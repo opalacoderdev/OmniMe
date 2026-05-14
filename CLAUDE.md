@@ -1,0 +1,1 @@
+consulte a biblioteca https://github.com/gilzamir/agenticblocks para entender como a AgenticBlocks.IO funciona.
