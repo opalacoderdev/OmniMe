@@ -16,6 +16,7 @@ from .agents import make_executor_block, make_aggregator
 from .subplan import Subplan, topological_sort
 from .config import DEFAULT_MAX_RETRIES, SENSITIVE_OPS
 from . import terminal as T
+from .i18n import _
 
 
 @contextmanager
@@ -37,22 +38,23 @@ def _build_task(sp: Subplan, original_request: str, context: str, global_skills_
     steps_str = "\n".join(f"  {i+1}. {s}" for i, s in enumerate(sp.steps))
     
     return (
-        f"Pedido original: {original_request}\n\n"
-        f"Subplano {sp.id} — Fase: {sp.phase}\n"
-        f"Objetivo: {sp.objective}\n\n"
-        f"Passos a executar:\n{steps_str}\n\n"
-        f"Critério de conclusão: {sp.completion_criterion}\n\n"
-        f"Contexto de subplanos anteriores:\n{context}\n\n"
-        "INSTRUÇÕES OBRIGATÓRIAS PARA O CÓDIGO GERADO:\n"
-        "1. Gere código Python executável que realize CONCRETAMENTE as ações acima.\n"
-        "2. Para criar arquivos ou pastas: use `pathlib.Path` ou `open()`.\n"
-        "3. Para rodar comandos shell:\n"
-        "   Use OBRIGATORIAMENTE `subprocess.run(cmd, shell=True, capture_output=True, text=True, stdin=subprocess.DEVNULL)`.\n"
-        "   O `stdin=subprocess.DEVNULL` é vital para evitar travamentos.\n"
-        "4. NÃO apenas imprima texto descrevendo o que faria — EXECUTE de verdade.\n"
-        "5. NÃO use input() nem interação com o usuário.\n"
-        "6. Ao final, liste os arquivos criados com `print()` para confirmar.\n"
-        "7. ATENÇÃO AOS CAMINHOS: Cada subplano roda do zero! Leia o 'Contexto de subplanos anteriores' para descobrir onde o projeto foi criado. Se precisar modificar arquivos do passo anterior, USE CAMINHOS ABSOLUTOS ou faça `os.chdir(caminho_correto)` antes de rodar os comandos/criar arquivos."
+        f"Original request: {original_request}\n\n"
+        f"Subplan {sp.id} — Phase: {sp.phase}\n"
+        f"Objective: {sp.objective}\n\n"
+        f"Steps to execute:\n{steps_str}\n\n"
+        f"Completion criterion: {sp.completion_criterion}\n\n"
+        f"Context from previous subplans:\n{context}\n\n"
+        "MANDATORY INSTRUCTIONS FOR THE GENERATED CODE:\n"
+        "1. Generate executable Python code that CONCRETELY performs the actions above.\n"
+        "2. To create files or folders: use `pathlib.Path` or `open()`.\n"
+        "3. To run shell commands:\n"
+        "   You MUST use `subprocess.run(cmd, shell=True, capture_output=True, text=True, stdin=subprocess.DEVNULL)`.\n"
+        "   The `stdin=subprocess.DEVNULL` is vital to prevent hanging.\n"
+        "4. DO NOT just print text describing what you would do — actually EXECUTE it.\n"
+        "5. DO NOT use input() or interact with the user.\n"
+        "6. At the end, list the created files using `print()` to confirm.\n"
+        "7. PATH AWARENESS: Each subplan runs from scratch! Read the 'Context from previous subplans' to find out where the project was created. If you need to modify files from a previous step, USE ABSOLUTE PATHS or run `os.chdir(correct_path)` before running commands/creating files.\n"
+        "8. NEVER start development servers or infinite processes (e.g., `npm start`, `npm run dev`, `flask run`, `python -m http.server`). Just build/configure the project. The script must terminate execution immediately."
         f"\n{global_skills_context}"
     )
 
@@ -86,11 +88,11 @@ class SubplanExecutionBlock(Block[SubplanExecutionInput, CodePlanExecutorOutput]
         sp = self.subplan
         # Build context from prerequisite results
         context_parts = [
-            f"Resultado de {pid}:\n{self.results_map[pid]}"
+            f"Result of {pid}:\n{self.results_map[pid]}"
             for pid in sp.prerequisites
             if pid in self.results_map
         ]
-        context = "\n\n".join(context_parts) or "Nenhum contexto anterior."
+        context = "\n\n".join(context_parts) or "No previous context."
         task = _build_task(sp, self.original_request, context, self.global_skills_context)
 
         last_error: str = ""
@@ -99,7 +101,7 @@ class SubplanExecutionBlock(Block[SubplanExecutionInput, CodePlanExecutorOutput]
 
         for attempt in range(1, self.max_retries + 1):
             if attempt > 1:
-                task += f"\n\n[SISTEMA] Tentativa anterior falhou: {last_error}\nTente uma abordagem alternativa."
+                task += f"\n\n[SYSTEM] Previous attempt failed: {last_error}\nTry an alternative approach."
             import asyncio
             try:
                 with _sandboxed_stdin():
@@ -127,16 +129,16 @@ class SubplanExecutionBlock(Block[SubplanExecutionInput, CodePlanExecutorOutput]
                     success = True
                     break
                 else:
-                    last_error = stderr or stdout or "falha desconhecida"
+                    last_error = stderr or stdout or "unknown failure"
 
             except asyncio.TimeoutError:
-                last_error = "Timeout: O script demorou mais de 3 minutos. Você iniciou algum servidor (npm start/dev) ou loop infinito? Nunca inicie servidores."
+                last_error = "Timeout: The script took more than 3 minutes. Did you start a server (npm start/dev) or infinite loop? Never start servers."
                 success = False
             except Exception as exc:
                 last_error = str(exc)
 
         if not success:
-            msg = f"[FALHOU após {self.max_retries} tentativas] {last_error}"
+            msg = f"[FAILED after {self.max_retries} attempts] {last_error}"
             self.results_map[sp.id] = msg
             if result is None:
                 # Mock a failure result to maintain type
@@ -174,9 +176,9 @@ async def execute_subplans(
     for sp in subplans:
         # Confirm sensitive ops in edit mode
         if mode == "edit" and _is_sensitive(sp):
-            T.warning(f"{sp.id} contém operação sensível: {sp.objective}")
-            if not T.confirm(f"Executar {sp.id}?"):
-                results[sp.id] = "[PULADO pelo usuário]"
+            T.warning(_("sensitive_op", id=sp.id, obj=sp.objective))
+            if not T.confirm(_("execute_subplan", id=sp.id)):
+                results[sp.id] = _("skipped_by_user")
                 continue
 
         block = SubplanExecutionBlock(
@@ -199,7 +201,7 @@ async def execute_subplans(
             if req in graph.graph.nodes:
                 graph.connect(req, sp.id)
 
-    T.section("Executando Subplanos (AgenticBlocks WorkflowGraph)")
+    T.section(_("executing_subplans"))
 
     from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
     
@@ -227,9 +229,9 @@ async def execute_subplans(
                     progress.remove_task(t_id)
                     
                 if result.status == NodeStatus.DONE:
-                    T.console.print(f"  [bold green]✓[/bold green] {result.node_id} concluído ({result.duration_ms/1000:.1f}s)")
+                    T.console.print(f"  [bold green]✓[/bold green] {result.node_id} {_('completed')} ({result.duration_ms/1000:.1f}s)")
                 else:
-                    T.console.print(f"  [bold red]✗[/bold red] {result.node_id} falhou ({result.duration_ms/1000:.1f}s)")
+                    T.console.print(f"  [bold red]✗[/bold red] {result.node_id} {_('failed')} ({result.duration_ms/1000:.1f}s)")
                     if result.error:
                         errors.append((result.node_id, str(result.error)))
 
@@ -253,15 +255,15 @@ async def aggregate_results(
     original_request: str,
     model: str,
 ) -> str:
-    T.thinking("Agregando resultados…")
+    T.thinking(_("aggregating_results"))
     summary = "\n\n".join(
         f"=== {sp_id} ===\n{output}" for sp_id, output in results.items()
     )
     prompt = (
-        f"PEDIDO ORIGINAL: {original_request}\n\n"
-        f"RESULTADOS DOS SUBPLANOS:\n{summary}"
+        f"ORIGINAL REQUEST: {original_request}\n\n"
+        f"SUBPLAN RESULTS:\n{summary}"
     )
-    with T.spinner("Sintetizando resultado final…"):
+    with T.spinner(_("synthesizing_final_result")):
         aggregator = make_aggregator(model)
         agg = await aggregator.run(AgentInput(prompt=prompt))
     return agg.response

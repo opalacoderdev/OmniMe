@@ -10,7 +10,32 @@ from rich import print as rprint
 from contextlib import contextmanager
 import sys
 
+from .i18n import _
+
+try:
+    import readline
+except ImportError:
+    pass
+
 console = Console(highlight=False)
+
+class UserCancelled(Exception):
+    """Raised when the user wants to cancel the current operation."""
+    pass
+
+class AppExit(Exception):
+    """Raised when the user wants to exit the application completely."""
+    pass
+
+_CANCEL_WORDS = {"cancelar", "abortar", "/cancel", "/abort", "cancel", "abort"}
+_EXIT_WORDS = {"/exit", "/quit", "/sair", "sair", "exit", "quit"}
+
+def _check_cancel(text: str) -> None:
+    text_lower = text.strip().lower()
+    if text_lower in _CANCEL_WORDS:
+        raise UserCancelled()
+    if text_lower in _EXIT_WORDS:
+        raise AppExit()
 
 
 # ─── Branding ─────────────────────────────────────────────────────────────────
@@ -68,22 +93,24 @@ def thinking(msg: str) -> None:
 
 # ─── Panels ───────────────────────────────────────────────────────────────────
 
-def show_plan(plan_text: str, title: str = "Plano Gerado") -> None:
+def show_plan(plan_text: str, title: str = None) -> None:
+    title = title or _("generated_plan")
     console.print(
         Panel(plan_text, title=f"[bold]{title}[/bold]", border_style="cyan", expand=False)
     )
 
 
-def show_result(text: str, title: str = "Resultado Final") -> None:
+def show_result(text: str, title: str = None) -> None:
+    title = title or _("final_result")
     console.print(
         Panel(text, title=f"[bold green]{title}[/bold green]", border_style="green")
     )
 
 
 def show_error_report(errors: list[tuple[str, str]]) -> None:
-    table = Table(title="Erros de Execução", border_style="red", show_lines=True)
-    table.add_column("Subplano", style="bold yellow")
-    table.add_column("Erro", style="red")
+    table = Table(title=_("exec_errors"), border_style="red", show_lines=True)
+    table.add_column(_("subplan"), style="bold yellow")
+    table.add_column(_("error"), style="red")
     for sp_id, err in errors:
         table.add_row(sp_id, err[:300])
     console.print(table)
@@ -107,16 +134,19 @@ def spinner(label: str):
 
 def ask(prompt: str) -> str:
     console.print(f"\n[bold yellow]?[/bold yellow] {prompt}")
-    return input("  → ").strip()
+    ans = input("  → ").strip()
+    _check_cancel(ans)
+    return ans
 
 
 def confirm(prompt: str, default: bool = True) -> bool:
     hint = "[Y/n]" if default else "[y/N]"
     console.print(f"\n[bold yellow]?[/bold yellow] {prompt} {hint}")
     raw = input("  → ").strip().lower()
+    _check_cancel(raw)
     if not raw:
         return default
-    return raw in ("y", "yes", "sim", "s")
+    return raw in _("yes_hints")
 
 
 def choose(prompt: str, options: list[str]) -> str:
@@ -126,13 +156,14 @@ def choose(prompt: str, options: list[str]) -> str:
         console.print(f"  [cyan]{i}[/cyan]) {opt}")
     while True:
         raw = input("  → ").strip()
+        _check_cancel(raw)
         if raw.isdigit() and 1 <= int(raw) <= len(options):
             return options[int(raw) - 1]
         # accept text match too
         matches = [o for o in options if o.lower().startswith(raw.lower())]
         if len(matches) == 1:
             return matches[0]
-        console.print("  [red]Opção inválida, tente novamente.[/red]")
+        console.print(f"  [red]{_('invalid_option')}[/red]")
 
 
 # ─── Subplan progress table ───────────────────────────────────────────────────
@@ -140,11 +171,11 @@ def choose(prompt: str, options: list[str]) -> str:
 def subplan_status_table(statuses: list[tuple[str, str, str]]) -> None:
     """statuses: [(sp_id, objective, status_label), ...]"""
     table = Table(show_header=True, header_style="bold magenta", show_lines=False)
-    table.add_column("ID", style="cyan", width=6)
-    table.add_column("Objetivo")
-    table.add_column("Status", width=12)
+    table.add_column(_("table_id"), style="cyan", width=6)
+    table.add_column(_("table_objective"))
+    table.add_column(_("table_status"), width=12)
     for sp_id, obj, status in statuses:
-        color = {"OK": "green", "FALHOU": "red", "ERRO": "red", "→": "yellow"}.get(
+        color = {"OK": "green", "FALHOU": "red", "FAILED": "red", "ERRO": "red", "ERROR": "red", "→": "yellow"}.get(
             status.upper().split()[0], "white"
         )
         table.add_row(sp_id, obj[:70], f"[{color}]{status}[/{color}]")

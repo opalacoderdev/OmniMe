@@ -58,6 +58,12 @@ class SessionData:
     results: dict = field(default_factory=dict)
     history: list = field(default_factory=list)   # [{role, content}]
 
+    def clear_state(self) -> None:
+        self.request = ""
+        self.plan_text = ""
+        self.subplans = []
+        self.results = {}
+
 
 class SessionStore:
     def __init__(self, db_path: str = DEFAULT_DB_PATH):
@@ -88,10 +94,21 @@ class SessionStore:
         return SessionData(name=name, mode=mode, model=model)
 
     def overwrite(self, name: str, mode: str, model: str) -> SessionData:
+        self.delete(name)
+        return self.create(name, mode, model)
+
+    def delete(self, name: str) -> None:
         with _conn(self.db_path) as conn:
             conn.execute("DELETE FROM sessions WHERE name = ?", (name,))
             conn.execute("DELETE FROM session_history WHERE session = ?", (name,))
-        return self.create(name, mode, model)
+
+    def rename(self, old_name: str, new_name: str) -> bool:
+        if self.exists(new_name):
+            return False
+        with _conn(self.db_path) as conn:
+            conn.execute("UPDATE sessions SET name=? WHERE name=?", (new_name, old_name))
+            conn.execute("UPDATE session_history SET session=? WHERE session=?", (new_name, old_name))
+        return True
 
     def load(self, name: str) -> Optional[SessionData]:
         with _conn(self.db_path) as conn:

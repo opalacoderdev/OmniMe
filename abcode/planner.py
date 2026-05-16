@@ -7,16 +7,22 @@ from .structured import decompose_to_subplans, confirm_plan
 from .subplan import Subplan
 from .session import SessionData, SessionStore
 from . import terminal as T
-
+from .i18n import _
 
 MAX_REFINEMENT_CYCLES = 20
 
 # Fast-path heuristics — avoid an LLM call when user intent is unambiguous
-_APPROVAL_WORDS = {"sim", "s", "yes", "y", "ok", "okay", "aprovado", "pode", "certo", "perfeito"}
+_APPROVAL_WORDS = {
+    "sim", "s", "yes", "y", "ok", "okay", "aprovado", "pode", "certo", "perfeito",
+    "approved", "sure", "fine", "great", "looks good", "proceed"
+}
 _CHANGE_SIGNALS = {
     "quero que", "adicione", "remova", "mude", "altere", "somente", "apenas",
     "não precisa", "deve mostrar", "deve ter", "deve ser", "coloque", "tire",
     "inclua", "exclua", "troque", "substitua", "corrija", "ajuste",
+    "want", "add", "remove", "change", "alter", "only", "just",
+    "don't need", "must show", "must have", "must be", "put", "take",
+    "include", "exclude", "replace", "substitute", "fix", "adjust", "instead"
 }
 
 
@@ -35,7 +41,7 @@ def _fast_approval(user_response: str) -> bool | None:
 
 async def generate_panorama(request: str, model: str) -> str:
     """Generate a high-level plan (panorama) for the given request."""
-    with T.spinner("Gerando panorama do plano…"):
+    with T.spinner(_("generating_panorama")):
         planner = make_landscape_planner(model)
         result = await planner.run(AgentInput(prompt=request))
     return result.response
@@ -57,12 +63,11 @@ async def refine_plan(
     cycles = 0
 
     while cycles < MAX_REFINEMENT_CYCLES:
-        T.section("Revisão do Plano")
+        T.section(_("plan_review"))
         T.show_plan(plan_text)
 
-        user_response = T.ask(
-            "O plano está ok? (responda 'sim' para aprovar, ou descreva as alterações desejadas)"
-        )
+        T.info(_("cancel_reminder"))
+        user_response = T.ask(_("plan_ok"))
 
         store.append_message(session.name, "assistant", plan_text)
         store.append_message(session.name, "user", user_response)
@@ -70,35 +75,31 @@ async def refine_plan(
         # Fast heuristic — no LLM call needed for obvious cases
         fast = _fast_approval(user_response)
         if fast is True:
-            T.success("Plano aprovado!")
+            T.success(_("plan_approved"))
             return plan_text
         elif fast is False:
             approved = False
         else:
             # Ambiguous — use structured LLM classification
-            with T.spinner("Interpretando resposta…"):
+            with T.spinner(_("interpreting_response")):
                 result = await confirm_plan(plan_text, user_response, model)
             approved = result.approved
 
         if approved:
-            T.success("Plano aprovado!")
+            T.success(_("plan_approved"))
             return plan_text
 
         cycles += 1
-        T.thinking("Refinando plano com base no seu feedback…")
-        with T.spinner("Refinando…"):
+        T.thinking(_("refining_plan"))
+        with T.spinner(_("refining")):
             refined = await refinement_agent.run(
                 AgentInput(
-                    prompt=(
-                        f"PEDIDO ORIGINAL: {request}\n"
-                        f"PLANO ORIGINAL: {plan_text}\n"
-                        f"FEEDBACK DO USUÁRIO: {user_response}"
-                    )
+                    prompt=_("refinement_prompt", request=request, plan_text=plan_text, feedback=user_response)
                 )
             )
         plan_text = refined.response
 
-    T.warning("Número máximo de ciclos de refinamento atingido. Usando último plano.")
+    T.warning(_("max_refinement_cycles"))
     return plan_text
 
 
@@ -108,8 +109,8 @@ async def decompose_plan(plan_text: str, model: str) -> list[Subplan]:
     No regex parsing — the LLM is forced to return validated JSON directly.
     instructor retries automatically with validation error feedback on bad output.
     """
-    T.thinking("Decompondo plano em subetapas…")
-    with T.spinner("Decompondo…"):
+    T.thinking(_("decomposing_plan"))
+    with T.spinner(_("decomposing")):
         result = await decompose_to_subplans(plan_text, model)
 
     subplans = [
@@ -125,6 +126,6 @@ async def decompose_plan(plan_text: str, model: str) -> list[Subplan]:
     ]
 
     if not subplans:
-        T.warning("Nenhum subplano retornado pelo modelo.")
+        T.warning(_("no_subplan_returned"))
 
     return subplans
