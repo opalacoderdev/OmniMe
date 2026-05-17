@@ -8,19 +8,33 @@ from dotenv import load_dotenv
 # Load local .env
 load_dotenv()
 
+# Suppress the non-fatal LiteLLM logging worker warning (coroutine never awaited)
+# which frequently occurs in asynchronous contexts on newer Python versions.
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    category=RuntimeWarning,
+    message=".*coroutine 'Logging.async_success_handler' was never awaited.*"
+)
+
 # Load global .env
 global_env = pathlib.Path.home() / ".abcode" / ".env"
 if global_env.exists():
     load_dotenv(dotenv_path=global_env)
 
 def _load_agents_config() -> dict:
-    config_path = os.path.join(os.getcwd(), "agents.yaml")
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                return yaml.safe_load(f) or {}
-        except Exception as e:
-            print(f"Warning: Failed to parse agents.yaml: {e}")
+    # Search for agents.yaml next to this file (project root), then fall back to cwd.
+    candidates = [
+        pathlib.Path(__file__).parent.parent / "agents.yaml",
+        pathlib.Path(os.getcwd()) / "agents.yaml",
+    ]
+    for config_path in candidates:
+        if config_path.exists():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    return yaml.safe_load(f) or {}
+            except Exception as e:
+                print(f"Warning: Failed to parse {config_path}: {e}")
     return {}
 
 _AGENTS_CONFIG = _load_agents_config()
@@ -41,6 +55,28 @@ _LLM_DEFAULTS: dict = {
 _AGENT_OVERRIDES: dict[str, dict] = _AGENTS_CONFIG.get("agents", {})
 
 
+# Fields that are consumed outside of litellm kwargs and must not be forwarded.
+_NON_LITELLM_FIELDS = {"model", "max_heartbeats", "debug"}
+
+
+def get_agent_max_heartbeats(agent_name: str, default: int) -> int:
+    """Return max_heartbeats configured for *agent_name* in agents.yaml, or *default*."""
+    return int(_AGENT_OVERRIDES.get(agent_name, {}).get("max_heartbeats", default))
+
+
+def get_agent_debug(agent_name: str, default: bool = False) -> bool:
+    """Return debug flag configured for *agent_name* in agents.yaml, or *default*."""
+    return bool(_AGENT_OVERRIDES.get(agent_name, {}).get("debug", default))
+
+
+def get_agent_model(agent_name: str, default: str | None = None) -> str:
+    """Return the model configured for *agent_name* in agents.yaml, or *default*."""
+    override = _AGENT_OVERRIDES.get(agent_name, {}).get("model")
+    if override:
+        return override
+    return default if default is not None else DEFAULT_MODEL
+
+
 def get_agent_llm_kwargs(agent_name: str) -> dict:
     """Return merged litellm kwargs for *agent_name*.
 
@@ -48,9 +84,13 @@ def get_agent_llm_kwargs(agent_name: str) -> dict:
       1. Per-agent override in agents.yaml ``agents.<name>``
       2. Global ``llm_defaults`` in agents.yaml
       3. Hard-coded defaults above
+
+    Non-litellm fields (model, max_heartbeats) are excluded.
     """
     merged = dict(_LLM_DEFAULTS)
     merged.update(_AGENT_OVERRIDES.get(agent_name, {}))
+    for field in _NON_LITELLM_FIELDS:
+        merged.pop(field, None)
     return merged
 
 # Maximum retry attempts for a failing subplan step

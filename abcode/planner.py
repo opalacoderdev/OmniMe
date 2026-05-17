@@ -7,11 +7,37 @@ from pathlib import Path
 from agenticblocks.blocks.llm.agent import AgentInput
 
 from .agents import make_landscape_planner, make_refinement_agent
-from .structured import decompose_to_subplans, confirm_plan
-from .subplan import Subplan
+from .structured import confirm_plan
 from .project import ProjectData, ProjectStore
+from .config import get_agent_llm_kwargs
 from . import terminal as T
 from .i18n import _
+
+
+def _estimate_tokens(text: str) -> int:
+    try:
+        import litellm
+        return litellm.token_counter(model="gpt-3.5-turbo", messages=[{"role": "user", "content": text}])
+    except Exception:
+        return len(text) // 4
+
+
+def _trim_to_budget(text: str, budget_tokens: int) -> str:
+    """Keep the tail of text that fits within budget_tokens, preserving line boundaries."""
+    if _estimate_tokens(text) <= budget_tokens:
+        return text
+    lines = text.splitlines()
+    kept: list[str] = []
+    used = 0
+    for line in reversed(lines):
+        cost = _estimate_tokens(line) + 1
+        if used + cost > budget_tokens:
+            break
+        kept.append(line)
+        used += cost
+    if not kept:
+        return text[-(budget_tokens * 4):]
+    return "[...earlier content omitted...]\n" + "\n".join(reversed(kept))
 
 PLAN_FILE = "plan.md"
 
@@ -78,9 +104,19 @@ def _sanitize_panorama(text: str) -> str:
 
 async def generate_panorama(request: str, model: str, history: str = "") -> str:
     """Generate a high-level plan (panorama) for the given request."""
+    num_ctx = get_agent_llm_kwargs("landscape_planner").get("num_ctx", 8192)
+    threshold = 0.9
+    # Reserve budget for system prompt (~500 tokens) and the request itself
+    system_reserved = 500
+    request_tokens = _estimate_tokens(request)
+    history_budget = int(num_ctx * threshold) - system_reserved - request_tokens
+
+    if history and history_budget > 0:
+        history = _trim_to_budget(history, history_budget)
+
     prompt = request
     if history:
-        prompt = f"[CONVERSATION HISTORY]\n{history}\n[END HISTORY]\n\n[USER TASK]:\n{request}"
+        prompt = f"[CONVERSATION HISTORY]\n{history}\n[END HISTORY]\n\n[USER TASK]:\n{request}\n[END USER TASK]"
 
     with T.spinner(_("generating_panorama")):
         planner = make_landscape_planner(model)
@@ -151,41 +187,20 @@ async def refine_plan(
 
         cycles += 1
         T.thinking(_("refining_plan"))
+        num_ctx = get_agent_llm_kwargs("refinement_agent").get("num_ctx", 8192)
+        threshold = 0.9
+        guarded_request = request
+        full_prompt = _("refinement_prompt", request=request, plan_text=plan_text, feedback=user_response)
+        if _estimate_tokens(full_prompt) > num_ctx * threshold:
+            # Trim the request (skills preamble) to recover budget; plan and feedback are preserved
+            request_budget = int(num_ctx * threshold) - _estimate_tokens(plan_text) - _estimate_tokens(user_response) - 100
+            guarded_request = _trim_to_budget(request, max(request_budget, 200))
+            full_prompt = _("refinement_prompt", request=guarded_request, plan_text=plan_text, feedback=user_response)
         with T.spinner(_("refining")):
-            refined = await refinement_agent.run(
-                AgentInput(
-                    prompt=_("refinement_prompt", request=request, plan_text=plan_text, feedback=user_response)
-                )
-            )
+            refined = await refinement_agent.run(AgentInput(prompt=full_prompt))
         plan_text = refined.response
 
     T.warning(_("max_refinement_cycles"))
     return plan_text
 
 
-async def decompose_plan(plan_text: str, model: str) -> list[Subplan]:
-    """
-    Decompose an approved plan into structured subplans using instructor.
-    No regex parsing — the LLM is forced to return validated JSON directly.
-    instructor retries automatically with validation error feedback on bad output.
-    """
-    T.thinking(_("decomposing_plan"))
-    with T.spinner(_("decomposing")):
-        result = await decompose_to_subplans(plan_text, model)
-
-    subplans = [
-        Subplan(
-            id=sp.id,
-            phase=sp.phase,
-            objective=sp.objective,
-            prerequisites=sp.prerequisites,
-            steps=sp.steps,
-            completion_criterion=sp.completion_criterion,
-        )
-        for sp in result.subplans
-    ]
-
-    if not subplans:
-        T.warning(_("no_subplan_returned"))
-
-    return subplans

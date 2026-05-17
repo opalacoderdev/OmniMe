@@ -95,6 +95,14 @@ _STRINGS = {
         "plan_saved_to_file": "Plan saved to '{path}'. Edit it in your editor, save it, and then come back here.",
         "plan_confirm_after_edit": "Press Enter when you are done editing (or type your changes here, or 'yes'/'y' to approve as-is):",
         "plan_file_read_error": "Could not read plan.md: {err}. Using the in-memory plan.",
+        "intent_unclear": "Your message wasn't clear enough. Could you please rephrase or provide more details?",
+        "command_hint_suggestion": "Did you mean [bold]/{cmd}[/bold]? Commands must be prefixed with [bold]/[/bold]. Type [bold]/help[/bold] to see all available commands.",
+        "evaluating_complexity": "Evaluating task complexity...",
+        "selecting_skills": "Selecting skills for this project...",
+        "routing_complex_task": "Complex task detected. Routing to alternative model ({model})...",
+        "api_key_missing_fallback": "API Key missing or skipped. Falling back to {model}.",
+        "alt_model_error": "Error using alternative model ({model}): {err}",
+        "fallback_to_model": "Falling back to {model}",
     },
     "pt": {
         "active_session": "Sessão Ativa: {name}",
@@ -188,6 +196,14 @@ _STRINGS = {
         "plan_saved_to_file": "Plano salvo em '{path}'. Edite-o no seu editor, salve e depois volte aqui.",
         "plan_confirm_after_edit": "Pressione Enter quando terminar de editar (ou descreva as alterações aqui, ou 'sim'/'s' para aprovar como está):",
         "plan_file_read_error": "Não foi possível ler plan.md: {err}. Usando o plano em memória.",
+        "intent_unclear": "Sua mensagem não ficou clara o suficiente. Poderia reformulá-la ou fornecer mais detalhes?",
+        "command_hint_suggestion": "Você quis dizer [bold]/{cmd}[/bold]? Comandos devem ser prefixados com [bold]/[/bold]. Digite [bold]/help[/bold] para ver todos os comandos disponíveis.",
+        "evaluating_complexity": "Avaliando complexidade da tarefa...",
+        "selecting_skills": "Selecionando skills para este projeto...",
+        "routing_complex_task": "Tarefa complexa detectada. Roteando para modelo alternativo ({model})...",
+        "api_key_missing_fallback": "API Key ausente ou ignorada. Usando {model} como fallback.",
+        "alt_model_error": "Erro ao usar modelo alternativo ({model}): {err}",
+        "fallback_to_model": "Usando {model} como fallback",
     }
 }
 

@@ -150,8 +150,87 @@ def ask_human(question: str) -> str:
     return T.ask("Your response")
 
 
+@as_tool(
+    name="get_project_overview",
+    description=(
+        "Return a compact overview of the current project: directory tree (max depth 3), "
+        "file count by type, and a summary of key files (README, package.json, requirements.txt, etc.). "
+        "Call this at the start of any task to understand the project before acting."
+    ),
+)
+def get_project_overview() -> str:
+    AGENT_PROGRESS.update("get_project_overview")
+    root = Path(get_project_path())
+
+    if not root.exists():
+        return f"Project directory does not exist yet: {root}"
+
+    # ── Directory tree (depth ≤ 3, skip hidden & node_modules/__pycache__) ──
+    SKIP = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", "dist", "build"}
+
+    def _tree(path: Path, prefix: str = "", depth: int = 0) -> list[str]:
+        if depth > 3:
+            return ["    " * depth + "…"]
+        lines = []
+        try:
+            entries = sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name))
+        except PermissionError:
+            return []
+        for entry in entries:
+            if entry.name.startswith(".") or entry.name in SKIP:
+                continue
+            connector = "├── " if entry != entries[-1] else "└── "
+            lines.append(prefix + connector + entry.name + ("/" if entry.is_dir() else ""))
+            if entry.is_dir():
+                extension = "│   " if entry != entries[-1] else "    "
+                lines.extend(_tree(entry, prefix + extension, depth + 1))
+        return lines
+
+    tree_lines = _tree(root)
+    tree_str = f"{root.name}/\n" + "\n".join(tree_lines) if tree_lines else f"{root.name}/  (empty)"
+
+    # ── File count by extension ──
+    ext_count: dict[str, int] = {}
+    total = 0
+    for p in root.rglob("*"):
+        if p.is_file() and not any(part in SKIP or part.startswith(".") for part in p.parts):
+            ext = p.suffix.lower() or "(no ext)"
+            ext_count[ext] = ext_count.get(ext, 0) + 1
+            total += 1
+    ext_summary = ", ".join(
+        f"{ext}: {n}" for ext, n in sorted(ext_count.items(), key=lambda x: -x[1])[:8]
+    )
+
+    # ── Key file snapshots ──
+    KEY_FILES = ["README.md", "package.json", "requirements.txt", "pyproject.toml",
+                 "Makefile", "Dockerfile", "docker-compose.yml", ".env.example"]
+    snippets = []
+    for name in KEY_FILES:
+        kf = root / name
+        if kf.exists():
+            try:
+                content = kf.read_text(encoding="utf-8", errors="replace")[:400]
+                snippets.append(f"### {name}\n{content.strip()}")
+            except Exception:
+                pass
+
+    parts = [
+        f"## Project: {root.name}",
+        f"Path: {root}",
+        f"Total files: {total}  |  By type: {ext_summary or 'n/a'}",
+        "",
+        "## Directory structure",
+        tree_str,
+    ]
+    if snippets:
+        parts += ["", "## Key files"] + snippets
+
+    return "\n".join(parts)
+
+
 def get_available_tools():
     return [
+        get_project_overview,
         read_file,
         write_file,
         run_command,

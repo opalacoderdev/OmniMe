@@ -16,28 +16,35 @@ llm_defaults:
 #   chat_agent           — conversational assistant with memory
 #   landscape_planner    — high-level strategic planner
 #   refinement_agent     — refines plan based on user feedback
-#   decomposer           — breaks panorama into executable subplans
-#   aggregator           — synthesises subplan results into final answer
-#   context_extractor    — extracts project state from execution logs
-#   executor_agent       — generates Python code to execute subplan steps
 #   skill_selector       — routes request to the appropriate skills
 #   confirmation_agent   — checks if user approved the plan
+#   orchestrator         — autonomous MemGPT agent that executes the approved plan
 
 agents:
+  # think: false disables Gemma4's thinking mode on ollama so that content is
+  # returned in message.content instead of the reasoning field (ollama issue #15288).
+  # Set think: false for single-shot classifiers/selectors that gain nothing from
+  # extended reasoning. Leave it unset (defaults to true) for planning/execution
+  # agents where deeper reasoning improves output quality.
+
   intent_classifier:
-    temperature: 0.0
-    max_tokens: 5
+    temperature: 0
+    max_tokens: 10
     num_ctx: 2048
+    think: false
 
   complexity_evaluator:
     temperature: 0.3
-    max_tokens: 10
+    max_tokens: 30
     num_ctx: 2048
+    think: false
 
   chat_agent:
     temperature: 1.0
     max_tokens: 2048
     num_ctx: 8192
+    max_heartbeats: 10
+    debug: false
 
   landscape_planner:
     temperature: 1.0
@@ -49,32 +56,20 @@ agents:
     max_tokens: 1024
     num_ctx: 8192
 
-  decomposer:
-    temperature: 0.5
-    max_tokens: 4096
-    num_ctx: 16384
-
-  aggregator:
-    temperature: 0.3
-    max_tokens: 2048
-    num_ctx: 16384
-
-  context_extractor:
-    temperature: 0.0
-    max_tokens: 1024
-    num_ctx: 8192
-
-  executor_agent:
-    temperature: 0.5
-    max_tokens: 4096
-    num_ctx: 16384
-
   skill_selector:
     temperature: 0.0
     max_tokens: 64
     num_ctx: 4096
+    think: false
 
   confirmation_agent:
     temperature: 0.0
     max_tokens: 5
     num_ctx: 2048
+    think: false
+
+  orchestrator:
+    temperature: 0.2
+    num_ctx: 16384
+    max_heartbeats: 30
+    debug: false

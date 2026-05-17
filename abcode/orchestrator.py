@@ -1,6 +1,7 @@
 """MemGPT-style autonomous orchestrator with real-time live progress panel."""
 
 import asyncio
+import logging
 import time
 from rich.live import Live
 from rich.table import Table
@@ -10,9 +11,20 @@ from rich import box
 
 import abc
 
+
+class _SuppressMockToolCallErrors(logging.Filter):
+    """Suppress the non-fatal LiteLLM serialization error caused by MockToolCall objects."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "__pydantic_fields_set__" not in record.getMessage()
+
+
+logging.getLogger("LiteLLM").addFilter(_SuppressMockToolCallErrors())
+
 from agenticblocks.blocks.llm.memgpt_agent import MemGPTAgentBlock
 from agenticblocks.blocks.llm.agent import AgentInput
 from .tools import get_available_tools, AGENT_PROGRESS
+from .config import get_agent_llm_kwargs, get_agent_model, get_agent_debug, DEFAULT_MODEL
 from . import terminal as T
 
 
@@ -60,55 +72,66 @@ def _build_progress_panel(progress: object, max_hb: int) -> Panel:
 
 
 class AutonomousOrchestratorStrategy(BaseOrchestratorStrategy):
-    def __init__(self, model: str):
-        super().__init__(model)
+    def __init__(self, model: str | None = None):
+        super().__init__(get_agent_model("orchestrator", model or DEFAULT_MODEL))
         self.tools = get_available_tools()
 
     def _build_system_prompt(self, approved_plan: str = "", project_context: str = "") -> str:
+        import re as _re
+
+        proj_path = "."
+        project_header = ""
+        if project_context:
+            _m = _re.search(r"PATH:\s*(.+?)\]", project_context)
+            proj_path = _m.group(1).strip() if _m else "."
+            _n = _re.search(r"PROJECT:\s*(.+?)\s*\|", project_context)
+            proj_name = _n.group(1).strip() if _n else proj_path
+            project_header = f"""
+## PROJECT CONTEXT
+Name : {proj_name}
+Path : {proj_path}
+
+You are working EXCLUSIVELY inside this project. Every file you read, write, or execute
+must live under `{proj_path}`. Never touch files outside this directory.
+"""
+
         plan_section = ""
         if approved_plan:
             plan_section = f"""
 ## APPROVED PLAN
-The user has reviewed and approved the following plan. Follow it faithfully:
+The user reviewed and approved this plan. **Execute every step now — do not re-describe the plan.**
+Use your tools to implement it fully before calling `send_message`.
 
 {approved_plan}
+"""
 
-"""
-        project_section = ""
-        if project_context:
-            # Extract path from context_header format "[PROJECT: name | PATH: /some/path]"
-            import re as _re
-            _m = _re.search(r"PATH:\s*(.+?)\]", project_context)
-            proj_path = _m.group(1).strip() if _m else "(see context)"
-            project_section = f"""
-## WORKSPACE
-{project_context.strip()}
-- ALL files you create or modify MUST be placed inside: `{proj_path}`
-- Use absolute paths when calling write_file and run_command, rooted at `{proj_path}`.
-- Never write files outside this directory unless explicitly requested.
-"""
-        return f"""You are the ABCode Autonomous Orchestrator — an expert software engineer agent.
-{project_section}
-You operate in a continuous loop and have access to the filesystem and terminal.
+        return f"""You are ABCode — an autonomous software-engineering agent embedded inside a project workspace.
+{project_header}
+## FIRST ACTION — always
+Before doing anything else, call `get_project_overview` to understand the current state of the project:
+its files, structure, and technology stack. Use that snapshot to make every decision that follows.
 {plan_section}
 ## YOUR MISSION
-Solve coding tasks autonomously. This includes: creating NEW projects AND fixing/updating EXISTING projects
-when the user reports bugs, errors, or problems with previously generated code.
+Implement coding tasks autonomously within the project. This includes creating new features, fixing bugs,
+refactoring, and updating any existing code inside the project directory.
 
 ## RULES
-1. **ACT, don't ask**: Create directories, write files, run `npm install`, `pip install`, or any standard
-   dev command WITHOUT asking for permission. Just do it.
-2. **Use ask_human ONLY** for genuinely dangerous or irreversible actions: `rm -rf`, `sudo`, accessing
-   credentials, or modifying files outside the project workspace.
-3. **Fix bugs autonomously**: If the user reports a bug or error in existing code:
-   a. First use `read_file` to read the relevant files.
-   b. Identify the problem from the user's description.
-   c. Use `write_file` to fix the files in place. Do NOT recreate from scratch unless necessary.
-   d. Report exactly what you changed and why.
+1. **Project-first**: Every action must reference the project. Read existing files before rewriting them.
+   Extend what is already there unless a full rewrite is explicitly requested.
+2. **ACT, don't ask**: Create directories, write files, run `npm install`, `pip install`, or any standard
+   dev command without asking for permission.
+3. **Fix bugs autonomously**: read the relevant file → identify the problem → fix in place.
+   Do NOT recreate from scratch unless the file is irreparably broken.
 4. **Never start servers**: Do NOT run `npm start`, `npm run dev`, `flask run`, or any long-running process.
-5. **Verify your work**: After writing code, run a quick syntax check (e.g. `node --check file.js`).
-6. **Report ONCE**: Call `send_message` exactly ONCE at the end with a concise summary of what was done.
-   Do NOT repeat the same message multiple times.
+5. **Verify your work**: After writing code, run a quick syntax/lint check (e.g. `node --check file.js`,
+   `python -m py_compile file.py`).
+6. **Use ask_human ONLY** for genuinely dangerous or irreversible operations (`rm -rf`, `sudo`,
+   credentials, files outside the project).
+7. **Report ONCE — but only after finishing**: Call `send_message` **exactly once**, and only after
+   you have fully completed every step of the plan (all files written, commands run, verifications done).
+   NEVER call `send_message` to describe what you are *about to do* — that terminates execution immediately.
+   The message must be a past-tense summary of what you *actually did*: files created/modified (relative paths),
+   commands run, and any caveats. If you have not finished all steps, keep using tools — do not send yet.
 """
 
     async def _plan_and_refine(self, user_request: str, history: str, session, store) -> str:
@@ -134,7 +157,8 @@ when the user reports bugs, errors, or problems with previously generated code.
         if session and store:
             approved_plan = await self._plan_and_refine(user_request, history, session, store)
 
-        max_hb = 20
+        llm_kwargs = get_agent_llm_kwargs("orchestrator")
+        max_hb = llm_kwargs.pop("max_heartbeats", 20)
 
         # Reset progress state for this new run
         AGENT_PROGRESS.heartbeat = 0
@@ -148,23 +172,25 @@ when the user reports bugs, errors, or problems with previously generated code.
             system_prompt=self._build_system_prompt(approved_plan, project_context),
             model=self.model,
             tools=self.tools,
-            litellm_kwargs={"temperature": 0.2, "num_ctx": 8192},
+            litellm_kwargs=llm_kwargs,
             max_heartbeats=max_hb,
-            debug=False
+            debug=get_agent_debug("orchestrator", False)
         )
 
         prompt = (
             f"[CONVERSATION HISTORY]\n{history}\n[END HISTORY]\n\n"
-            f"[USER TASK]:\n{user_request}"
+            f"[USER TASK]:\n{user_request}\n[END USER TASK]"
         )
 
         result_holder: list[str] = []
+        agent_holder: list = []
         error_holder: list[Exception] = []
 
         async def _run_agent():
             try:
                 out = await agent.run(AgentInput(prompt=prompt))
                 result_holder.append(out.response)
+                agent_holder.append(agent)
             except Exception as e:
                 error_holder.append(e)
 
@@ -186,8 +212,42 @@ when the user reports bugs, errors, or problems with previously generated code.
         if error_holder:
             return f"Agent execution encountered an error: {error_holder[0]}"
 
-        raw = result_holder[0] if result_holder else "(No response from agent)"
+        raw = result_holder[0] if result_holder else ""
+        if not raw.strip() and agent_holder:
+            raw = _extract_fallback(agent_holder[0])
+        if not raw.strip():
+            raw = "(Agent completed without generating a final report.)"
         return _deduplicate_response(raw)
+
+
+def _extract_fallback(agent) -> str:
+    """Extract the last meaningful assistant text from the agent's internal history.
+
+    Skips messages that are raw JSON tool-call blobs (plain-text tool calls that
+    the MemGPT fallback parser intercepted) — those are internal plumbing, not
+    user-facing content.
+    """
+    import json as _json
+
+    history = getattr(agent, "internal_history", [])
+    for msg in reversed(history):
+        if msg.get("role") != "assistant":
+            continue
+        # Skip messages that contain tool_calls (already handled by send_message accumulator)
+        if msg.get("tool_calls"):
+            continue
+        content = (msg.get("content") or "").strip()
+        if not content:
+            continue
+        # Skip raw JSON blobs (plain-text tool-call attempts)
+        if content.startswith("{"):
+            try:
+                _json.loads(content)
+                continue  # valid JSON → internal plumbing, not a report
+            except _json.JSONDecodeError:
+                pass
+        return content
+    return ""
 
 
 def _deduplicate_response(text: str) -> str:
@@ -205,61 +265,3 @@ def _deduplicate_response(text: str) -> str:
     return "\n".join(seen)
 
 
-class DeterministicOrchestratorStrategy(BaseOrchestratorStrategy):
-    """
-    A deterministic DAG-based orchestrator suitable for smaller models.
-    Executes a rigid pipeline: Panorama -> Refine -> Decompose -> Execute -> Aggregate.
-    """
-    async def run(self, user_request: str, history: str, **kwargs) -> str:
-        session = kwargs.get("session")
-        store = kwargs.get("store")
-        max_retries = kwargs.get("max_retries", 3)
-        
-        if not session or not store:
-            raise ValueError("Deterministic strategy requires 'session' and 'store' kwargs.")
-
-        from .planner import generate_panorama, refine_plan, decompose_plan
-        from .executor import execute_subplans, aggregate_results
-        from .subplan import topological_sort
-        
-        request_with_history = user_request
-        if history:
-            request_with_history = f"[CONVERSATION HISTORY]\n{history}\n[END HISTORY]\n\n[USER TASK]:\n{user_request}"
-        
-        # 1. Panorama
-        T.section("Fase 1 — Panorama de Implementação")
-        panorama_text = await generate_panorama(user_request, self.model, history=history)
-        
-        # 2. Refinement
-        T.section("Fase 2 — Refinamento do Plano")
-        plan_text = await refine_plan(user_request, panorama_text, self.model, session, store)
-        
-        # 3. Decomposition
-        T.section("Fase 3 — Decomposição Técnica")
-        subplans = await decompose_plan(plan_text, self.model)
-        if not subplans:
-            return "O planejamento falhou ou foi abortado. Nenhuma tarefa gerada."
-            
-        subplans = topological_sort(subplans)
-        
-        # 4. Execution
-        T.section("Fase 4 — Execução Automática")
-        # Use the refined plan as the authoritative context for executors, not the raw
-        # conversation history, which may contain stale results from previous sessions
-        # that reference incorrect technology choices (e.g. Vite when user wanted plain HTML).
-        executor_context = f"[REFINED PLAN]:\n{plan_text}\n\n[USER REQUEST]:\n{user_request}"
-        results = await execute_subplans(
-            subplans=subplans,
-            original_request=executor_context,
-            model=self.model,
-            mode=session.mode,
-            max_retries=max_retries,
-            user_request_for_dir=user_request,
-        )
-
-        # 5. Aggregation
-        T.section("Fase 5 — Resultado Final")
-        # Pass the refined plan so the aggregator knows the actual tech stack chosen.
-        aggregation_context = f"[REFINED PLAN]:\n{plan_text}\n\n[USER REQUEST]:\n{user_request}"
-        final_response = await aggregate_results(results, aggregation_context, self.model)
-        return final_response
