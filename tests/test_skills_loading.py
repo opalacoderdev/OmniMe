@@ -1,7 +1,7 @@
 """Tests for the skills loading and filtering system.
 
 Verifies:
-1. load_project_skills always includes 'abcode' regardless of input list
+1. load_project_skills always includes 'opalacoder' regardless of input list
 2. _filter_by_scope returns only skills matching the target scope
 3. find_skill_file respects priority order: project > repo > global
 4. Skill frontmatter is parsed correctly (tags, description, scope, content)
@@ -14,7 +14,7 @@ import tempfile
 import textwrap
 import pytest
 
-from abcode.skills import (
+from opalacoder.skills import (
     load_project_skills,
     load_skills,
     find_skill_file,
@@ -41,15 +41,15 @@ def _write_skill(directory: str, name: str, content: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 1. load_project_skills always includes 'abcode'
+# 1. load_project_skills always includes 'opalacoder'
 # ---------------------------------------------------------------------------
 
-def test_load_project_skills_always_adds_abcode(tmp_path):
-    """abcode must always be present, even if not in the requested skill list."""
+def test_load_project_skills_always_adds_opalacoder(tmp_path):
+    """opalacoder must always be present, even if not in the requested skill list."""
     skills_dir = str(tmp_path / "skills")
-    _write_skill(skills_dir, "abcode", """\
-        tags: abcode
-        description: Core ABCode skill.
+    _write_skill(skills_dir, "opalacoder", """\
+        tags: opalacoder
+        description: Core OpalaCoder skill.
         scope: all
         ---
         Core instructions.
@@ -64,14 +64,14 @@ def test_load_project_skills_always_adds_abcode(tmp_path):
 
     result = load_project_skills(str(tmp_path), skill_names=["react_vite"])
     names = [s["name"] for s in result]
-    assert "abcode" in names
+    assert "opalacoder" in names
 
 
-def test_load_project_skills_empty_list_still_has_abcode(tmp_path):
-    """Even with an empty skills list, abcode must be loaded."""
+def test_load_project_skills_empty_list_still_has_opalacoder(tmp_path):
+    """Even with an empty skills list, opalacoder must be loaded."""
     skills_dir = str(tmp_path / "skills")
-    _write_skill(skills_dir, "abcode", """\
-        tags: abcode
+    _write_skill(skills_dir, "opalacoder", """\
+        tags: opalacoder
         description: Core.
         scope: all
         ---
@@ -80,7 +80,7 @@ def test_load_project_skills_empty_list_still_has_abcode(tmp_path):
 
     result = load_project_skills(str(tmp_path), skill_names=[])
     names = [s["name"] for s in result]
-    assert "abcode" in names
+    assert "opalacoder" in names
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +141,7 @@ def test_find_skill_file_prefers_project_local(tmp_path, monkeypatch):
         dirs.append(str(repo_skills))
         return dirs
 
-    monkeypatch.setattr("abcode.skills._skill_search_dirs", fake_dirs)
+    monkeypatch.setattr("opalacoder.skills._skill_search_dirs", fake_dirs)
 
     found = find_skill_file("myskill", project_path=str(project_dir))
     assert found is not None
@@ -201,26 +201,26 @@ def test_parse_skill_file_returns_none_for_missing_file(tmp_path):
 def test_orchestrator_scope_skill_not_injected_into_classifier(tmp_path):
     """A skill with scope=orchestrator must not appear in classifier-scoped output."""
     skills_dir = str(tmp_path / "skills")
-    _write_skill(skills_dir, "abcode", "tags: abcode\ndescription: Core.\nscope: all\n---\nCore.")
+    _write_skill(skills_dir, "opalacoder", "tags: opalacoder\ndescription: Core.\nscope: all\n---\nCore.")
     _write_skill(skills_dir, "orch_only", "tags: build\ndescription: Orch only.\nscope: orchestrator\n---\nBuild stuff.")
 
-    all_loaded = load_project_skills(str(tmp_path), skill_names=["abcode", "orch_only"])
+    all_loaded = load_project_skills(str(tmp_path), skill_names=["opalacoder", "orch_only"])
     classifier_skills = _filter_by_scope(all_loaded, SCOPE_CLASSIFIER)
     names = [s["name"] for s in classifier_skills]
 
-    assert "abcode" in names
+    assert "opalacoder" in names
     assert "orch_only" not in names
 
 
 def test_classifier_scope_skill_not_injected_into_orchestrator(tmp_path):
     """A skill with scope=classifier must not appear in orchestrator-scoped output."""
     skills_dir = str(tmp_path / "skills")
-    _write_skill(skills_dir, "abcode", "tags: abcode\ndescription: Core.\nscope: all\n---\nCore.")
+    _write_skill(skills_dir, "opalacoder", "tags: opalacoder\ndescription: Core.\nscope: all\n---\nCore.")
     _write_skill(skills_dir, "class_only", "tags: help\ndescription: Classifier only.\nscope: classifier\n---\nHelp text.")
 
-    all_loaded = load_project_skills(str(tmp_path), skill_names=["abcode", "class_only"])
+    all_loaded = load_project_skills(str(tmp_path), skill_names=["opalacoder", "class_only"])
     orchestrator_skills = _filter_by_scope(all_loaded, SCOPE_ORCHESTRATOR)
     names = [s["name"] for s in orchestrator_skills]
 
-    assert "abcode" in names
+    assert "opalacoder" in names
     assert "class_only" not in names

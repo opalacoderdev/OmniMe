@@ -2,10 +2,10 @@ import asyncio
 import os
 import sys
 
-# Add parent directory to path to import abcode
+# Add parent directory to path to import opalacoder
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from abcode.agents import (
+from opalacoder.agents import (
     make_skill_selector,
     make_landscape_planner,
     make_context_extractor,
@@ -13,11 +13,11 @@ from abcode.agents import (
     make_aggregator,
     DEFAULT_MODEL
 )
-from abcode.skills import get_relevant_skills_llm, SCOPE_ORCHESTRATOR
+from opalacoder.skills import get_relevant_skills_llm, SCOPE_ORCHESTRATOR
 from agenticblocks.blocks.llm.agent import AgentInput
 from pydantic import BaseModel
-from abcode.executor import CodePlanExecutorInput, _build_task
-from abcode.subplan import Subplan
+from opalacoder.executor import CodePlanExecutorInput, _build_task
+from opalacoder.subplan import Subplan
 
 async def run_flow_test():
     print("="*60)
@@ -54,7 +54,7 @@ async def run_flow_test():
     # 3. DECOMPOSER
     # ---------------------------------------------------------
     print("\n--- 3. DECOMPOSER ---")
-    from abcode.structured import decompose_to_subplans
+    from opalacoder.structured import decompose_to_subplans
     
     print("Calling decompose_to_subplans with instructor...")
     dec_result = await decompose_to_subplans(plan_text, model)
@@ -66,7 +66,7 @@ async def run_flow_test():
         return
 
     # Convert to standard Subplan schemas
-    from abcode.subplan import Subplan as CoreSubplan
+    from opalacoder.subplan import Subplan as CoreSubplan
     subplans = [
         CoreSubplan(
             id=sp.id,

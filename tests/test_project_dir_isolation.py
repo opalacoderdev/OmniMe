@@ -17,8 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from abcode.executor import SharedContext, SubplanExecutionBlock, _build_task, _extract_context_regex, _infer_project_dir_from_request
-from abcode.subplan import Subplan
+from opalacoder.executor import SharedContext, SubplanExecutionBlock, _build_task, _extract_context_regex, _infer_project_dir_from_request
+from opalacoder.subplan import Subplan
 
 
 # ---------------------------------------------------------------------------

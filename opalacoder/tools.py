@@ -1,4 +1,4 @@
-"""Tools for the ABCode Autonomous Agent (MemGPT pattern + HITL)."""
+"""Tools for the OpalaCoder Autonomous Agent (MemGPT pattern + HITL)."""
 
 import os
 import subprocess

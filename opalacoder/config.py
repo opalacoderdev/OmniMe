@@ -1,4 +1,4 @@
-"""Global configuration defaults for ABCode."""
+"""Global configuration defaults for OpalaCoder."""
 
 import os
 import yaml
@@ -18,7 +18,7 @@ warnings.filterwarnings(
 )
 
 # Load global .env
-global_env = pathlib.Path.home() / ".abcode" / ".env"
+global_env = pathlib.Path.home() / ".opalacoder" / ".env"
 if global_env.exists():
     load_dotenv(dotenv_path=global_env)
 
@@ -40,7 +40,7 @@ def _load_agents_config() -> dict:
 _AGENTS_CONFIG = _load_agents_config()
 
 # Model used for all agents (can be overridden via CLI --model)
-DEFAULT_MODEL = _AGENTS_CONFIG.get("default", os.getenv("ABCODE_MODEL", "ollama/mistral-nemo"))
+DEFAULT_MODEL = _AGENTS_CONFIG.get("default", os.getenv("OPALA_MODEL", "ollama/mistral-nemo"))
 ALTERNATIVE_MODEL = _AGENTS_CONFIG.get("alternative", "gemini/gemini-3.1-flash-lite")
 
 # Global LLM defaults (temperature, max_tokens, num_ctx) — can be set in agents.yaml
@@ -105,14 +105,14 @@ DEFAULT_MAX_HEARTBEATS = 15
 
 # SQLite database file for session persistence
 DEFAULT_DB_PATH = os.path.join(
-    os.path.expanduser("~"), ".abcode", "sessions.db"
+    os.path.expanduser("~"), ".opalacoder", "sessions.db"
 )
 
 # Execution mode: "auto" | "plan" | "edit"
 DEFAULT_MODE = "plan"
 
 def _get_system_lang() -> str:
-    env_lang = os.getenv("ABCODE_LANG")
+    env_lang = os.getenv("OPALA_LANG")
     if env_lang in ("en", "pt"):
         return env_lang
         
@@ -154,7 +154,7 @@ def setup_litellm_debug():
     import logging
     from datetime import datetime
     
-    log_dir = os.path.join(os.path.expanduser("~"), ".abcode", "logs")
+    log_dir = os.path.join(os.path.expanduser("~"), ".opalacoder", "logs")
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, "llm_debug.log")
     

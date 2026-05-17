@@ -1,4 +1,4 @@
-"""REPL command registry and handlers for ABCode CLI."""
+"""REPL command registry and handlers for OpalaCoder CLI."""
 
 from .project import ProjectStore, ProjectData
 from .agents import make_chat_memgpt_agent
@@ -145,7 +145,7 @@ async def cmd_delete(state: REPLState, args: list[str]) -> str | None:
     state.store.delete(name)
     T.success(f"Project '{name}' deleted.")
     if state.project.name == name:
-        T.info("Current project was deleted. Please restart ABCode.")
+        T.info("Current project was deleted. Please restart OpalaCoder.")
         return "break"
 
 
@@ -208,8 +208,8 @@ async def cmd_rmskill(state: REPLState, args: list[str]) -> str | None:
         T.error("Usage: /rmskill <skill_name>")
         return "continue"
     skill_name = args[0].strip().lower()
-    if skill_name == "abcode":
-        T.error("Skill 'abcode' is required and cannot be removed.")
+    if skill_name == "opalacoder":
+        T.error("Skill 'opalacoder' is required and cannot be removed.")
         return "continue"
     if skill_name not in state.project.skills:
         T.info(f"Skill '{skill_name}' is not active in this project.")
@@ -220,7 +220,7 @@ async def cmd_rmskill(state: REPLState, args: list[str]) -> str | None:
     T.success(f"Skill '{skill_name}' removed from project.")
 
 
-@_registry.register("/exit", "/quit", description="Exit ABCode")
+@_registry.register("/exit", "/quit", description="Exit OpalaCoder")
 async def cmd_exit(_state: REPLState, _args: list[str]) -> str:
     T.info(_("exiting"))
     return "break"

@@ -11,8 +11,8 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from abcode.agents import make_intent_classifier
-from abcode.config import get_agent_llm_kwargs
+from opalacoder.agents import make_intent_classifier
+from opalacoder.config import get_agent_llm_kwargs
 from agenticblocks.blocks.llm.agent import AgentInput, AgentOutput
 
 

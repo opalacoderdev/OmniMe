@@ -21,12 +21,12 @@ import pytest
 
 from agenticblocks.blocks.patterns.code_plan_executor import CodePlanExecutorOutput
 
-from abcode.executor import (
+from opalacoder.executor import (
     _build_task,
     _infer_project_dir_from_request,
     execute_subplans,
 )
-from abcode.subplan import Subplan
+from opalacoder.subplan import Subplan
 
 
 # ---------------------------------------------------------------------------
@@ -116,8 +116,8 @@ class TestUserRequestForDir:
                 fake_executor = FakeExecutorBlock(_ok_result())
                 context_prefixed = "[REFINED PLAN]:\nsome plan\n\n[USER REQUEST]:\nquero criar um app de calculadora"
 
-                with patch("abcode.executor.make_executor_block", return_value=fake_executor), \
-                     patch("abcode.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")):
+                with patch("opalacoder.executor.make_executor_block", return_value=fake_executor), \
+                     patch("opalacoder.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")):
                     _run(execute_subplans(
                         subplans=[_sp("SP-1", "Init project")],
                         original_request=context_prefixed,
@@ -142,8 +142,8 @@ class TestUserRequestForDir:
                 os.chdir(tmpdir)
                 fake_executor = FakeExecutorBlock(_ok_result())
 
-                with patch("abcode.executor.make_executor_block", return_value=fake_executor), \
-                     patch("abcode.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")):
+                with patch("opalacoder.executor.make_executor_block", return_value=fake_executor), \
+                     patch("opalacoder.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")):
                     _run(execute_subplans(
                         subplans=[_sp("SP-1", "Init project")],
                         original_request="create a todo app",
@@ -186,9 +186,9 @@ class TestTimeout:
                 async def fast_wait_for(coro, timeout):
                     return await original_wait_for(coro, timeout=1.0)
 
-                with patch("abcode.executor.make_executor_block", return_value=hanging), \
-                     patch("abcode.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")), \
-                     patch("abcode.executor.DEFAULT_MAX_RETRIES", 1), \
+                with patch("opalacoder.executor.make_executor_block", return_value=hanging), \
+                     patch("opalacoder.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")), \
+                     patch("opalacoder.executor.DEFAULT_MAX_RETRIES", 1), \
                      patch("asyncio.wait_for", side_effect=fast_wait_for):
 
                     results = _run(execute_subplans(

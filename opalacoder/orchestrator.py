@@ -109,7 +109,7 @@ Use your tools to implement it fully before calling `send_message`.
 {approved_plan}
 """
 
-        return f"""You are ABCode — an autonomous software-engineering agent embedded inside a project workspace.
+        return f"""You are OpalaCoder — an autonomous software-engineering agent embedded inside a project workspace.
 {project_header}
 ## FIRST ACTION — always
 Before doing anything else, call `get_project_overview` to understand the current state of the project:
@@ -303,10 +303,10 @@ The user reviewed and approved this plan. **Execute every step now — do not re
         return f"""You are an autonomous Code Planning agent.
 {project_header}
 {plan_section}
-Your task is to write a single Python script that accomplishes the plan using the available tools from the injected module `abcode.tools`.
+Your task is to write a single Python script that accomplishes the plan using the available tools from the injected module `opalacoder.tools`.
 You MUST import it exactly like this:
 ```python
-import abcode.tools as tools
+import opalacoder.tools as tools
 ```
 Then use `tools.read_file(path)`, `tools.write_file(path, content)`, etc.
 
@@ -352,7 +352,7 @@ CRITICAL INSTRUCTIONS:
         from agenticblocks.core.graph import WorkflowGraph
         from agenticblocks.runtime.executor import WorkflowExecutor
         from agenticblocks import as_tool
-        from . import tools as abcode_tools
+        from . import tools as opalacoder_tools
 
         agent = LLMAgentBlock(
             name="code_generator",
@@ -364,7 +364,7 @@ CRITICAL INSTRUCTIONS:
         code_planner = CodePlanExecutorBlock(
             executor_agent=agent,
             execution_mode="local",
-            inject_module=[abcode_tools],
+            inject_module=[opalacoder_tools],
             max_entries=10
         )
 

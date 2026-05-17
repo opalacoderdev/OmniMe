@@ -1,7 +1,7 @@
 import re
 
-from abcode.executor import SharedContext, _build_task, _extract_context_regex
-from abcode.subplan import Subplan
+from opalacoder.executor import SharedContext, _build_task, _extract_context_regex
+from opalacoder.subplan import Subplan
 
 
 def test_build_task_includes_project_dir_instructions():

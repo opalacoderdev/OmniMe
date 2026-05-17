@@ -9,7 +9,7 @@ Covers:
 """
 
 import pytest
-from abcode.config import get_agent_llm_kwargs
+from opalacoder.config import get_agent_llm_kwargs
 
 
 CLASSIFIER_AGENTS = [

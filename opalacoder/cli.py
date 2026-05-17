@@ -1,4 +1,4 @@
-"""ABCode CLI – entry point."""
+"""OpalaCoder CLI – entry point."""
 
 import asyncio
 import argparse
@@ -66,14 +66,14 @@ async def _create_project(store: ProjectStore, args) -> ProjectData:
     description = T.ask("Brief project description (used to select skills)").strip()
 
     all_skills = load_skills(project_path)
-    available = [s["name"] for s in all_skills if s["name"] != "abcode"]
-    T.info(f"Available skills: abcode (default), {', '.join(available) if available else '(none)'}")
+    available = [s["name"] for s in all_skills if s["name"] != "opalacoder"]
+    T.info(f"Available skills: opalacoder (default), {', '.join(available) if available else '(none)'}")
 
     if description and available:
         with T.spinner(_("selecting_skills")):
             chosen_skills = await select_skills_for_project(args.model, description, project_path)
     else:
-        chosen_skills = ["abcode"]
+        chosen_skills = ["opalacoder"]
 
     T.success(f"Skills selected: {', '.join(chosen_skills)}")
 
@@ -121,7 +121,7 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
 
     while True:
         try:
-            user_input = T.ask(f"ABCode ({state.display_name})")
+            user_input = T.ask(f"OpalaCoder ({state.display_name})")
             if not user_input:
                 continue
 
@@ -195,7 +195,7 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                     with T.spinner(_("agent_thinking")):
                         response = await state.chat_agent.run(AgentInput(prompt=_inject_project(state.project, user_input)))
                     answer = response.response.strip() if response.response else "(no response)"
-                    T.console.print(f"\n[bold green]ABCode:[/bold green] {answer}\n")
+                    T.console.print(f"\n[bold green]OpalaCoder:[/bold green] {answer}\n")
                     store.append_message(state.project, "user", user_input)
                     store.append_message(state.project, "assistant", answer)
 
@@ -279,10 +279,10 @@ async def run_pipeline(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="abcode",
-        description="ABCode – project-centric coding agent",
+        prog="opalacoder",
+        description="OpalaCoder – project-centric coding agent",
     )
-    parser.add_argument("--version", action="version", version=f"ABCode {__version__}")
+    parser.add_argument("--version", action="version", version=f"OpalaCoder {__version__}")
     parser.add_argument("--mode", choices=["auto", "plan", "edit"], default=DEFAULT_MODE)
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL})")
     parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES)
@@ -299,7 +299,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.debug:
-        from abcode.config import setup_litellm_debug
+        from opalacoder.config import setup_litellm_debug
         setup_litellm_debug()
 
     set_lang(args.lang)

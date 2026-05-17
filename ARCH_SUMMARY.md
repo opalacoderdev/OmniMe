@@ -1,14 +1,14 @@
-# ABCode — Architecture Summary
+# OpalaCoder — Architecture Summary
 
 ## Focus
 
-ABCode is designed to work with **small language models** (e.g. Mistral-Nemo, Llama 3 8B via Ollama) as its primary target. Large models (Gemini, GPT-4, Claude) are supported as a fallback for complex tasks, but the core design prioritizes correctness and usability under constrained context windows and limited reasoning capacity.
+OpalaCoder is designed to work with **small language models** (e.g. Mistral-Nemo, Llama 3 8B via Ollama) as its primary target. Large models (Gemini, GPT-4, Claude) are supported as a fallback for complex tasks, but the core design prioritizes correctness and usability under constrained context windows and limited reasoning capacity.
 
 ## Core Idea: Project-Centric Context Management
 
 The central abstraction is the **project**, not the session. Every interaction happens within a named project that has a fixed filesystem path. This design decision exists for one reason: **context management**.
 
-Small models degrade quickly when context is large, mixed, or unbounded. By anchoring all activity to a project, ABCode can:
+Small models degrade quickly when context is large, mixed, or unbounded. By anchoring all activity to a project, OpalaCoder can:
 
 - Inject a stable, minimal project header (`[PROJECT: name | PATH: /path]`) into every prompt instead of growing conversation state
 - Load only the skills relevant to that project type (selected at creation, not dynamically per-request)
@@ -51,8 +51,8 @@ Tools (tools.py)              — file read/write, run_command, search_code, ask
 
 Skill search order:
   1. {project_path}/skills/   (project-local, highest priority)
-  2. {repo_root}/skills/      (ABCode built-in skills)
-  3. ~/.abcode/skills/        (user global skills)
+  2. {repo_root}/skills/      (OpalaCoder built-in skills)
+  3. ~/.opalacoder/skills/        (user global skills)
 ```
 
 ## Key Decisions
@@ -62,7 +62,7 @@ Skill search order:
 | Project replaces session as primary abstraction | Stable context anchor; avoids unbounded session drift |
 | Skills fixed at project creation | Prevents irrelevant skill injection; reduces prompt size for small models |
 | `/addskill` command | Lets users extend skills without restarting or recreating the project |
-| `abcode` skill always loaded | Core behavioral instructions must always be present |
+| `opalacoder` skill always loaded | Core behavioral instructions must always be present |
 | Two orchestrator strategies | Small models cannot reliably drive autonomous tool loops; deterministic DAG is more reliable for them |
 | All tools use `PROJECT_PATH` as `cwd` | Eliminates path ambiguity; agent does not need to reason about absolute paths |
 | SQLite persistence | Lightweight, zero-dependency, suitable for local-first tooling |

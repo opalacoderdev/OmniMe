@@ -8,7 +8,7 @@ Covers:
 """
 
 import pytest
-from abcode.i18n import _, set_lang, _STRINGS
+from opalacoder.i18n import _, set_lang, _STRINGS
 
 
 EN_KEYS = set(_STRINGS["en"].keys())

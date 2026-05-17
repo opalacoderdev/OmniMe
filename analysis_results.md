@@ -1,6 +1,6 @@
 # Análise Arquitetural: Agentes Interativos de Terminal (Agent-in-the-loop)
 
-A ideia de permitir que o agente converse "ao vivo" com o terminal (respondendo a prompts como os do `npm`, `vite`, `apt-get`) é o "Santo Graal" dos agentes de código (como o Devin ou o SWE-Agent). É perfeitamente possível, mas **extremamente complexo** e mudaria a fundação do ABCode. 
+A ideia de permitir que o agente converse "ao vivo" com o terminal (respondendo a prompts como os do `npm`, `vite`, `apt-get`) é o "Santo Graal" dos agentes de código (como o Devin ou o SWE-Agent). É perfeitamente possível, mas **extremamente complexo** e mudaria a fundação do OpalaCoder. 
 
 Abaixo detalho como isso funcionaria e quais seriam os impactos de implementar isso na sua arquitetura atual.
 
@@ -38,4 +38,4 @@ Para o foco do **AgenticBlocks.IO** (construir grafos autônomos eficientes), **
 **O padrão da indústria para automação:**
 A regra de ouro da engenharia DevOps e Automação CI/CD (que é o que agentes tentam emular) é **desabilitar qualquer interatividade de CLI**. Praticamente todas as ferramentas do mundo possuem flags *headless* (`-y`, `--quiet`, `--template`, `--force`, `DEBIAN_FRONTEND=noninteractive`).
 
-Em vez de transformar o ABCode em um "emulador de teclado humano lento e complexo", a arquitetura atual de usar **Skills** para ensinar o agente a sempre usar as flags autônomas (`-y`) é muito mais rápida, barata, imune a problemas de UI de terminal e mais alinhada com as melhores práticas de Engenharia de Software.
+Em vez de transformar o OpalaCoder em um "emulador de teclado humano lento e complexo", a arquitetura atual de usar **Skills** para ensinar o agente a sempre usar as flags autônomas (`-y`) é muito mais rápida, barata, imune a problemas de UI de terminal e mais alinhada com as melhores práticas de Engenharia de Software.

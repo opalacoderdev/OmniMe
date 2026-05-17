@@ -1,4 +1,4 @@
-"""Project management: create, load, save, and list ABCode projects using SQLite."""
+"""Project management: create, load, save, and list OpalaCoder projects using SQLite."""
 
 import sqlite3
 import json
@@ -32,7 +32,7 @@ def _init_schema(db_path: str) -> None:
                 model           TEXT NOT NULL DEFAULT '',
                 project_name    TEXT NOT NULL DEFAULT '',
                 project_path    TEXT NOT NULL DEFAULT '',
-                skills          TEXT NOT NULL DEFAULT '["abcode"]',
+                skills          TEXT NOT NULL DEFAULT '["opalacoder"]',
                 description     TEXT NOT NULL DEFAULT '',
                 request         TEXT NOT NULL DEFAULT '',
                 plan_text       TEXT NOT NULL DEFAULT '',
@@ -58,7 +58,7 @@ class ProjectData:
     model: str = ""
     project_name: str = ""
     project_path: str = ""
-    skills: list = field(default_factory=lambda: ["abcode"])
+    skills: list = field(default_factory=lambda: ["opalacoder"])
     description: str = ""
     request: str = ""
     plan_text: str = ""
@@ -104,9 +104,9 @@ class ProjectStore:
 
     def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "") -> ProjectData:
         now = datetime.now(timezone.utc).isoformat()
-        _skills = skills if skills is not None else ["abcode"]
-        if "abcode" not in _skills:
-            _skills = ["abcode"] + _skills
+        _skills = skills if skills is not None else ["opalacoder"]
+        if "opalacoder" not in _skills:
+            _skills = ["opalacoder"] + _skills
         with _conn(self.db_path) as conn:
             conn.execute(
                 "INSERT INTO projects (name, created_at, updated_at, mode, model, project_name, project_path, skills, description) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -160,8 +160,8 @@ class ProjectStore:
     def save(self, project: ProjectData) -> None:
         now = datetime.now(timezone.utc).isoformat()
         _skills = list(project.skills)
-        if "abcode" not in _skills:
-            _skills = ["abcode"] + _skills
+        if "opalacoder" not in _skills:
+            _skills = ["opalacoder"] + _skills
         with _conn(self.db_path) as conn:
             conn.execute(
                 """UPDATE projects SET updated_at=?, mode=?, model=?, project_name=?, project_path=?,

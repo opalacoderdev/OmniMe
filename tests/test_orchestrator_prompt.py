@@ -9,7 +9,7 @@ Verifies that the orchestrator's system prompt:
 """
 
 import pytest
-from abcode.orchestrator import AutonomousOrchestratorStrategy
+from opalacoder.orchestrator import AutonomousOrchestratorStrategy
 
 
 @pytest.fixture

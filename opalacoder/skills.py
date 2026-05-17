@@ -16,11 +16,11 @@ def _skill_search_dirs(project_path: str = "") -> list[str]:
     # 1. Project's own skills dir
     if project_path:
         dirs.append(os.path.join(project_path, "skills"))
-    # 2. ABCode repo skills dir (next to the abcode package)
+    # 2. OpalaCoder repo skills dir (next to the opalacoder package)
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     dirs.append(os.path.join(repo_root, "skills"))
     # 3. User global skills
-    dirs.append(os.path.expanduser("~/.abcode/skills"))
+    dirs.append(os.path.expanduser("~/.opalacoder/skills"))
     return dirs
 
 
@@ -66,9 +66,9 @@ def load_skills(project_path: str = "") -> list[dict]:
 
 
 def load_project_skills(project_path: str, skill_names: list[str]) -> list[dict]:
-    """Load only the skills listed in the project's skill_names, always including abcode."""
+    """Load only the skills listed in the project's skill_names, always including opalacoder."""
     names = set(skill_names)
-    names.add("abcode")
+    names.add("opalacoder")
     all_skills = load_skills(project_path)
     return [s for s in all_skills if s["name"] in names]
 
@@ -84,11 +84,11 @@ def find_skill_file(skill_name: str, project_path: str = "") -> str | None:
 
 
 async def select_skills_for_project(model: str, description: str, project_path: str = "") -> list[str]:
-    """Use an LLM to pick skills relevant to a new project description. Always includes abcode."""
+    """Use an LLM to pick skills relevant to a new project description. Always includes opalacoder."""
     all_skills = load_skills(project_path)
-    catalog = "\n".join(f"- {s['name']}: {s['description']}" for s in all_skills if s['name'] != "abcode")
+    catalog = "\n".join(f"- {s['name']}: {s['description']}" for s in all_skills if s['name'] != "opalacoder")
     if not catalog:
-        return ["abcode"]
+        return ["opalacoder"]
 
     prompt = (
         f"PROJECT DESCRIPTION: {description}\n\n"
@@ -105,10 +105,10 @@ async def select_skills_for_project(model: str, description: str, project_path: 
         result = await selector.run(AgentInput(prompt=prompt))
         selected = [w.strip().lower() for w in result.response.replace("\n", ",").split(",") if w.strip()]
         valid_names = {s["name"].lower(): s["name"] for s in all_skills}
-        chosen = ["abcode"] + [valid_names[n] for n in selected if n in valid_names and valid_names[n] != "abcode"]
-        return chosen if chosen else ["abcode"]
+        chosen = ["opalacoder"] + [valid_names[n] for n in selected if n in valid_names and valid_names[n] != "opalacoder"]
+        return chosen if chosen else ["opalacoder"]
     except Exception:
-        return ["abcode"]
+        return ["opalacoder"]
 
 
 def _filter_by_scope(skills: list, target_scope: str) -> list:

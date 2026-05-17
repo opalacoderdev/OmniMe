@@ -1,4 +1,4 @@
-"""Agent factory functions for ABCode."""
+"""Agent factory functions for OpalaCoder."""
 
 from agenticblocks.blocks.llm.agent import LLMAgentBlock, AgentInput
 from agenticblocks.blocks.llm.memgpt_agent import MemGPTAgentBlock
@@ -121,7 +121,7 @@ def make_chat_memgpt_agent(model: str | None = None) -> MemGPTAgentBlock:
     )
 
     system_prompt = (
-        "You are ABCode's conversational assistant, embedded inside a software project.\n"
+        "You are OpalaCoder's conversational assistant, embedded inside a software project.\n"
         "You have access to the conversation history and know which project the user is working on.\n"
         "Answer programming questions, explain concepts, and discuss code in the context of that project.\n"
         "When relevant, refer to the project's known structure and technology stack.\n"
@@ -205,7 +205,7 @@ Step 2: Based on the translated demand, list the exact names of the skills you d
 Answer ONLY with the names of the skills, separated by comma. If none are relevant, answer 'none'.
 
 CRITICAL RULES:
-1. If the user demand is a single word without context or meaningless (e.g. "list", "help", "hello"), you MUST include the 'abcode' skill.
+1. If the user demand is a single word without context or meaningless (e.g. "list", "help", "hello"), you MUST include the 'opalacoder' skill.
 2. NEVER select a framework skill (like `react_vite`) if the user requests "plain", "vanilla", or "manually" created files, or explicitly says "without react".
 3. ONLY select skills whose description perfectly matches the requested technologies.
 """,

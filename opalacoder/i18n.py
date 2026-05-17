@@ -1,4 +1,4 @@
-"""Internationalization support for ABCode CLI."""
+"""Internationalization support for OpalaCoder CLI."""
 
 _LANG = "en"
 
@@ -17,7 +17,7 @@ _STRINGS = {
         "list_desc": "Lists all sessions",
         "load_desc": "Loads another session",
         "delete_desc": "Deletes a session",
-        "exit_desc": "Exits ABCode",
+        "exit_desc": "Exits OpalaCoder",
         "usage_rename": "Usage: /rename <new_name>",
         "session_renamed": "Session renamed to '{name}'.",
         "session_exists": "A session with the name '{name}' already exists.",
@@ -29,7 +29,7 @@ _STRINGS = {
         "usage_delete": "Usage: /delete <name>",
         "session_deleted": "Session '{name}' deleted.",
         "current_deleted": "The current session was deleted. Loading 'default'.",
-        "exiting": "Exiting ABCode. Goodbye!",
+        "exiting": "Exiting OpalaCoder. Goodbye!",
         "unknown_command": "Unknown command: {cmd}. Type /help for help.",
         "agent_thinking": "Agent thinking...",
         "agent_plan_triggered": "The agent triggered the planning mode for the demand: '{req}'",
@@ -118,7 +118,7 @@ _STRINGS = {
         "list_desc": "Lista todas as sessões",
         "load_desc": "Carrega outra sessão",
         "delete_desc": "Apaga uma sessão",
-        "exit_desc": "Sai do ABCode",
+        "exit_desc": "Sai do OpalaCoder",
         "usage_rename": "Uso: /rename <novo_nome>",
         "session_renamed": "Sessão renomeada para '{name}'.",
         "session_exists": "Já existe uma sessão com o nome '{name}'.",
@@ -130,7 +130,7 @@ _STRINGS = {
         "usage_delete": "Uso: /delete <nome>",
         "session_deleted": "Sessão '{name}' apagada.",
         "current_deleted": "A sessão atual foi apagada. Carregando 'default'.",
-        "exiting": "Encerrando ABCode. Até logo!",
+        "exiting": "Encerrando OpalaCoder. Até logo!",
         "unknown_command": "Comando desconhecido: {cmd}. Digite /help para ajuda.",
         "agent_thinking": "Agente pensando...",
         "agent_plan_triggered": "O agente acionou o modo de planejamento para a demanda: '{req}'",

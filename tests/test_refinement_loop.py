@@ -25,13 +25,13 @@ def _run(coro):
 
 
 def _make_project(name="test_proj", model="fake/model"):
-    from abcode.project import ProjectData
+    from opalacoder.project import ProjectData
     return ProjectData(
         name=name,
         model=model,
         project_name=name,
         project_path="/tmp/test_proj",
-        skills=["abcode"],
+        skills=["opalacoder"],
     )
 
 
@@ -53,12 +53,12 @@ def _null_spinner(*args, **kwargs):
 # cannot be reused. So this is a factory function, not a module-level list.
 def _common_patches():
     return [
-        patch("abcode.planner.T.show_plan"),
-        patch("abcode.planner.T.section"),
-        patch("abcode.planner.T.success"),
-        patch("abcode.planner.T.info"),
-        patch("abcode.planner.T.thinking"),
-        patch("abcode.planner.T.warning"),
+        patch("opalacoder.planner.T.show_plan"),
+        patch("opalacoder.planner.T.section"),
+        patch("opalacoder.planner.T.success"),
+        patch("opalacoder.planner.T.info"),
+        patch("opalacoder.planner.T.thinking"),
+        patch("opalacoder.planner.T.warning"),
         patch("pathlib.Path.write_text"),
     ]
 
@@ -74,14 +74,14 @@ def test_run_pipeline_calls_refine_plan():
     mock_refine = AsyncMock(return_value="approved plan")
 
     with (
-        patch("abcode.cli.get_relevant_skills_llm", new=AsyncMock(return_value="")),
-        patch("abcode.planner.generate_panorama", new=AsyncMock(return_value="Phase 1: Do stuff")),
-        patch("abcode.planner.refine_plan", new=mock_refine),
-        patch("abcode.orchestrator.AutonomousOrchestratorStrategy.run", new=AsyncMock(return_value="Done")),
-        patch("abcode.cli.T.section"),
-        patch("abcode.cli.T.show_result"),
+        patch("opalacoder.cli.get_relevant_skills_llm", new=AsyncMock(return_value="")),
+        patch("opalacoder.planner.generate_panorama", new=AsyncMock(return_value="Phase 1: Do stuff")),
+        patch("opalacoder.planner.refine_plan", new=mock_refine),
+        patch("opalacoder.orchestrator.AutonomousOrchestratorStrategy.run", new=AsyncMock(return_value="Done")),
+        patch("opalacoder.cli.T.section"),
+        patch("opalacoder.cli.T.show_result"),
     ):
-        from abcode.cli import run_pipeline
+        from opalacoder.cli import run_pipeline
         _run(run_pipeline(
             project=project,
             store=store,
@@ -100,14 +100,14 @@ def test_run_pipeline_calls_refine_plan():
 
 def test_refine_plan_fast_approval_returns_unchanged():
     """Typing 'sim' (a known approval word) must return the plan unchanged."""
-    from abcode.planner import refine_plan
+    from opalacoder.planner import refine_plan
 
     original_plan = "Phase 1: Setup\nPhase 2: Build"
     project = _make_project()
     store = _make_store()
 
     with (
-        patch("abcode.terminal.ask", return_value="sim"),
+        patch("opalacoder.terminal.ask", return_value="sim"),
         patch("pathlib.Path.read_text", return_value=original_plan),
         *_common_patches(),
     ):
@@ -130,14 +130,14 @@ def test_refine_plan_fast_approval_returns_unchanged():
 
 def test_refine_plan_empty_enter_approves():
     """Pressing Enter (empty input) must approve the plan immediately."""
-    from abcode.planner import refine_plan
+    from opalacoder.planner import refine_plan
 
     plan = "Phase 1: Something"
     project = _make_project()
     store = _make_store()
 
     with (
-        patch("abcode.terminal.ask", return_value=""),
+        patch("opalacoder.terminal.ask", return_value=""),
         patch("pathlib.Path.read_text", return_value=plan),
         *_common_patches(),
     ):
@@ -158,7 +158,7 @@ def test_refine_plan_empty_enter_approves():
 
 def test_refine_plan_one_cycle_then_approve():
     """One round of feedback must call the refinement LLM, then approve on 'ok'."""
-    from abcode.planner import refine_plan
+    from opalacoder.planner import refine_plan
 
     original_plan = "Phase 1: Setup"
     refined_plan  = "Phase 1: Setup\nPhase 2: Tests added"
@@ -172,11 +172,11 @@ def test_refine_plan_one_cycle_then_approve():
     mock_agent.run = AsyncMock(return_value=MagicMock(response=refined_plan))
 
     with (
-        patch("abcode.terminal.ask", side_effect=lambda *a, **kw: next(ask_seq)),
+        patch("opalacoder.terminal.ask", side_effect=lambda *a, **kw: next(ask_seq)),
         patch("pathlib.Path.read_text", side_effect=lambda *a, **kw: next(read_seq)),
-        patch("abcode.planner.make_refinement_agent", return_value=mock_agent),
-        patch("abcode.planner.confirm_plan", new=AsyncMock(return_value=MagicMock(approved=False))),
-        patch("abcode.planner.T.spinner", new=_null_spinner),
+        patch("opalacoder.planner.make_refinement_agent", return_value=mock_agent),
+        patch("opalacoder.planner.confirm_plan", new=AsyncMock(return_value=MagicMock(approved=False))),
+        patch("opalacoder.planner.T.spinner", new=_null_spinner),
         *_common_patches(),
     ):
         result = _run(refine_plan(
@@ -197,15 +197,15 @@ def test_refine_plan_one_cycle_then_approve():
 
 def test_refine_plan_cancel_raises():
     """Calling terminal.ask with /cancel must bubble UserCancelled out."""
-    from abcode.planner import refine_plan
-    from abcode.terminal import UserCancelled
+    from opalacoder.planner import refine_plan
+    from opalacoder.terminal import UserCancelled
 
     plan = "Phase 1: Something"
     project = _make_project()
     store = _make_store()
 
     with (
-        patch("abcode.terminal.ask", side_effect=UserCancelled),
+        patch("opalacoder.terminal.ask", side_effect=UserCancelled),
         patch("pathlib.Path.read_text", return_value=plan),
         *_common_patches(),
     ):
@@ -235,14 +235,14 @@ def test_run_pipeline_passes_correct_session_and_store():
         return plan_text
 
     with (
-        patch("abcode.cli.get_relevant_skills_llm", new=AsyncMock(return_value="")),
-        patch("abcode.planner.generate_panorama", new=AsyncMock(return_value="Phase 1")),
-        patch("abcode.planner.refine_plan", new=fake_refine),
-        patch("abcode.orchestrator.AutonomousOrchestratorStrategy.run", new=AsyncMock(return_value="Done")),
-        patch("abcode.cli.T.section"),
-        patch("abcode.cli.T.show_result"),
+        patch("opalacoder.cli.get_relevant_skills_llm", new=AsyncMock(return_value="")),
+        patch("opalacoder.planner.generate_panorama", new=AsyncMock(return_value="Phase 1")),
+        patch("opalacoder.planner.refine_plan", new=fake_refine),
+        patch("opalacoder.orchestrator.AutonomousOrchestratorStrategy.run", new=AsyncMock(return_value="Done")),
+        patch("opalacoder.cli.T.section"),
+        patch("opalacoder.cli.T.show_result"),
     ):
-        from abcode.cli import run_pipeline
+        from opalacoder.cli import run_pipeline
         _run(run_pipeline(
             project=project,
             store=store,

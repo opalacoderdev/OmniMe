@@ -17,8 +17,8 @@ import pytest
 
 from agenticblocks.blocks.patterns.code_plan_executor import CodePlanExecutorOutput
 
-from abcode.executor import execute_subplans
-from abcode.subplan import Subplan
+from opalacoder.executor import execute_subplans
+from opalacoder.subplan import Subplan
 
 
 # ---------------------------------------------------------------------------
@@ -86,8 +86,8 @@ def test_all_files_created_in_project_subdir():
             sp2_code = "from pathlib import Path; Path('style.css').write_text('body{}')"
             fake_executor = FakeExecutorBlock([sp1_code, sp2_code])
 
-            with patch("abcode.executor.make_executor_block", return_value=fake_executor), \
-                 patch("abcode.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")):
+            with patch("opalacoder.executor.make_executor_block", return_value=fake_executor), \
+                 patch("opalacoder.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")):
                 _run(execute_subplans(
                     subplans=[_sp("SP-1", "Create HTML"), _sp("SP-2", "Create CSS")],
                     original_request="create a calculator app",
@@ -121,8 +121,8 @@ def test_sp2_task_prompt_lists_files_from_sp1():
             sp1_code = "from pathlib import Path; Path('index.html').write_text('<html/>')"
             fake_executor = FakeExecutorBlock([sp1_code, ""])
 
-            with patch("abcode.executor.make_executor_block", return_value=fake_executor), \
-                 patch("abcode.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")):
+            with patch("opalacoder.executor.make_executor_block", return_value=fake_executor), \
+                 patch("opalacoder.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")):
                 _run(execute_subplans(
                     subplans=[_sp("SP-1", "Create HTML"), _sp("SP-2", "Add CSS")],
                     original_request="create a calculator app",
@@ -162,8 +162,8 @@ def test_context_not_corrupted_by_stdout_parsing():
             )
             fake_executor = FakeExecutorBlock([sp1_code, ""])
 
-            with patch("abcode.executor.make_executor_block", return_value=fake_executor), \
-                 patch("abcode.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")):
+            with patch("opalacoder.executor.make_executor_block", return_value=fake_executor), \
+                 patch("opalacoder.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")):
                 _run(execute_subplans(
                     subplans=[_sp("SP-1", "Create HTML"), _sp("SP-2", "Add CSS")],
                     original_request="create a calculator app",
@@ -197,8 +197,8 @@ def test_each_subplan_runs_in_same_project_directory():
                 make_code("script.js"),
             ])
 
-            with patch("abcode.executor.make_executor_block", return_value=fake_executor), \
-                 patch("abcode.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")):
+            with patch("opalacoder.executor.make_executor_block", return_value=fake_executor), \
+                 patch("opalacoder.skills.get_relevant_skills_llm", new=AsyncMock(return_value="")):
                 _run(execute_subplans(
                     subplans=[
                         _sp("SP-1", "Create HTML"),

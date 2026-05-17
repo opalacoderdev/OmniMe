@@ -10,8 +10,8 @@ Covers:
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from abcode.planner import _estimate_tokens, _trim_to_budget, generate_panorama
-from abcode.config import get_agent_llm_kwargs
+from opalacoder.planner import _estimate_tokens, _trim_to_budget, generate_panorama
+from opalacoder.config import get_agent_llm_kwargs
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@ def test_estimate_tokens_grows_with_length():
 def test_estimate_tokens_fallback_heuristic():
     """When litellm.token_counter raises, the fallback (len // 4) must still
     return a positive int for non-trivial text."""
-    with patch("abcode.planner._estimate_tokens", side_effect=None):
+    with patch("opalacoder.planner._estimate_tokens", side_effect=None):
         # Call the real function — if litellm is unavailable it uses len//4
         result = _estimate_tokens("a" * 400)
         assert result > 0
@@ -115,7 +115,7 @@ def test_generate_panorama_trims_huge_history():
     mock_planner = MagicMock()
     mock_planner.run = fake_run
 
-    with patch("abcode.planner.make_landscape_planner", return_value=mock_planner):
+    with patch("opalacoder.planner.make_landscape_planner", return_value=mock_planner):
         asyncio.new_event_loop().run_until_complete(
             generate_panorama(request, model="fake/model", history=huge_history)
         )
@@ -142,7 +142,7 @@ def test_generate_panorama_no_trim_for_small_history():
     mock_planner = MagicMock()
     mock_planner.run = fake_run
 
-    with patch("abcode.planner.make_landscape_planner", return_value=mock_planner):
+    with patch("opalacoder.planner.make_landscape_planner", return_value=mock_planner):
         asyncio.new_event_loop().run_until_complete(
             generate_panorama(request, model="fake/model", history=small_history)
         )
