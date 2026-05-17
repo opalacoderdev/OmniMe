@@ -27,3 +27,5 @@ Run tests on tests dir after you implement a new feature.
 > Fill in your actual commands below — this is the highest-value section.
 
 ```bash
+python -m pytest
+```

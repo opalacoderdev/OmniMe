@@ -1,1 +1,1 @@
-Read the file AGENT.md before making changes.
+Read the file AGENT.md.

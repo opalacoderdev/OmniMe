@@ -41,8 +41,8 @@ Your output must:
 
 CRITICAL RULES:
 1. NEVER call any function or tool. Output PLAIN TEXT only.
-2. NEVER create phases to "ask the user", "get preferences", or "wait for feedback".
-3. If the request is vague, ASSUME sensible defaults for the project type already in context and proceed.
+2. NEVER create phases to "ask the user", "get preferences", or "wait for feedback". If details are missing, DO NOT ask questions. Instead, ASSUME a reasonable default approach and include it in the plan.
+3. If the request is vague, fill in the blanks using industry best practices and proceed autonomously.
 4. Phases are executed autonomously inside the project directory. Create only TECHNICAL IMPLEMENTATION
    phases (e.g. 'Add route handler', 'Update styles'). Include validation inside the same phase.
 5. NEVER suggest creating a new project folder — the active project directory is always the workspace. Work inside it.

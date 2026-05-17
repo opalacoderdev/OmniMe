@@ -1,5 +1,5 @@
 default: ollama/ministral-3:14b
-alternative: gemini/gemini-3.1-flash-lite
+alternative: gemini/gemini-3-flash-preview
 
 # Global LLM defaults applied to all agents unless overridden below.
 llm_defaults:

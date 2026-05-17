@@ -103,6 +103,7 @@ _STRINGS = {
         "api_key_missing_fallback": "API Key missing or skipped. Falling back to {model}.",
         "alt_model_error": "Error using alternative model ({model}): {err}",
         "fallback_to_model": "Falling back to {model}",
+        "using_model": "Using model: {model}",
     },
     "pt": {
         "active_session": "Sessão Ativa: {name}",
@@ -204,6 +205,7 @@ _STRINGS = {
         "api_key_missing_fallback": "API Key ausente ou ignorada. Usando {model} como fallback.",
         "alt_model_error": "Erro ao usar modelo alternativo ({model}): {err}",
         "fallback_to_model": "Usando {model} como fallback",
+        "using_model": "Usando o modelo: {model}",
     }
 }
 

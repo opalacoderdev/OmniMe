@@ -207,10 +207,16 @@ refactoring, and updating any existing code inside the project directory.
             refresh_per_second=4,
             transient=False,
         ) as live:
+            AGENT_PROGRESS.live_context = live
             while not agent_task.done():
-                live.update(_build_progress_panel(AGENT_PROGRESS, max_hb))
+                if live.is_started:
+                    live.update(_build_progress_panel(AGENT_PROGRESS, max_hb))
                 await asyncio.sleep(0.25)
+            AGENT_PROGRESS.live_context = None
+            
             # Final render with terminal state
+            if not live.is_started:
+                live.start()
             live.update(_build_progress_panel(AGENT_PROGRESS, max_hb))
 
         if error_holder:
@@ -417,9 +423,15 @@ CRITICAL INSTRUCTIONS:
             refresh_per_second=4,
             transient=False,
         ) as live:
+            AGENT_PROGRESS.live_context = live
             while not agent_task.done():
-                live.update(_build_progress_panel(AGENT_PROGRESS, max_hb))
+                if live.is_started:
+                    live.update(_build_progress_panel(AGENT_PROGRESS, max_hb))
                 await asyncio.sleep(0.25)
+            AGENT_PROGRESS.live_context = None
+            
+            if not live.is_started:
+                live.start()
             live.update(_build_progress_panel(AGENT_PROGRESS, max_hb))
 
         return result_holder[0] if result_holder else "Code Plan execution finished but no completion message was recorded."

@@ -165,8 +165,10 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                         complexity_evaluator = make_complexity_evaluator(state.project.model)
                         with T.spinner(_("evaluating_complexity")):
                             comp_res = await complexity_evaluator.run(AgentInput(prompt=user_input))
-                            complexity = comp_res.response.strip().lower().split()[0]
-                            if complexity not in ("default", "alternative"):
+                            raw_comp = comp_res.response.strip().lower()
+                            if "alternative" in raw_comp:
+                                complexity = "alternative"
+                            else:
                                 complexity = "default"
 
                     if complexity == "alternative":
@@ -225,6 +227,7 @@ async def run_pipeline(
     project_skills: list = None,
 ) -> None:
     model = active_model or project.model
+    T.info(_("using_model", model=model))
 
     if not request:
         return

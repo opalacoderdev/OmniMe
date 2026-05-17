@@ -18,6 +18,7 @@ class _AgentProgress:
         self.last_tool: str = "—"
         self.last_args: str = ""
         self.start_time: float = time.monotonic()
+        self.live_context = None
 
     def update(self, tool_name: str, args_preview: str = "") -> None:
         self.heartbeat += 1
@@ -73,9 +74,6 @@ def read_file(path: str) -> str:
 
 @as_tool(name="write_file", description="Write or overwrite a file inside the project directory. Relative paths are resolved from the project directory. Creates parent directories if needed.")
 def write_file(path: str, content: str) -> str:
-    print("\n\nDEBUG: AGENT WRITTING FILE... ", path)
-    print("CONTENT: ", content)
-    print("\n\n")
     resolved = _resolve_path(path)
     AGENT_PROGRESS.update("write_file", f"path={_preview(resolved)}")
     try:
@@ -150,8 +148,16 @@ def search_code(query: str, path: str = ".") -> str:
 )
 def ask_human(question: str) -> str:
     AGENT_PROGRESS.update("ask_human", _preview(question))
-    T.warning(f"\n[Agent requires input]: {question}")
-    return T.ask("Your response")
+    
+    if getattr(AGENT_PROGRESS, "live_context", None):
+        AGENT_PROGRESS.live_context.stop()
+        
+    try:
+        T.warning(f"\n[Agent requires input]: {question}")
+        return T.ask("Your response")
+    finally:
+        if getattr(AGENT_PROGRESS, "live_context", None):
+            AGENT_PROGRESS.live_context.start()
 
 
 @as_tool(
