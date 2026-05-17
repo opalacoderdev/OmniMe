@@ -133,15 +133,17 @@ def spinner(label: str):
 # ─── User prompts ─────────────────────────────────────────────────────────────
 
 def ask(prompt: str) -> str:
-    console.print(f"\n[bold yellow]?[/bold yellow] {prompt}")
+    from rich.markup import escape
+    console.print(f"\n[bold yellow]?[/bold yellow] {escape(prompt)}")
     ans = input("  → ").strip()
     _check_cancel(ans)
     return ans
 
 
 def confirm(prompt: str, default: bool = True) -> bool:
+    from rich.markup import escape
     hint = "[Y/n]" if default else "[y/N]"
-    console.print(f"\n[bold yellow]?[/bold yellow] {prompt} {hint}")
+    console.print(f"\n[bold yellow]?[/bold yellow] {escape(prompt)} {hint}")
     raw = input("  → ").strip().lower()
     _check_cancel(raw)
     if not raw:
@@ -151,9 +153,10 @@ def confirm(prompt: str, default: bool = True) -> bool:
 
 def choose(prompt: str, options: list[str]) -> str:
     """Let user pick from a numbered list; returns chosen option string."""
-    console.print(f"\n[bold yellow]?[/bold yellow] {prompt}")
+    from rich.markup import escape
+    console.print(f"\n[bold yellow]?[/bold yellow] {escape(prompt)}")
     for i, opt in enumerate(options, 1):
-        console.print(f"  [cyan]{i}[/cyan]) {opt}")
+        console.print(f"  [cyan]{i}[/cyan]) {escape(opt)}")
     while True:
         raw = input("  → ").strip()
         _check_cancel(raw)

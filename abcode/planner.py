@@ -1,28 +1,46 @@
 """Planning pipeline: panorama generation, user refinement loop, and decomposition."""
 
+import os
+import re
+from pathlib import Path
+
 from agenticblocks.blocks.llm.agent import AgentInput
 
 from .agents import make_landscape_planner, make_refinement_agent
 from .structured import decompose_to_subplans, confirm_plan
 from .subplan import Subplan
-from .session import SessionData, SessionStore
+from .project import ProjectData, ProjectStore
 from . import terminal as T
 from .i18n import _
+
+PLAN_FILE = "plan.md"
 
 MAX_REFINEMENT_CYCLES = 20
 
 # Fast-path heuristics — avoid an LLM call when user intent is unambiguous
 _APPROVAL_WORDS = {
-    "sim", "s", "yes", "y", "ok", "okay", "aprovado", "pode", "certo", "perfeito",
-    "approved", "sure", "fine", "great", "looks good", "proceed"
+    # Portuguese
+    "sim", "s", "ok", "okay", "aprovado", "pode", "certo", "perfeito",
+    "tudo certo", "tudo bem", "pode ir", "vai", "prossiga", "continua",
+    "continue", "confirmo", "confirmado", "aceito", "aceitar", "beleza",
+    "ótimo", "excelente", "correto", "está bom", "está ótimo", "positivo",
+    # English
+    "yes", "y", "approved", "sure", "fine", "great", "looks good", "proceed",
+    "go ahead", "confirmed", "confirm", "good", "perfect", "done", "alright",
+    "all good", "that's good", "sounds good", "let's go", "execute", "run it",
 }
 _CHANGE_SIGNALS = {
+    # Portuguese
     "quero que", "adicione", "remova", "mude", "altere", "somente", "apenas",
     "não precisa", "deve mostrar", "deve ter", "deve ser", "coloque", "tire",
-    "inclua", "exclua", "troque", "substitua", "corrija", "ajuste",
+    "inclua", "exclua", "troque", "substitua", "corrija", "ajuste", "falta",
+    "precisa de", "faltou", "acrescente", "retire", "prefiro", "melhor seria",
+    # English
     "want", "add", "remove", "change", "alter", "only", "just",
     "don't need", "must show", "must have", "must be", "put", "take",
-    "include", "exclude", "replace", "substitute", "fix", "adjust", "instead"
+    "include", "exclude", "replace", "substitute", "fix", "adjust", "instead",
+    "also", "but", "however", "missing", "need", "should", "could you",
+    "can you", "please add", "please remove", "please change",
 }
 
 
@@ -39,20 +57,43 @@ def _fast_approval(user_response: str) -> bool | None:
     return None
 
 
-async def generate_panorama(request: str, model: str) -> str:
+_TOOL_CALL_PATTERN = re.compile(
+    r"(`{1,3}[^`]*`{1,3}|\b(?:ask_human|input|print|get_preferences)\s*\([^)]*\))",
+    re.DOTALL,
+)
+_PREAMBLE_PATTERN = re.compile(
+    r"^.*?(?:before (?:creating|planning)|need to (?:run|conduct|perform)|requirements elicitation)[^\n]*\n+",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _sanitize_panorama(text: str) -> str:
+    """Strip tool calls and elicitation preambles from raw LLM panorama output."""
+    text = _PREAMBLE_PATTERN.sub("", text)
+    text = _TOOL_CALL_PATTERN.sub("", text)
+    # Collapse leftover blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+async def generate_panorama(request: str, model: str, history: str = "") -> str:
     """Generate a high-level plan (panorama) for the given request."""
+    prompt = request
+    if history:
+        prompt = f"[CONVERSATION HISTORY]\n{history}\n[END HISTORY]\n\n[USER TASK]:\n{request}"
+
     with T.spinner(_("generating_panorama")):
         planner = make_landscape_planner(model)
-        result = await planner.run(AgentInput(prompt=request))
-    return result.response
+        result = await planner.run(AgentInput(prompt=prompt))
+    return _sanitize_panorama(result.response)
 
 
 async def refine_plan(
     request: str,
     plan_text: str,
     model: str,
-    session: SessionData,
-    store: SessionStore,
+    session: ProjectData,
+    store: ProjectStore,
 ) -> str:
     """
     Interactive refinement loop: show plan → ask user → refine or approve.
@@ -64,13 +105,32 @@ async def refine_plan(
 
     while cycles < MAX_REFINEMENT_CYCLES:
         T.section(_("plan_review"))
+
+        # Show plan in terminal and write to file so user can also edit it externally
         T.show_plan(plan_text)
+        plan_path = Path(PLAN_FILE).resolve()
+        try:
+            plan_path.write_text(plan_text, encoding="utf-8")
+            T.success(_("plan_saved_to_file", path=str(plan_path)))
+        except OSError as e:
+            T.warning(f"Could not write {PLAN_FILE}: {e}")
 
         T.info(_("cancel_reminder"))
-        user_response = T.ask(_("plan_ok"))
+        user_response = T.ask(_("plan_confirm_after_edit"))
 
-        store.append_message(session.name, "assistant", plan_text)
-        store.append_message(session.name, "user", user_response)
+        # Read back the (possibly edited) file before using plan_text further
+        try:
+            plan_text = plan_path.read_text(encoding="utf-8")
+        except OSError as e:
+            T.warning(_("plan_file_read_error", err=e))
+
+        store.append_message(session, "assistant", plan_text)
+        store.append_message(session, "user", user_response)
+
+        # Empty Enter or explicit approval words → approved as-is
+        if not user_response:
+            T.success(_("plan_approved"))
+            return plan_text
 
         # Fast heuristic — no LLM call needed for obvious cases
         fast = _fast_approval(user_response)

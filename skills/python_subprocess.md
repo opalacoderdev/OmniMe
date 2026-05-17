@@ -1,10 +1,11 @@
-tags: python, shell, bash, subprocess, script, comando
-description: Proteções anti-travamento para comandos shell (subprocess) em scripts Python (devnull).
+tags: python, shell, bash, subprocess, script, command
+description: Anti-hang protections for shell commands (subprocess) in Python scripts (devnull).
+scope: orchestrator
 ---
-Sempre que precisar rodar comandos shell a partir do Python:
-Use `import subprocess` e chame a função passando `stdin=subprocess.DEVNULL`:
+Whenever you need to run shell commands from Python:
+Use `import subprocess` and call the function passing `stdin=subprocess.DEVNULL`:
 `subprocess.run(cmd, shell=True, capture_output=True, text=True, stdin=subprocess.DEVNULL)`
 
-A flag `stdin=subprocess.DEVNULL` é OBRIGATÓRIA. Ela impede travamentos infinitos caso qualquer comando tente ser interativo (pedir Y/N, senhas ou escolhas de menus). O script deve ser 100% automatizado.
+The `stdin=subprocess.DEVNULL` flag is MANDATORY. It prevents infinite hangs if any command tries to be interactive (asking for Y/N, passwords, or menu choices). The script must be 100% automated.
 
-Imprima o `stdout` e `stderr` de cada comando para que possamos logar e validar o resultado da execução.
+Print the `stdout` and `stderr` of each command so we can log and validate the execution result.

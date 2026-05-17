@@ -1,5 +1,6 @@
 tags: react, vite, npm, npx, node, javascript, js, ts, frontend
-description: Regras e comandos obrigatórios para inicializar projetos React/Vite com npx de forma automatizada.
+description: Use ONLY if the user asks to initialize, create, or configure a React or Vite project.
+scope: orchestrator
 ---
-Se você precisar inicializar um projeto Vite usando `npx create-vite`, você DEVE usar OBRIGATORIAMENTE o comando 100% automatizado passando as flags `-y` e `--template react` (ou outro template se explicitamente pedido).
-Exemplo: `npx -y create-vite@latest <nome_do_projeto> --template react`
+If you need to initialize a Vite project using `npx create-vite`, you MUST use the 100% automated command passing the flags `-y` and `--template react` (or another template if explicitly requested).
+Example: `npx -y create-vite@latest <project_name> --template react`

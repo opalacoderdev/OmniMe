@@ -6,6 +6,12 @@
 
 ## Funcionalidades
 
+### Roteador Semântico Avançado (Chain of Thought)
+Utiliza um LLM para roteamento semântico com raciocínio interno (Chain of Thought). Ele traduz mentalmente a demanda do usuário para o inglês primeiro, para então deduzir de forma assertiva a intenção da ação, roteando a execução perfeitamente mesmo em comandos multilíngues (português, espanhol, etc) e injetando apenas o contexto das **Skills** necessárias (`skills/*.md`).
+
+### Seleção Dinâmica de Modelo (Supervisor)
+O ABCode avalia dinamicamente a complexidade da demanda. Para tarefas triviais, usa um modelo local rápido (`ollama/mistral-nemo`). Se a tarefa exigir refatoração arquitetural ou lógicas complexas avançadas, ele faz fallback automático para um modelo alternativo mais poderoso configurado via chave de API.
+
 ### Planejamento interativo
 O agente recebe uma demanda em linguagem natural, gera um panorama de alto nível e entra em um loop de refinamento com o usuário até o plano ser aprovado. O plano aprovado é então decomposto automaticamente em subetapas executáveis (subplanos).
 
@@ -20,8 +26,14 @@ Cada subplano é executado sequencialmente, respeitando dependências entre etap
 | `auto` | Executa tudo sem interrupções — ideal para pipelines automatizados |
 | `edit` | Pede confirmação do usuário apenas para operações sensíveis (criação/deleção de arquivos, chamadas de rede, etc.) |
 
-### Sessões persistentes
-Cada execução pertence a uma sessão nomeada. Todo o estado — demanda, plano, subplanos, resultados e histórico de conversa — é salvo em um banco SQLite local (`~/.abcode/sessions.db`). Ao retomar uma sessão existente, o usuário pode escolher entre continuar de onde parou ou recomeçar do zero.
+### Sessões persistentes e Comandos CLI
+Cada execução pertence a uma sessão nomeada com memória contínua. Durante o chat com o ABCode, você pode interagir com o gerenciador de estado usando comandos nativos:
+- `/help` ou `/h`: Mostra os comandos disponíveis.
+- `/clear`: Limpa a memória e o histórico da sessão atual.
+- `/rename <novo_nome>`: Renomeia a sessão ativa.
+- `/list`: Lista todas as sessões guardadas no SQLite.
+- `/load <nome>` e `/delete <nome>`: Carrega ou exclui sessões antigas.
+- `/exit`: Sai da aplicação.
 
 ### Terminal elegante
 Saída formatada com [Rich](https://github.com/Texel-io/rich): banners, spinners de progresso, painéis de plano, tabela de status por subplano e relatório de erros destacado.

@@ -7,7 +7,7 @@ model produces malformed JSON, making this robust for small models.
 
 import instructor
 import litellm
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # MD_JSON works with any model: asks for JSON inside a markdown block,
 # no native tool-calling support required (safe for local/small models).
@@ -17,19 +17,20 @@ _client = instructor.from_litellm(litellm.acompletion, mode=instructor.Mode.MD_J
 # ─── Schemas ──────────────────────────────────────────────────────────────────
 
 class SubplanSchema(BaseModel):
-    id: str = Field(description="Identificador único no formato SP-<n>, ex: SP-1")
-    phase: str = Field(description="Nome curto da fase do plano")
-    objective: str = Field(description="O que este subplano entrega")
+    id: str = Field(description="Unique ID in format SP-<n>, e.g. SP-1")
+    phase: str = Field(description="Short phase name")
+    objective: str = Field(description="What this subplan delivers")
     prerequisites: list[str] = Field(
         default_factory=list,
-        description="Lista de IDs de subplanos que devem ser concluídos antes deste (ex: ['SP-1']). Vazio se não houver.",
+        description="List of prerequisite subplan IDs, or empty.",
     )
-    steps: list[str] = Field(
-        description="Ações concretas e atômicas, máximo 5 itens"
-    )
-    completion_criterion: str = Field(
-        description="Como validar que este subplano foi concluído com sucesso"
-    )
+    steps: list[str] = Field(description="Concrete atomic actions, max 5 items")
+    completion_criterion: str = Field(description="How to validate completion")
+
+    @field_validator("steps")
+    @classmethod
+    def cap_steps(cls, v: list[str]) -> list[str]:
+        return v[:5]
 
 
 class DecompositionResult(BaseModel):
@@ -46,26 +47,20 @@ class ConfirmationResult(BaseModel):
 
 # ─── Callers ──────────────────────────────────────────────────────────────────
 
-_DECOMPOSE_SYSTEM = """Você é um agente de decomposição de planos de software.
-Receberá um PANORAMA GERAL e deve decompor cada fase em subplanos executáveis e independentes.
+_DECOMPOSE_SYSTEM = """You are a plan decomposition agent.
+Break the given PANORAMA into sequential executable subplans.
 
-Regras obrigatórias:
-- Cada subplano deve ser executável por um agente separado
-- Passos devem ser ações concretas e atômicas (máximo 5 por subplano)
-- Respeite dependências reais entre subplanos via o campo prerequisites
-- IDs devem ser sequenciais: SP-1, SP-2, SP-3, ...
-"""
+Rules:
+- Each subplan runs as a standalone Python script (no human input).
+- IDs must be sequential: SP-1, SP-2, SP-3, ...
+- Max 5 steps per subplan.
+- Never create subplans for analysis or planning; only for code execution.
+Output valid JSON only."""
 
-_CONFIRM_SYSTEM = """Você determina se um usuário APROVOU um plano ou quer MODIFICÁ-LO.
-
-Retorne approved=true APENAS para aprovação clara e sem condições.
-Exemplos de aprovação: "sim", "ok", "pode prosseguir", "perfeito", "tudo certo".
-
-Retorne approved=false se o usuário pediu qualquer alteração, adição ou remoção,
-mesmo que parcial ou educada.
-Exemplos de não-aprovação: "quero que...", "adicione...", "mude...", "somente...",
-"não precisa de...", "o app deve...".
-"""
+_CONFIRM_SYSTEM = """Determine if the user APPROVED the plan or wants changes.
+Return approved=true only for clear unconditional approval (e.g. "yes", "ok", "proceed").
+Return approved=false for any change request, however polite (e.g. "add", "remove", "change").
+Output valid JSON only."""
 
 
 async def decompose_to_subplans(
@@ -88,6 +83,7 @@ async def decompose_to_subplans(
         response_model=DecompositionResult,
         max_retries=max_retries,
         timeout=timeout,
+        max_tokens=4096,
     )
 
 

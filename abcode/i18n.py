@@ -91,7 +91,10 @@ _STRINGS = {
         "confirm_plan_execution": "Are you sure you want to start the planning phase? This might be an expensive operation.",
         "plan_execution_cancelled": "Planning execution cancelled.",
         "plan_execution_cancelled_msg": "I offered to start the planning phase, but you cancelled it. Let me know if you need anything else.",
-        "cancel_reminder": "💡 Tip: You can type /cancel at any time to abort the planning and return to the chat."
+        "cancel_reminder": "💡 Tip: You can type /cancel at any time to abort the planning and return to the chat.",
+        "plan_saved_to_file": "Plan saved to '{path}'. Edit it in your editor, save it, and then come back here.",
+        "plan_confirm_after_edit": "Press Enter when you are done editing (or type your changes here, or 'yes'/'y' to approve as-is):",
+        "plan_file_read_error": "Could not read plan.md: {err}. Using the in-memory plan.",
     },
     "pt": {
         "active_session": "Sessão Ativa: {name}",
@@ -181,7 +184,10 @@ _STRINGS = {
         "confirm_plan_execution": "Você tem certeza que deseja iniciar a fase de planejamento? Esta pode ser uma operação demorada/custosa.",
         "plan_execution_cancelled": "Execução do planejamento cancelada.",
         "plan_execution_cancelled_msg": "Eu ofereci iniciar a fase de planejamento, mas você cancelou. Me avise se precisar de mais alguma coisa.",
-        "cancel_reminder": "💡 Dica: Você pode digitar /cancel a qualquer momento para abortar o planejamento e voltar ao chat."
+        "cancel_reminder": "💡 Dica: Você pode digitar /cancel a qualquer momento para abortar o planejamento e voltar ao chat.",
+        "plan_saved_to_file": "Plano salvo em '{path}'. Edite-o no seu editor, salve e depois volte aqui.",
+        "plan_confirm_after_edit": "Pressione Enter quando terminar de editar (ou descreva as alterações aqui, ou 'sim'/'s' para aprovar como está):",
+        "plan_file_read_error": "Não foi possível ler plan.md: {err}. Usando o plano em memória.",
     }
 }
 

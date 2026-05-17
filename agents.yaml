@@ -1,0 +1,80 @@
+default: ollama/gemma4:latest
+alternative: gemini/gemini-3.1-flash-lite
+
+# Global LLM defaults applied to all agents unless overridden below.
+llm_defaults:
+  temperature: 0.7
+  max_tokens: 4096
+  num_ctx: 8192
+
+# Per-agent overrides. Only fields listed here are overridden;
+# everything else falls back to llm_defaults.
+#
+# Roles:
+#   intent_classifier    — classifies user intent (greetings/question/plan/chat)
+#   complexity_evaluator — decides default vs alternative model
+#   chat_agent           — conversational assistant with memory
+#   landscape_planner    — high-level strategic planner
+#   refinement_agent     — refines plan based on user feedback
+#   decomposer           — breaks panorama into executable subplans
+#   aggregator           — synthesises subplan results into final answer
+#   context_extractor    — extracts project state from execution logs
+#   executor_agent       — generates Python code to execute subplan steps
+#   skill_selector       — routes request to the appropriate skills
+#   confirmation_agent   — checks if user approved the plan
+
+agents:
+  intent_classifier:
+    temperature: 0.0
+    max_tokens: 5
+    num_ctx: 2048
+
+  complexity_evaluator:
+    temperature: 0.3
+    max_tokens: 10
+    num_ctx: 2048
+
+  chat_agent:
+    temperature: 1.0
+    max_tokens: 2048
+    num_ctx: 8192
+
+  landscape_planner:
+    temperature: 1.0
+    max_tokens: 1024
+    num_ctx: 8192
+
+  refinement_agent:
+    temperature: 0.5
+    max_tokens: 1024
+    num_ctx: 8192
+
+  decomposer:
+    temperature: 0.5
+    max_tokens: 4096
+    num_ctx: 16384
+
+  aggregator:
+    temperature: 0.3
+    max_tokens: 2048
+    num_ctx: 16384
+
+  context_extractor:
+    temperature: 0.0
+    max_tokens: 1024
+    num_ctx: 8192
+
+  executor_agent:
+    temperature: 0.5
+    max_tokens: 4096
+    num_ctx: 16384
+
+  skill_selector:
+    temperature: 0.0
+    max_tokens: 64
+    num_ctx: 4096
+
+  confirmation_agent:
+    temperature: 0.0
+    max_tokens: 5
+    num_ctx: 2048
