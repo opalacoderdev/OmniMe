@@ -24,7 +24,7 @@ logging.getLogger("LiteLLM").addFilter(_SuppressMockToolCallErrors())
 from agenticblocks.blocks.llm.memgpt_agent import MemGPTAgentBlock
 from agenticblocks.blocks.llm.agent import AgentInput
 from .tools import get_available_tools, AGENT_PROGRESS
-from .config import get_agent_llm_kwargs, get_agent_model, get_agent_debug, DEFAULT_MODEL
+from .config import get_agent_llm_kwargs, get_agent_model, get_agent_debug, DEFAULT_MODEL, get_agent_max_heartbeats
 from . import terminal as T
 
 
@@ -47,7 +47,11 @@ def _build_progress_panel(progress: object, max_hb: int) -> Panel:
 
     tool_color = {
         "write_file": "green",
+        "write_content_pos": "green",
         "read_file": "blue",
+        "read_content_pos": "blue",
+        "get_file_overview": "blue",
+        "get_project_overview": "magenta",
         "run_command": "yellow",
         "search_code": "magenta",
         "ask_human": "red",
@@ -116,7 +120,7 @@ Implement coding tasks autonomously within the project. This includes creating n
 refactoring, and updating any existing code inside the project directory.
 
 ## RULES
-1. **Project-first**: Every action must reference the project. Read existing files before rewriting them.
+1. **Project-first**: Every action must reference the project. Read existing files before rewriting them. Use `get_file_overview` to understand a file's structure before making targeted edits.
    Extend what is already there unless a full rewrite is explicitly requested.
 2. **ACT, don't ask**: Create directories, write files, run `npm install`, `pip install`, or any standard
    dev command without asking for permission.
@@ -158,7 +162,7 @@ refactoring, and updating any existing code inside the project directory.
             approved_plan = await self._plan_and_refine(user_request, history, session, store)
 
         llm_kwargs = get_agent_llm_kwargs("orchestrator")
-        max_hb = llm_kwargs.pop("max_heartbeats", 20)
+        max_hb = get_agent_max_heartbeats("orchestrator", 20)
 
         # Reset progress state for this new run
         AGENT_PROGRESS.heartbeat = 0
@@ -264,4 +268,159 @@ def _deduplicate_response(text: str) -> str:
             seen.append(p)
     return "\n".join(seen)
 
+class CodePlanExecutorStrategy(BaseOrchestratorStrategy):
+    def __init__(self, model: str | None = None):
+        super().__init__(get_agent_model("orchestrator", model or DEFAULT_MODEL))
+        self.tools = get_available_tools()
+
+    def _build_system_prompt(self, approved_plan: str = "", project_context: str = "") -> str:
+        import re as _re
+        proj_path = "."
+        project_header = ""
+        if project_context:
+            _m = _re.search(r"PATH:\s*(.+?)\]", project_context)
+            proj_path = _m.group(1).strip() if _m else "."
+            _n = _re.search(r"PROJECT:\s*(.+?)\s*\|", project_context)
+            proj_name = _n.group(1).strip() if _n else proj_path
+            project_header = f"""
+## PROJECT CONTEXT
+Name : {proj_name}
+Path : {proj_path}
+
+You are working EXCLUSIVELY inside this project. Every file you read, write, or execute
+must live under `{proj_path}`.
+"""
+
+        plan_section = ""
+        if approved_plan:
+            plan_section = f"""
+## APPROVED PLAN
+The user reviewed and approved this plan. **Execute every step now — do not re-describe the plan.**
+
+{approved_plan}
+"""
+
+        return f"""You are an autonomous Code Planning agent.
+{project_header}
+{plan_section}
+Your task is to write a single Python script that accomplishes the plan using the available tools from the injected module `abcode.tools`.
+You MUST import it exactly like this:
+```python
+import abcode.tools as tools
+```
+Then use `tools.read_file(path)`, `tools.write_file(path, content)`, etc.
+
+CRITICAL INSTRUCTIONS:
+1. You MUST output ONLY valid Python code enclosed in a ```python ... ``` markdown block.
+2. The script must execute the plan fully.
+3. At the very end of your script, you MUST print the exact string "halt" to stdout, otherwise the system will assume you failed and retry.
+4. Do NOT use `input()` or any interactive functions.
+"""
+
+    async def _plan_and_refine(self, user_request: str, history: str, session, store) -> str:
+        from .planner import generate_panorama, refine_plan
+        from . import terminal as T
+
+        T.section("Phase 1 — Implementation Overview (Code Plan)")
+        panorama_text = await generate_panorama(user_request, self.model, history=history)
+
+        T.section("Phase 2 — Plan Refinement")
+        approved_plan = await refine_plan(user_request, panorama_text, self.model, session, store)
+        return approved_plan
+
+    async def run(self, user_request: str, history: str, **kwargs) -> str:
+        session = kwargs.get("session")
+        store = kwargs.get("store")
+
+        project_context = session.context_header() if session and hasattr(session, "context_header") else ""
+
+        approved_plan = ""
+        if session and store:
+            approved_plan = await self._plan_and_refine(user_request, history, session, store)
+
+        llm_kwargs = get_agent_llm_kwargs("orchestrator")
+        max_hb = get_agent_max_heartbeats("orchestrator", 20)
+
+        AGENT_PROGRESS.heartbeat = 0
+        AGENT_PROGRESS.max_heartbeats = max_hb
+        AGENT_PROGRESS.last_tool = "Initializing Code Plan…"
+        AGENT_PROGRESS.last_args = ""
+        AGENT_PROGRESS.start_time = time.monotonic()
+
+        from agenticblocks.blocks.llm.agent import LLMAgentBlock
+        from agenticblocks.blocks.patterns.code_plan_executor import CodePlanExecutorBlock, CodePlanExecutorOutput
+        from agenticblocks.core.graph import WorkflowGraph
+        from agenticblocks.runtime.executor import WorkflowExecutor
+        from agenticblocks import as_tool
+        from . import tools as abcode_tools
+
+        agent = LLMAgentBlock(
+            name="code_generator",
+            model=self.model,
+            system_prompt=self._build_system_prompt(approved_plan, project_context),
+            litellm_kwargs=llm_kwargs
+        )
+
+        code_planner = CodePlanExecutorBlock(
+            executor_agent=agent,
+            execution_mode="local",
+            inject_module=[abcode_tools],
+            max_entries=10
+        )
+
+        result_holder = []
+
+        @as_tool(name="condition_block")
+        def condition_block(obj: CodePlanExecutorOutput) -> dict:
+            AGENT_PROGRESS.update("Code Execution", f"Checking code generation output.")
+            agent_output = obj.execution_stdout or ""
+            
+            if "halt" in agent_output.lower():
+                result_holder.append("Code Plan completed successfully. The execution printed 'halt'.")
+                return {'is_valid': True, 'feedback': ''}
+            else:
+                feedback = agent_output.strip()
+                if obj.execution_stderr and obj.execution_stderr.strip():
+                    feedback += f"\n[ERROR]\n{obj.execution_stderr.strip()}"
+                
+                if not feedback:
+                    feedback = "Script executed but did not print 'halt'. Make sure to print 'halt' when all tasks are complete."
+                
+                return {'is_valid': False, 'feedback': feedback}
+
+        graph = WorkflowGraph()
+        graph.add_block(code_planner)
+        graph.add_block(condition_block)
+        graph.add_cycle(
+            name="code_plan_loop",
+            sequence=[code_planner.name, "condition_block"],
+            condition_block="condition_block",
+            max_iterations=max_hb,
+            augment_fn=lambda _orig, _it, _prod, feedback: feedback or ""
+        )
+
+        prompt = (
+            f"[CONVERSATION HISTORY]\n{history}\n[END HISTORY]\n\n"
+            f"[USER TASK]:\n{user_request}\n[END USER TASK]"
+        )
+
+        async def _run_graph():
+            executor = WorkflowExecutor(graph, verbose=False)
+            await executor.run(initial_input={"prompt": prompt})
+
+        from . import terminal as T
+        agent_task = asyncio.create_task(_run_graph())
+
+        with Live(
+            _build_progress_panel(AGENT_PROGRESS, max_hb),
+            console=T.console,
+            refresh_per_second=4,
+            transient=False,
+        ) as live:
+            while not agent_task.done():
+                live.update(_build_progress_panel(AGENT_PROGRESS, max_hb))
+                await asyncio.sleep(0.25)
+            live.update(_build_progress_panel(AGENT_PROGRESS, max_hb))
+
+        return result_holder[0] if result_holder else "Code Plan execution finished but no completion message was recorded."
 

@@ -1,4 +1,4 @@
-default: ollama/gemma4:latest
+default: ollama/ministral-3:14b
 alternative: gemini/gemini-3.1-flash-lite
 
 # Global LLM defaults applied to all agents unless overridden below.
@@ -29,13 +29,13 @@ agents:
 
   intent_classifier:
     temperature: 0
-    max_tokens: 10
+    max_tokens: 64
     num_ctx: 2048
     think: false
 
   complexity_evaluator:
     temperature: 0.3
-    max_tokens: 30
+    max_tokens: 64
     num_ctx: 2048
     think: false
 
@@ -48,12 +48,10 @@ agents:
 
   landscape_planner:
     temperature: 1.0
-    max_tokens: 1024
     num_ctx: 8192
 
   refinement_agent:
-    temperature: 0.5
-    max_tokens: 1024
+    temperature: 0.3
     num_ctx: 8192
 
   skill_selector:
@@ -64,12 +62,14 @@ agents:
 
   confirmation_agent:
     temperature: 0.0
-    max_tokens: 5
+    max_tokens: 64
     num_ctx: 2048
     think: false
 
   orchestrator:
     temperature: 0.2
     num_ctx: 16384
-    max_heartbeats: 30
+    max_heartbeats: 100
     debug: false
+    strategy: autonomous
+

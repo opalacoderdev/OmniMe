@@ -56,7 +56,11 @@ _AGENT_OVERRIDES: dict[str, dict] = _AGENTS_CONFIG.get("agents", {})
 
 
 # Fields that are consumed outside of litellm kwargs and must not be forwarded.
-_NON_LITELLM_FIELDS = {"model", "max_heartbeats", "debug"}
+_NON_LITELLM_FIELDS = {"model", "max_heartbeats", "debug", "strategy"}
+
+def get_orchestrator_strategy() -> str:
+    """Return the orchestrator strategy configured in agents.yaml."""
+    return _AGENT_OVERRIDES.get("orchestrator", {}).get("strategy", "autonomous")
 
 
 def get_agent_max_heartbeats(agent_name: str, default: int) -> int:

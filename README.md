@@ -1,6 +1,6 @@
-# ABCode
+# OpalaCoder
 
-**ABCode** é um agente de codificação autônomo com planejamento interativo, execução modular e memória de sessão persistente. Projetado para funcionar bem com modelos pequenos e menos autônomos, mantendo a aparência de um agente totalmente autônomo.
+**OpalaCoder** é um agente de codificação autônomo com planejamento interativo, execução modular e memória de sessão persistente. Projetado para funcionar bem com modelos pequenos e menos autônomos, mantendo a aparência de um agente totalmente autônomo.
 
 ---
 
@@ -10,7 +10,7 @@
 Utiliza um LLM para roteamento semântico com raciocínio interno (Chain of Thought). Ele traduz mentalmente a demanda do usuário para o inglês primeiro, para então deduzir de forma assertiva a intenção da ação, roteando a execução perfeitamente mesmo em comandos multilíngues (português, espanhol, etc) e injetando apenas o contexto das **Skills** necessárias (`skills/*.md`).
 
 ### Seleção Dinâmica de Modelo (Supervisor)
-O ABCode avalia dinamicamente a complexidade da demanda. Para tarefas triviais, usa um modelo local rápido (`ollama/mistral-nemo`). Se a tarefa exigir refatoração arquitetural ou lógicas complexas avançadas, ele faz fallback automático para um modelo alternativo mais poderoso configurado via chave de API.
+O OpalaCoder avalia dinamicamente a complexidade da demanda. Para tarefas triviais, usa um modelo local rápido (`ollama/mistral-nemo`). Se a tarefa exigir refatoração arquitetural ou lógicas complexas avançadas, ele faz fallback automático para um modelo alternativo mais poderoso configurado via chave de API.
 
 ### Planejamento interativo
 O agente recebe uma demanda em linguagem natural, gera um panorama de alto nível e entra em um loop de refinamento com o usuário até o plano ser aprovado. O plano aprovado é então decomposto automaticamente em subetapas executáveis (subplanos).
@@ -27,7 +27,7 @@ Cada subplano é executado sequencialmente, respeitando dependências entre etap
 | `edit` | Pede confirmação do usuário apenas para operações sensíveis (criação/deleção de arquivos, chamadas de rede, etc.) |
 
 ### Sessões persistentes e Comandos CLI
-Cada execução pertence a uma sessão nomeada com memória contínua. Durante o chat com o ABCode, você pode interagir com o gerenciador de estado usando comandos nativos:
+Cada execução pertence a uma sessão nomeada com memória contínua. Durante o chat com o OpalaCoder, você pode interagir com o gerenciador de estado usando comandos nativos:
 - `/help` ou `/h`: Mostra os comandos disponíveis.
 - `/clear`: Limpa a memória e o histórico da sessão atual.
 - `/rename <novo_nome>`: Renomeia a sessão ativa.
@@ -42,7 +42,7 @@ Saída formatada com [Rich](https://github.com/Texel-io/rich): banners, spinners
 O código é dividido em módulos independentes e fáceis de depurar:
 
 ```
-abcode/
+opalacoder/
 ├── config.py       configurações globais (modelo, retries, modo, db)
 ├── terminal.py     output Rich (banners, spinners, painéis, tabelas)
 ├── session.py      gerenciamento de sessões SQLite
@@ -69,7 +69,7 @@ abcode/
 ```bash
 # Clone o repositório
 git clone <url-do-repositorio>
-cd ABCode
+cd OpalaCoder
 
 # Crie e ative o ambiente virtual
 python -m venv .env
@@ -86,7 +86,7 @@ Crie um arquivo `.env` na raiz do projeto para sobrescrever os padrões:
 
 ```env
 # Modelo LLM padrão (qualquer string suportada pelo litellm)
-ABCODE_MODEL=ollama/mistral-nemo
+OPALA_MODEL=ollama/mistral-nemo
 ```
 
 ---
@@ -199,25 +199,25 @@ Sessões existentes:
 
 ### Alterar o modelo padrão
 
-Edite `abcode/config.py`:
+Edite `opala/config.py`:
 
 ```python
 DEFAULT_MODEL = "ollama/mistral-nemo"  # altere aqui
 ```
 
-Ou use a variável de ambiente `ABCODE_MODEL`.
+Ou use a variável de ambiente `OPALA_MODEL`.
 
 ### Alterar o número padrão de retentativas
 
 ```python
-DEFAULT_MAX_RETRIES = 3  # em abcode/config.py
+DEFAULT_MAX_RETRIES = 3  # em opala/config.py
 ```
 
 Ou passe `--max-retries N` na linha de comando.
 
 ### Adicionar operações sensíveis customizadas
 
-Em `abcode/config.py`:
+Em `opalacoder/config.py`:
 
 ```python
 SENSITIVE_OPS = {
@@ -232,7 +232,7 @@ SENSITIVE_OPS = {
 ## Segurança
 
 - O modo `edit` exige confirmação explícita para operações que afetam o sistema de arquivos, a rede ou contas de usuário.
-- Código gerado é executado localmente via `exec()` (modo `local`). Para maior isolamento, o `CodePlanExecutorBlock` da biblioteca AgenticBlocks suporta execução em contêiner Docker — edite `make_executor_block` em `abcode/agents.py` trocando `execution_mode="local"` por `execution_mode="docker"`.
+- Código gerado é executado localmente via `exec()` (modo `local`). Para maior isolamento, o `CodePlanExecutorBlock` da biblioteca AgenticBlocks suporta execução em contêiner Docker — edite `make_executor_block` em `opalacoder/agents.py` trocando `execution_mode="local"` por `execution_mode="docker"`.
 - Nunca execute o agente em modo `auto` com acesso a sistemas de produção sem revisar os subplanos gerados.
 
 ---

@@ -3,6 +3,7 @@
 import os
 import subprocess
 import time
+import ast
 from pathlib import Path
 from agenticblocks.core.function_block import as_tool
 from . import terminal as T
@@ -72,6 +73,9 @@ def read_file(path: str) -> str:
 
 @as_tool(name="write_file", description="Write or overwrite a file inside the project directory. Relative paths are resolved from the project directory. Creates parent directories if needed.")
 def write_file(path: str, content: str) -> str:
+    print("\n\nDEBUG: AGENT WRITTING FILE... ", path)
+    print("CONTENT: ", content)
+    print("\n\n")
     resolved = _resolve_path(path)
     AGENT_PROGRESS.update("write_file", f"path={_preview(resolved)}")
     try:
@@ -228,11 +232,113 @@ def get_project_overview() -> str:
     return "\n".join(parts)
 
 
+@as_tool(
+    name="get_file_overview",
+    description=(
+        "Return an overview of a file's structure. For Python files, it lists classes, functions, "
+        "and methods with their start and end line numbers. For other files, it returns the first 100 lines."
+    )
+)
+def get_file_overview(path: str) -> str:
+    resolved = _resolve_path(path)
+    AGENT_PROGRESS.update("get_file_overview", f"path={_preview(resolved)}")
+    try:
+        with open(resolved, "r", encoding="utf-8") as f:
+            content = f.read()
+            
+        if not path.endswith(".py"):
+            lines = content.splitlines()
+            preview = "\n".join(lines[:100])
+            return f"Overview for {path} (non-Python):\n{preview}" + ("\n... [TRUNCATED]" if len(lines) > 100 else "")
+
+        tree = ast.parse(content)
+        overview = [f"File: {path}"]
+        
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                start = node.lineno
+                end = node.end_lineno
+                overview.append(f"{node.__class__.__name__} '{node.name}' (lines {start}-{end})")
+                
+                if isinstance(node, ast.ClassDef):
+                    for subnode in node.body:
+                        if isinstance(subnode, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            sub_start = subnode.lineno
+                            sub_end = subnode.end_lineno
+                            overview.append(f"  Method '{subnode.name}' (lines {sub_start}-{sub_end})")
+        
+        if len(overview) == 1:
+            overview.append("No classes or functions found.")
+            
+        return "\n".join(overview)
+    except Exception as e:
+        return f"Error generating overview for {resolved}: {e}"
+
+@as_tool(
+    name="write_content_pos",
+    description=(
+        "Insert content into a file starting at a specific line number (1-indexed). "
+        "The new content will be inserted just before the specified line."
+    )
+)
+def write_content_pos(path: str, content: str, pos: int) -> str:
+    resolved = _resolve_path(path)
+    AGENT_PROGRESS.update("write_content_pos", f"path={_preview(resolved)} pos={pos}")
+    try:
+        with open(resolved, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        
+        idx = max(0, min(pos - 1, len(lines)))
+        
+        if content and not content.endswith('\n'):
+            content += '\n'
+            
+        lines.insert(idx, content)
+        
+        with open(resolved, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+            
+        return f"Successfully inserted content at line {pos} in {resolved}."
+    except FileNotFoundError:
+        return f"Error: File {resolved} not found."
+    except Exception as e:
+        return f"Error writing to {resolved}: {e}"
+
+@as_tool(
+    name="read_content_pos",
+    description=(
+        "Read a specific range of lines from a file. "
+        "start_pos and end_pos are 1-indexed line numbers (inclusive)."
+    )
+)
+def read_content_pos(path: str, start_pos: int, end_pos: int) -> str:
+    resolved = _resolve_path(path)
+    AGENT_PROGRESS.update("read_content_pos", f"path={_preview(resolved)} lines={start_pos}-{end_pos}")
+    try:
+        with open(resolved, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            
+        start_idx = max(0, start_pos - 1)
+        end_idx = min(len(lines), end_pos)
+        
+        if start_idx >= len(lines):
+            return f"Error: start_pos {start_pos} is beyond the end of the file (total lines: {len(lines)})."
+            
+        selected_lines = lines[start_idx:end_idx]
+        return "".join(selected_lines)
+    except FileNotFoundError:
+        return f"Error: File {resolved} not found."
+    except Exception as e:
+        return f"Error reading {resolved}: {e}"
+
 def get_available_tools():
     return [
         get_project_overview,
+        get_file_overview,
         read_file,
+        read_content_pos,
         write_file,
+        write_content_pos,
         run_command,
         search_code,
         ask_human,

@@ -239,7 +239,8 @@ async def run_pipeline(
         role = "Assistant" if msg["role"] == "assistant" else "User"
         hist_text += f"{role}: {msg['content']}\n"
 
-    from .orchestrator import AutonomousOrchestratorStrategy
+    from .orchestrator import AutonomousOrchestratorStrategy, CodePlanExecutorStrategy
+    from .config import get_orchestrator_strategy
     from .skills import get_relevant_skills_llm, SCOPE_ORCHESTRATOR
 
     orchestrator_skills = await get_relevant_skills_llm(
@@ -252,7 +253,11 @@ async def run_pipeline(
             f"[USER REQUEST]:\n{request}\n[END USER REQUEST]"
         )
 
-    orchestrator = AutonomousOrchestratorStrategy(model=model)
+    strategy_name = get_orchestrator_strategy()
+    if strategy_name == "code_plan":
+        orchestrator = CodePlanExecutorStrategy(model=model)
+    else:
+        orchestrator = AutonomousOrchestratorStrategy(model=model)
 
     final_response = await orchestrator.run(
         user_request=enriched_request,

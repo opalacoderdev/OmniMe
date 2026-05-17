@@ -55,12 +55,12 @@ Rules:
 - IDs must be sequential: SP-1, SP-2, SP-3, ...
 - Max 5 steps per subplan.
 - Never create subplans for analysis or planning; only for code execution.
-Output valid JSON only."""
+Output valid JSON only. DO NOT output any explanation or trailing text."""
 
 _CONFIRM_SYSTEM = """Determine if the user APPROVED the plan or wants changes.
 Return approved=true only for clear unconditional approval (e.g. "yes", "ok", "proceed").
 Return approved=false for any change request, however polite (e.g. "add", "remove", "change").
-Output valid JSON only."""
+Output valid JSON only. DO NOT output any explanation or trailing text."""
 
 
 async def decompose_to_subplans(
