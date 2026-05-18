@@ -78,6 +78,11 @@ def get_agent_max_heartbeats(agent_name: str, default: int) -> Union[int, str]:
     return int(val)
 
 
+def get_agent_heartbeats_scale_factor(agent_name: str, default: float = 2.0) -> float:
+    """Return heartbeats_scale_factor configured for *agent_name* in agents.yaml, or *default*."""
+    return float(_AGENT_OVERRIDES.get(agent_name, {}).get("heartbeats_scale_factor", default))
+
+
 def get_agent_debug(agent_name: str, default: bool = False) -> bool:
     """Return debug flag configured for *agent_name* in agents.yaml, or *default*."""
     return bool(_AGENT_OVERRIDES.get(agent_name, {}).get("debug", default))

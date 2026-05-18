@@ -297,9 +297,14 @@ You are running on an OS-like MemGPT architecture. You have a limited Main Conte
                     messages[-1] = assistant_msg_raw
                 else:
                     if message.content:
-                        err_msg = "SYSTEM ALERT: You violated the tool-only rule. You MUST NOT reply with plain text. Use the `send_message` tool to talk to the user."
-                        if message.content.strip().startswith("{"):
-                            err_msg = "SYSTEM ALERT: You replied with a JSON string in plain text that is not a valid tool call. You MUST use the proper tool calling API (like send_message)."
+                        # Check if the output was cut off
+                        finish_reason = getattr(response.choices[0], "finish_reason", "unknown")
+                        if finish_reason == "length":
+                            err_msg = "SYSTEM ALERT: Your output was cut off because it exceeded the maximum token limit (max_tokens). You MUST be more concise or split your output into multiple smaller tool calls."
+                        else:
+                            err_msg = "SYSTEM ALERT: You violated the tool-only rule. You MUST NOT reply with plain text. Use the `send_message` tool to talk to the user."
+                            if message.content.strip().startswith("{"):
+                                err_msg = f"SYSTEM ALERT: You replied with a broken JSON string that failed to parse. Did you forget to close the braces or quotes? Raw text:\n{message.content[:100]}...\nYou MUST use the proper tool calling API."
                         
                         alert_msg = {"role": "user", "content": err_msg}
                         self.internal_history.append(alert_msg)
@@ -307,7 +312,7 @@ You are running on an OS-like MemGPT architecture. You have a limited Main Conte
                         
                         heartbeats_used += 1
                         if heartbeats_used > self.max_heartbeats:
-                            termination_reason = "model repeatedly violated tool-only rule"
+                            termination_reason = "model repeatedly violated tool-only rule or output was continuously cut off"
                             break
                         continue
                     else:

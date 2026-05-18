@@ -23,7 +23,7 @@ logging.getLogger("LiteLLM").addFilter(_SuppressMockToolCallErrors())
 from agenticblocks.blocks.llm.agent import AgentInput
 from agenticblocks.core.function_block import FunctionBlock
 from .tools import get_available_tools, AGENT_PROGRESS
-from .config import get_agent_llm_kwargs, get_agent_model, get_agent_debug, DEFAULT_MODEL, get_agent_max_heartbeats
+from .config import get_agent_llm_kwargs, get_agent_model, get_agent_debug, DEFAULT_MODEL, get_agent_max_heartbeats, get_agent_heartbeats_scale_factor
 from . import terminal as T
 
 
@@ -223,6 +223,7 @@ refactoring, and updating any existing code inside the project directory.
 
         llm_kwargs = get_agent_llm_kwargs("orchestrator")
         max_hb_config = get_agent_max_heartbeats("orchestrator", 20)
+        scale_factor = get_agent_heartbeats_scale_factor("orchestrator", 2.0)
         
         from .config import get_complexity_inference_mode, ALTERNATIVE_MODEL
         from .api_keys import ensure_api_key
@@ -248,7 +249,7 @@ refactoring, and updating any existing code inside the project directory.
                         
                 if max_hb_config == "auto":
                     steps = int(eval_data.get("estimated_steps", 10))
-                    max_hb_config = min(steps * 3 + 5, 200)
+                    max_hb_config = min(int((steps * 3 + 5) * scale_factor), 200)
                     
         if max_hb_config == "auto":
             max_hb_config = 50  # Fallback for simple mode or error
@@ -383,7 +384,7 @@ refactoring, and updating any existing code inside the project directory.
         if not raw.strip() and agent_holder:
             raw = _extract_fallback(agent_holder[0])
         if not raw.strip():
-            raw = "(Agent completed without generating a final report.)"
+            raw = "(Agent completed without generating a final report. Possible cause: The model's output was repeatedly cut off due to 'max_tokens' limit, or it generated invalid JSON.)"
         return _deduplicate_response(raw)
 
 
