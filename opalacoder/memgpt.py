@@ -5,6 +5,7 @@ from collections import defaultdict
 from pydantic import Field
 from typing import List, Dict, Any, Optional
 import litellm
+import os
 
 from agenticblocks.core.agent import AgentBlock
 from agenticblocks.blocks.llm.agent import AgentInput, AgentOutput, _get_shared_router, _print_debug_report
@@ -227,6 +228,22 @@ You are running on an OS-like MemGPT architecture. You have a limited Main Conte
             await self._emit_token_usage(response, step=heartbeats_used)
             message = response.choices[0].message
             
+            # --- RIGOROUS TRACE ---
+            trace_path = os.path.expanduser("~/.opalacoder/memgpt_trace.log")
+            try:
+                with open(trace_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n\n{'='*40}\n")
+                    f.write(f"HEARTBEAT: {heartbeats_used}/{self.max_heartbeats}\n")
+                    f.write(f"MODEL: {self.model}\n")
+                    f.write(f"FINISH REASON: {getattr(response.choices[0], 'finish_reason', 'unknown')}\n")
+                    f.write(f"CONTENT LENGTH: {len(message.content) if message.content else 0}\n")
+                    f.write(f"CONTENT: {message.content}\n")
+                    f.write(f"TOOL CALLS: {message.tool_calls}\n")
+                    f.write(f"{'='*40}\n")
+            except Exception:
+                pass
+            # ----------------------
+            
             assistant_msg_raw = {"role": "assistant", "content": message.content}
             if message.tool_calls:
                 assistant_msg_raw["tool_calls"] = [
@@ -260,8 +277,15 @@ You are running on an OS-like MemGPT architecture. You have a limited Main Conte
 
                         try:
                             if parsed_json and isinstance(parsed_json, dict):
-                                fn_name = parsed_json.get("function") or parsed_json.get("name")
-                                args = parsed_json.get("arguments") or parsed_json.get("parameters") or {}
+                                # Se o modelo colocar tudo dentro de um array "tool_calls" simulando a API:
+                                if "tool_calls" in parsed_json and isinstance(parsed_json["tool_calls"], list) and len(parsed_json["tool_calls"]) > 0:
+                                    tc_obj = parsed_json["tool_calls"][0]
+                                    fn_obj = tc_obj.get("function") or tc_obj
+                                    fn_name = fn_obj.get("name") or fn_obj.get("function")
+                                    args = fn_obj.get("arguments") or fn_obj.get("args") or fn_obj.get("parameters") or {}
+                                else:
+                                    fn_name = parsed_json.get("function") or parsed_json.get("name")
+                                    args = parsed_json.get("arguments") or parsed_json.get("parameters") or parsed_json.get("args") or {}
                                 
                                 if isinstance(args, str):
                                     try: args = json.loads(args, strict=False)
@@ -316,8 +340,19 @@ You are running on an OS-like MemGPT architecture. You have a limited Main Conte
                             break
                         continue
                     else:
-                        termination_reason = "model returned empty response"
-                        break
+                        err_msg = "SYSTEM ALERT: You returned an empty response. You MUST use a tool or the `send_message` tool to report your progress. Do not output empty text."
+                        alert_msg = {"role": "user", "content": err_msg}
+                        self.internal_history.append(alert_msg)
+                        messages.append(alert_msg)
+                        
+                        import rich.console
+                        rich.console.Console().print("[yellow]⚠️  LLM retornou resposta vazia. Forçando nova tentativa...[/yellow]")
+                        
+                        heartbeats_used += 1
+                        if heartbeats_used > self.max_heartbeats:
+                            termination_reason = "model repeatedly returned empty responses"
+                            break
+                        continue
 
             heartbeats_used += 1
             wants_heartbeat = False
