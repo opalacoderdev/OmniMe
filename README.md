@@ -70,7 +70,11 @@ opalacoder/
 - Python 3.11+
 - [agenticblocks](https://github.com/gilzamir/agenticblocks) installed in the virtual environment
 - [Rich](https://github.com/Texel-io/rich): `pip install rich`
-- An accessible LLM server (e.g., [Ollama](https://ollama.com) with `mistral-nemo`, or any model supported by [litellm](https://docs.litellm.ai))
+- An accessible LLM server:
+  - **Ollama Recommended Version**: `0.24.0`
+  - **Recommended Main & Alternative Model**: `ollama/gemma4:latest` (or latest Gemma models)
+  - **Tested models for simpler tasks**: `ollama/ministral-3:14b` and `ollama/mistral-nemo:latest`
+  - Or any model supported by [litellm](https://docs.litellm.ai)
 
 ---
 
