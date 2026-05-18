@@ -6,10 +6,11 @@ from agenticblocks.blocks.llm.memgpt_agent import MemGPTAgentBlock
 from .config import DEFAULT_MODEL, LITELLM_DEFAULTS, get_agent_llm_kwargs, get_agent_model, get_agent_max_heartbeats, get_agent_debug
 from . import i18n
 
-
-def _make_llm(name: str, system_prompt: str, model: str | None, **kwargs) -> LLMAgentBlock:
+def _make_llm(name: str, system_prompt: str, model: str | None, disable_lang_rule: bool = False, **kwargs) -> LLMAgentBlock:
     lang_name = "English" if i18n._LANG == "en" else "Portuguese"
-    lang_rule = f"\n\nCRITICAL RULE: The user interface language is set to {lang_name}. You MUST translate your final responses, explanations, and output to {lang_name}. However, keep your internal reasoning, code variables, and logic in English."
+    lang_rule = ""
+    if not disable_lang_rule:
+        lang_rule = f"\n\nCRITICAL RULE: The user interface language is set to {lang_name}. You MUST translate your final responses, explanations, and output to {lang_name}. However, keep your internal reasoning, code variables, and logic in English."
 
     resolved_model = get_agent_model(name, model or DEFAULT_MODEL)
 
@@ -91,6 +92,7 @@ Read each category carefully — they have clear, non-overlapping definitions.
 Respond with ONLY ONE WORD from the list: command_hint, greetings, question, plan, chat.
 No punctuation, no explanation.""",
         model=model,
+        disable_lang_rule=True,
     )
 
 def make_complexity_evaluator(model: str | None = None) -> LLMAgentBlock:
@@ -105,6 +107,7 @@ Classify the user's request complexity into EXACTLY ONE of the following categor
 
 Respond with ONLY ONE WORD from the list above. No punctuation, no explanation.""",
         model=model,
+        disable_lang_rule=True,
     )
 
 
@@ -123,7 +126,8 @@ Output ONLY valid JSON. No markdown formatting, no comments, no extra text.
 Example: {"model": "default", "estimated_steps": 12}
 """,
         model=model,
-        response_format={"type": "json_object"}
+        disable_lang_rule=True,
+        litellm_kwargs={"response_format": {"type": "json_object"}}
     )
 
 
@@ -183,6 +187,7 @@ Strict rules:
 Do not explain, do not add anything else. Just: yes or no.
 """,
         model=model,
+        disable_lang_rule=True,
     )
 
 
@@ -204,6 +209,7 @@ Rules:
 Output: the refined plan only. No preamble, no explanation.
 """,
         model=model,
+        disable_lang_rule=True,
     )
 
 
@@ -229,5 +235,5 @@ CRITICAL RULES:
 3. ONLY select skills whose description perfectly matches the requested technologies.
 """,
         model=model,
+        disable_lang_rule=True,
     )
-

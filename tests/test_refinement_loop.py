@@ -49,8 +49,6 @@ def _null_spinner(*args, **kwargs):
 
 
 # Common patches for tests that call refine_plan directly.
-# NOTE: patch() objects must be recreated per test — a consumed context manager
-# cannot be reused. So this is a factory function, not a module-level list.
 def _common_patches():
     return [
         patch("opalacoder.planner.T.show_plan"),
@@ -67,29 +65,22 @@ def _common_patches():
 # 1. refine_plan is called by run_pipeline
 # ---------------------------------------------------------------------------
 
-def test_run_pipeline_calls_refine_plan():
-    """run_pipeline must invoke refine_plan (the plan refinement loop)."""
+def test_orchestrator_calls_refine_plan():
+    """_plan_and_refine must invoke refine_plan (the plan refinement loop)."""
     project = _make_project()
     store = _make_store()
     mock_refine = AsyncMock(return_value="approved plan")
 
     with (
-        patch("opalacoder.cli.get_relevant_skills_llm", new=AsyncMock(return_value="")),
         patch("opalacoder.planner.generate_panorama", new=AsyncMock(return_value="Phase 1: Do stuff")),
         patch("opalacoder.planner.refine_plan", new=mock_refine),
-        patch("opalacoder.orchestrator.AutonomousOrchestratorStrategy.run", new=AsyncMock(return_value="Done")),
-        patch("opalacoder.cli.T.section"),
-        patch("opalacoder.cli.T.show_result"),
+        patch("opalacoder.orchestrator.T.section"),
+        patch("builtins.open", MagicMock()),
+        patch("os.makedirs", MagicMock()),
     ):
-        from opalacoder.cli import run_pipeline
-        _run(run_pipeline(
-            project=project,
-            store=store,
-            max_retries=1,
-            request="build a calculator",
-            active_model="fake/model",
-            project_skills=[],
-        ))
+        from opalacoder.orchestrator import AutonomousOrchestratorStrategy
+        strategy = AutonomousOrchestratorStrategy(model="fake/model")
+        _run(strategy._plan_and_refine("build a calculator", "", project, store))
 
     mock_refine.assert_called_once()
 
@@ -106,11 +97,14 @@ def test_refine_plan_fast_approval_returns_unchanged():
     project = _make_project()
     store = _make_store()
 
-    with (
+    patches = [
         patch("opalacoder.terminal.ask", return_value="sim"),
         patch("pathlib.Path.read_text", return_value=original_plan),
-        *_common_patches(),
-    ):
+    ] + _common_patches()
+
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
         result = _run(refine_plan(
             request="build something",
             plan_text=original_plan,
@@ -136,11 +130,14 @@ def test_refine_plan_empty_enter_approves():
     project = _make_project()
     store = _make_store()
 
-    with (
+    patches = [
         patch("opalacoder.terminal.ask", return_value=""),
         patch("pathlib.Path.read_text", return_value=plan),
-        *_common_patches(),
-    ):
+    ] + _common_patches()
+
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
         result = _run(refine_plan(
             request="build something",
             plan_text=plan,
@@ -171,14 +168,17 @@ def test_refine_plan_one_cycle_then_approve():
     mock_agent = MagicMock()
     mock_agent.run = AsyncMock(return_value=MagicMock(response=refined_plan))
 
-    with (
+    patches = [
         patch("opalacoder.terminal.ask", side_effect=lambda *a, **kw: next(ask_seq)),
         patch("pathlib.Path.read_text", side_effect=lambda *a, **kw: next(read_seq)),
         patch("opalacoder.planner.make_refinement_agent", return_value=mock_agent),
         patch("opalacoder.planner.confirm_plan", new=AsyncMock(return_value=MagicMock(approved=False))),
         patch("opalacoder.planner.T.spinner", new=_null_spinner),
-        *_common_patches(),
-    ):
+    ] + _common_patches()
+
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
         result = _run(refine_plan(
             request="build something",
             plan_text=original_plan,
@@ -204,11 +204,14 @@ def test_refine_plan_cancel_raises():
     project = _make_project()
     store = _make_store()
 
-    with (
+    patches = [
         patch("opalacoder.terminal.ask", side_effect=UserCancelled),
         patch("pathlib.Path.read_text", return_value=plan),
-        *_common_patches(),
-    ):
+    ] + _common_patches()
+
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
         with pytest.raises(UserCancelled):
             _run(refine_plan(
                 request="build something",
@@ -223,8 +226,8 @@ def test_refine_plan_cancel_raises():
 # 6. run_pipeline forwards the real project and store to refine_plan
 # ---------------------------------------------------------------------------
 
-def test_run_pipeline_passes_correct_session_and_store():
-    """run_pipeline must forward its project and store objects into refine_plan."""
+def test_orchestrator_passes_correct_session_and_store():
+    """_plan_and_refine must forward its project and store objects into refine_plan."""
     project = _make_project(name="my_proj")
     store = _make_store()
     captured = {}
@@ -235,22 +238,15 @@ def test_run_pipeline_passes_correct_session_and_store():
         return plan_text
 
     with (
-        patch("opalacoder.cli.get_relevant_skills_llm", new=AsyncMock(return_value="")),
         patch("opalacoder.planner.generate_panorama", new=AsyncMock(return_value="Phase 1")),
         patch("opalacoder.planner.refine_plan", new=fake_refine),
-        patch("opalacoder.orchestrator.AutonomousOrchestratorStrategy.run", new=AsyncMock(return_value="Done")),
-        patch("opalacoder.cli.T.section"),
-        patch("opalacoder.cli.T.show_result"),
+        patch("opalacoder.orchestrator.T.section"),
+        patch("builtins.open", MagicMock()),
+        patch("os.makedirs", MagicMock()),
     ):
-        from opalacoder.cli import run_pipeline
-        _run(run_pipeline(
-            project=project,
-            store=store,
-            max_retries=1,
-            request="do stuff",
-            active_model="fake/model",
-            project_skills=[],
-        ))
+        from opalacoder.orchestrator import AutonomousOrchestratorStrategy
+        strategy = AutonomousOrchestratorStrategy(model="fake/model")
+        _run(strategy._plan_and_refine("do stuff", "", project, store))
 
     assert captured.get("session") is project, "refine_plan received wrong session object"
     assert captured.get("store") is store, "refine_plan received wrong store object"

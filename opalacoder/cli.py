@@ -97,10 +97,10 @@ async def _create_project(store: ProjectStore, args) -> ProjectData:
 # ─── REPL Loop ────────────────────────────────────────────────────────────────
 
 async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int) -> None:
-    from .tools import set_project_path
+    from .tools import set_project_context
     from .skills import load_project_skills
 
-    set_project_path(project.project_path)
+    set_project_context(project, store)
     project_skills = load_project_skills(project.project_path, project.skills)
 
     T.section(f"Active Project: {_escape(project.project_name or project.name)}")
@@ -118,6 +118,18 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
         else:
             state.project.clear_state()
             store.save(state.project)
+    else:
+        checkpoint_path = os.path.join(project.project_path, ".opalacoder", "session_state.json")
+        if os.path.exists(checkpoint_path):
+            T.warning("[yellow]Foi detectada uma execução de agente não finalizada (checkpoint salvo).[/yellow]")
+            choice = T.choose(_("resume_or_clear"), [_("resume"), _("clear")])
+            if choice == _("resume"):
+                await run_pipeline(state.project, store, max_retries, request="[RESUME_EXECUTION]", project_skills=state.project_skills)
+            else:
+                try:
+                    os.remove(checkpoint_path)
+                except Exception:
+                    pass
 
     while True:
         try:
@@ -142,7 +154,7 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                 with T.spinner(_("agent_thinking")):
                     intent_res = await classifier.run(AgentInput(prompt=user_input))
                     _raw = intent_res.response.strip().lower()
-                    intent = _raw.split()[0].rstrip(".,!?") if _raw else ""
+                    intent = _raw.split()[0].strip(".,!?*\"'") if _raw else ""
 
 
                 if not intent or intent not in _VALID_INTENTS:

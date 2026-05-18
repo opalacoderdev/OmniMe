@@ -1,0 +1,411 @@
+import json
+import time
+import inspect
+from collections import defaultdict
+from pydantic import Field
+from typing import List, Dict, Any, Optional
+import litellm
+
+from agenticblocks.core.agent import AgentBlock
+from agenticblocks.blocks.llm.agent import AgentInput, AgentOutput, _get_shared_router, _print_debug_report
+from agenticblocks.tools.a2a_bridge import block_to_tool_schema
+from agenticblocks.core.block import Block
+from agenticblocks.core.function_block import as_tool
+from agenticblocks.runtime.state import TokenUsage, _current_ctx
+
+class OpalaMemGPTAgentBlock(AgentBlock[AgentInput, AgentOutput]):
+    """
+    An Autonomous LLM Agent that strictly follows the MemGPT Heartbeat paradigm.
+    Customized for OpalaCoder with strict Gemini Sequence validation.
+    """
+    description: str = "OpalaCoder MemGPT style Agent with strict heartbeat limits and context management."
+    model: str = "gpt-4o-mini"
+    system_prompt: str = "You are a helpful AI assistant with extended memory capabilities."
+    tools: List[Block] = []
+    max_heartbeats: int = 10
+    max_context_tokens: int = 4000
+    eviction_threshold: float = 1.0
+    memory_pressure_threshold: float = 0.7
+    tool_call_limits: Dict[str, int] = Field(default_factory=dict)
+    debug: bool = False
+    use_shared_router: bool = True
+    litellm_kwargs: Dict[str, Any] = Field(default_factory=dict)
+
+    internal_history: List[Dict[str, Any]] = Field(default_factory=list)
+    recursive_summary: str = "Nenhum histórico removido ainda."
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    async def _emit_token_usage(self, response: Any, step: int) -> None:
+        usage = getattr(response, "usage", None)
+        record = TokenUsage(
+            block_name=self.name,
+            step=step,
+            prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            total_tokens=getattr(usage, "total_tokens", 0) or 0,
+        )
+        try:
+            ctx = _current_ctx.get()
+            await ctx.add_token_usage(record)
+        except LookupError:
+            pass
+
+    def _estimate_tokens(self, messages: List[Dict[str, Any]]) -> int:
+        try:
+            return litellm.token_counter(model=self.model, messages=messages)
+        except Exception:
+            text = json.dumps(messages)
+            return len(text) // 4
+
+    def _get_safe_eviction_index(self, history: List[Dict[str, Any]], target_count: int) -> int:
+        if target_count >= len(history): return len(history)
+        safe_index = target_count
+        while safe_index < len(history):
+            msg = history[safe_index]
+            if msg.get("role") == "tool":
+                safe_index += 1
+                continue
+            if safe_index > 0:
+                prev_msg = history[safe_index - 1]
+                if prev_msg.get("role") == "assistant" and prev_msg.get("tool_calls"):
+                    safe_index += 1
+                    continue
+            break
+        return safe_index
+
+    async def _summarize(self, messages_to_evict: List[Dict[str, Any]]) -> str:
+        summary_prompt = (
+            f"RESUMO ATUAL: {self.recursive_summary}\n\n"
+            f"NOVAS MENSAGENS EJETADAS DO CONTEXTO:\n{json.dumps(messages_to_evict, indent=2)}\n\n"
+            "Crie um novo resumo conciso que incorpore as informações chave do resumo atual e das novas mensagens ejetadas."
+        )
+        try:
+            resp = await litellm.acompletion(
+                model=self.model,
+                messages=[{"role": "system", "content": "Você é um sumarizador conciso de conversas."},
+                          {"role": "user", "content": summary_prompt}],
+                **self.litellm_kwargs
+            )
+            return resp.choices[0].message.content or self.recursive_summary
+        except Exception as e:
+            if self.debug: print(f"[DEBUG] Erro na sumarização recursiva: {e}")
+            return self.recursive_summary
+
+    def _build_system_prompt(self) -> str:
+        tool_descriptions_list = []
+        for t in self.tools:
+            desc = f"- **{t.name}**: {getattr(t, 'description', 'Sem descrição')}"
+            if t.name in self.tool_call_limits:
+                desc += f" [REGRAS: Máximo de {self.tool_call_limits[t.name]} chamada(s) permitida(s)]"
+            tool_descriptions_list.append(desc)
+        tool_descriptions = "\n".join(tool_descriptions_list)
+        
+        memgpt_rules = f"""
+\n\n---
+# SYSTEM INSTRUCTIONS (MEMGPT ARCHITECTURE)
+
+You are running on an OS-like MemGPT architecture. You have a limited Main Context (working memory) and access to external memory databases via tools.
+
+## AVAILABLE MEMORY TOOLS
+{tool_descriptions}
+- **send_message**: You MUST use this tool to talk to the user.
+
+## CORE RULES
+1. **TOOL-ONLY INTERFACE**: You MUST NEVER reply with plain text. Your only way to communicate with the user is by calling the `send_message` tool.
+2. **HEARTBEATS**: Every tool you call consumes one 'heartbeat'. You can chain multiple tool calls (e.g., search memory, analyze, then send_message). If you use `send_message` and set `request_heartbeat=true`, you retain control to use more tools. If `false`, you yield control to the user.
+3. **MEMORY PRESSURE**: If you see a SYSTEM ALERT about Memory Pressure, your Main Context is almost full. Be concise and rely on memory tools instead of keeping everything in context.
+4. **NO HALLUCINATION**: If the user asks about past interactions or facts you don't know, ALWAYS use your memory tools to retrieve the information before answering.
+"""
+        return self.system_prompt + memgpt_rules
+
+    async def run(self, input: AgentInput) -> AgentOutput:
+        start_time = time.monotonic()
+        agent_tools = self.tools.copy()
+        
+        @as_tool(name="send_message", description="Sends a message to the user. Set request_heartbeat=true if you want to perform more actions (like searching memory) before giving control back to the user.")
+        def send_message(message: str, request_heartbeat: bool = False) -> str:
+            return "Message recorded."
+            
+        agent_tools.append(send_message)
+        litellm_tools = [block_to_tool_schema(b) for b in agent_tools]
+
+        self.internal_history.append({"role": "user", "content": input.prompt})
+
+        heartbeats_used = 0
+        tool_call_count = 0
+        tool_usage: Dict[str, int] = defaultdict(int)
+        termination_reason = "unknown"
+        accumulated_responses = []
+        
+        final_system_prompt = self._build_system_prompt()
+
+        while True:
+            messages = [
+                {"role": "system", "content": final_system_prompt},
+                {"role": "system", "content": f"Recursive Summary of older messages: {self.recursive_summary}"}
+            ] + self.internal_history
+
+            current_tokens = self._estimate_tokens(messages)
+
+            if current_tokens > self.max_context_tokens * self.eviction_threshold:
+                if self.debug: print(f"[DEBUG] Contexto excedeu limite de evictação ({current_tokens} tokens). Iniciando evictação FIFO...")
+                target_evict = max(1, len(self.internal_history) // 4)
+                safe_evict_idx = self._get_safe_eviction_index(self.internal_history, target_evict)
+                
+                if safe_evict_idx == 0 and len(self.internal_history) > 0:
+                    safe_evict_idx = 1
+                
+                if safe_evict_idx < len(self.internal_history):
+                    to_evict = self.internal_history[:safe_evict_idx]
+                    self.internal_history = self.internal_history[safe_evict_idx:]
+                    
+                    self.recursive_summary = await self._summarize(to_evict)
+                    
+                    messages = [
+                        {"role": "system", "content": final_system_prompt},
+                        {"role": "system", "content": f"Recursive Summary of older messages: {self.recursive_summary}"}
+                    ] + self.internal_history
+                    current_tokens = self._estimate_tokens(messages)
+                else:
+                    if self.debug: print("[DEBUG] Falha ao evictar: impossível quebrar o histórico de forma segura.")
+
+            if current_tokens > self.max_context_tokens * self.memory_pressure_threshold:
+                pct = int(self.memory_pressure_threshold * 100)
+                messages.append({
+                    "role": "system", 
+                    "content": f"SYSTEM ALERT: Memory Pressure (>{pct}% context reached). Move critical facts to archival/working storage if needed."
+                })
+
+            heartbeats_left = self.max_heartbeats - heartbeats_used
+            kwargs = self.litellm_kwargs.copy()
+            kwargs["tools"] = litellm_tools
+            
+            if heartbeats_left <= 0:
+                kwargs["tool_choice"] = {"type": "function", "function": {"name": "send_message"}}
+                messages.append({
+                    "role": "system", 
+                    "content": "SYSTEM ALERT: 0 heartbeats remaining. You MUST call send_message with request_heartbeat=false now to finish the turn."
+                })
+            else:
+                kwargs["tool_choice"] = "auto"
+
+            # --- BULLETPROOF GEMINI SANITIZATION FOR OPALACODER ---
+            if "gemini" in str(self.model).lower():
+                sanitized = []
+                for msg in messages:
+                    msg_copy = dict(msg)
+                    if msg_copy.get("role") == "assistant" and msg_copy.get("tool_calls"):
+                        msg_copy["content"] = None
+                    
+                    if not sanitized:
+                        if msg_copy.get("role") != "user":
+                            sanitized.append({"role": "user", "content": "SYSTEM INIT"})
+                        sanitized.append(msg_copy)
+                        continue
+                    
+                    prev = sanitized[-1]
+                    role = msg_copy.get("role")
+                    prev_role = prev.get("role")
+                    
+                    if role in ["user", "system"] and prev_role in ["user", "system", "tool"]:
+                        prev["content"] = str(prev.get("content") or "") + "\n\n" + str(msg_copy.get("content") or "")
+                        continue
+                        
+                    if role == "assistant" and prev_role == "assistant":
+                        sanitized.append({"role": "user", "content": "Acknowledge."})
+                        
+                    sanitized.append(msg_copy)
+                messages = sanitized
+
+            if self.use_shared_router:
+                router = _get_shared_router(self.model)
+                response = await router.acompletion(model=self.model, messages=messages, **kwargs)
+            else:
+                response = await litellm.acompletion(model=self.model, messages=messages, **kwargs)
+
+            await self._emit_token_usage(response, step=heartbeats_used)
+            message = response.choices[0].message
+            
+            assistant_msg_raw = {"role": "assistant", "content": message.content}
+            if message.tool_calls:
+                assistant_msg_raw["tool_calls"] = [
+                    {"id": tc.id, "type": "function",
+                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in message.tool_calls
+                ]
+            
+            self.internal_history.append(assistant_msg_raw)
+            messages.append(assistant_msg_raw)
+
+            if not message.tool_calls:
+                parsed_tc = None
+                if message.content:
+                    content_str = message.content.strip()
+                    
+                    import re
+                    json_match = re.search(r'(\{.*\})', content_str, re.DOTALL)
+                    if json_match:
+                        clean_json_str = json_match.group(1)
+                        parsed_json = None
+                        try:
+                            parsed_json = json.loads(clean_json_str, strict=False)
+                        except Exception:
+                            try:
+                                heuristic_str = clean_json_str.replace('\\"', '"').replace('\\n', '\n')
+                                parsed_json = json.loads(heuristic_str, strict=False)
+                            except Exception as e:
+                                if self.debug: print(f"[DEBUG PARSE FALLBACK ERRO] {e}")
+                                pass
+
+                        try:
+                            if parsed_json and isinstance(parsed_json, dict):
+                                fn_name = parsed_json.get("function") or parsed_json.get("name")
+                                args = parsed_json.get("arguments") or parsed_json.get("parameters") or {}
+                                
+                                if isinstance(args, str):
+                                    try: args = json.loads(args, strict=False)
+                                    except: pass
+                                
+                                if fn_name and isinstance(fn_name, str):
+                                    class MockFunction:
+                                        def __init__(self, name, arguments):
+                                            self.name = name
+                                            self.arguments = arguments
+                                    class MockToolCall:
+                                        def __init__(self, id, function):
+                                            self.id = id
+                                            self.function = function
+                                            
+                                    parsed_tc = MockToolCall(
+                                        id=f"call_{int(time.time())}",
+                                        function=MockFunction(
+                                            name=fn_name,
+                                            arguments=json.dumps(args) if isinstance(args, dict) else str(args)
+                                        )
+                                    )
+                        except Exception:
+                            pass
+
+                if parsed_tc:
+                    message.tool_calls = [parsed_tc]
+                    assistant_msg_raw["tool_calls"] = [
+                        {"id": parsed_tc.id, "type": "function",
+                         "function": {"name": parsed_tc.function.name, "arguments": parsed_tc.function.arguments}}
+                    ]
+                    self.internal_history[-1] = assistant_msg_raw
+                    messages[-1] = assistant_msg_raw
+                else:
+                    if message.content:
+                        err_msg = "SYSTEM ALERT: You violated the tool-only rule. You MUST NOT reply with plain text. Use the `send_message` tool to talk to the user."
+                        if message.content.strip().startswith("{"):
+                            err_msg = "SYSTEM ALERT: You replied with a JSON string in plain text that is not a valid tool call. You MUST use the proper tool calling API (like send_message)."
+                        
+                        alert_msg = {"role": "user", "content": err_msg}
+                        self.internal_history.append(alert_msg)
+                        messages.append(alert_msg)
+                        
+                        heartbeats_used += 1
+                        if heartbeats_used > self.max_heartbeats:
+                            termination_reason = "model repeatedly violated tool-only rule"
+                            break
+                        continue
+                    else:
+                        termination_reason = "model returned empty response"
+                        break
+
+            heartbeats_used += 1
+            wants_heartbeat = False
+            
+            for tool_call in message.tool_calls:
+                tool_call_count += 1
+                function_name = tool_call.function.name
+                tool_usage[function_name] += 1
+
+                if function_name in self.tool_call_limits and tool_usage[function_name] > self.tool_call_limits[function_name]:
+                    err_res = {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "name": function_name,
+                        "content": json.dumps({"error": f"SYSTEM ALERT: Execution Blocked. You exceeded the maximum limit of {self.tool_call_limits[function_name]} calls for '{function_name}'."})
+                    }
+                    self.internal_history.append(err_res)
+                    messages.append(err_res)
+                    wants_heartbeat = True
+                    continue
+
+                if function_name == "send_message":
+                    try:
+                        args = json.loads(tool_call.function.arguments)
+                        msg_text = args.get("message", "")
+                        if msg_text:
+                            accumulated_responses.append(msg_text)
+                        
+                        hb_req = args.get("request_heartbeat", False)
+                        if hb_req: wants_heartbeat = True
+                        
+                        tool_result = {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": function_name,
+                            "content": f"Message recorded. Heartbeats remaining: {self.max_heartbeats - heartbeats_used}."
+                        }
+                        self.internal_history.append(tool_result)
+                        messages.append(tool_result)
+                    except Exception as e:
+                        err_res = {"role": "tool", "tool_call_id": tool_call.id, "name": function_name, "content": json.dumps({"error": str(e)})}
+                        self.internal_history.append(err_res)
+                        messages.append(err_res)
+                else:
+                    wants_heartbeat = True
+                    matched_block = next((b for b in agent_tools if b.name == function_name), None)
+                    if not matched_block:
+                        err_res = {"role": "tool", "tool_call_id": tool_call.id, "name": function_name, "content": json.dumps({"error": f"Tool '{function_name}' not found."})}
+                        self.internal_history.append(err_res)
+                        messages.append(err_res)
+                        continue
+
+                    try:
+                        args_dict = json.loads(tool_call.function.arguments)
+                        input_model = matched_block.input_schema()(**args_dict)
+                        result = await matched_block.run(input=input_model)
+                        content_str = json.dumps(result.model_dump(exclude_none=True) if hasattr(result, "model_dump") else result)
+                        
+                        hb_left = self.max_heartbeats - heartbeats_used
+                        sys_msg = f"\n[System: You have {hb_left} heartbeats remaining."
+                        if function_name in self.tool_call_limits:
+                            calls_left = max(0, self.tool_call_limits[function_name] - tool_usage[function_name])
+                            sys_msg += f" You have {calls_left} calls remaining for '{function_name}'."
+                        sys_msg += "]"
+                        content_str += sys_msg
+                            
+                        tool_res = {"role": "tool", "tool_call_id": tool_call.id, "name": function_name, "content": content_str}
+                        self.internal_history.append(tool_res)
+                        messages.append(tool_res)
+                    except Exception as e:
+                        err_res = {"role": "tool", "tool_call_id": tool_call.id, "name": function_name, "content": json.dumps({"error": str(e)})}
+                        self.internal_history.append(err_res)
+                        messages.append(err_res)
+
+            if not wants_heartbeat:
+                termination_reason = "send_message called with request_heartbeat=false"
+                break
+            
+            if heartbeats_used >= self.max_heartbeats:
+                termination_reason = f"max_heartbeats ({self.max_heartbeats}) reached"
+                break
+
+        final_text = "\n".join(accumulated_responses)
+        output = AgentOutput(response=final_text, tool_calls_made=tool_call_count)
+
+        if self.debug:
+            _print_debug_report(
+                agent_name=self.name,
+                model=self.model,
+                iteration_count=heartbeats_used,
+                tool_call_count=tool_call_count,
+                tool_usage=dict(tool_usage),
+                termination_reason=termination_reason,
+                elapsed_seconds=time.monotonic() - start_time,
+            )
+        return output

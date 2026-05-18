@@ -35,12 +35,14 @@ AGENT_PROGRESS = _AgentProgress()
 
 # Set once at session start via set_project_path(); all tools use this as their workspace.
 _PROJECT_PATH: str = ""
+_PROJECT_SESSION = None
+_PROJECT_STORE = None
 
-
-def set_project_path(path: str) -> None:
-    global _PROJECT_PATH
-    _PROJECT_PATH = os.path.abspath(path)
-
+def set_project_context(session, store=None) -> None:
+    global _PROJECT_PATH, _PROJECT_SESSION, _PROJECT_STORE
+    _PROJECT_SESSION = session
+    _PROJECT_STORE = store
+    _PROJECT_PATH = os.path.abspath(session.project_path) if getattr(session, "project_path", "") else os.getcwd()
 
 def get_project_path() -> str:
     return _PROJECT_PATH or os.getcwd()
@@ -348,4 +350,50 @@ def get_available_tools():
         run_command,
         search_code,
         ask_human,
+        read_core_memory,
+        append_core_memory,
+        search_conversation_history,
     ]
+
+# ─── Long-Term Memory (MemGPT-style) ──────────────────────────────────────────
+
+@as_tool(name="read_core_memory", description="Read the global 'Core Memory' of the project. Contains rules, persistent context, and architectural decisions you should follow.")
+def read_core_memory() -> str:
+    AGENT_PROGRESS.update("read_core_memory")
+    if not _PROJECT_SESSION:
+        return "Core memory not available (no active session)."
+    return getattr(_PROJECT_SESSION, "core_memory", "") or "(Core memory is empty)"
+
+@as_tool(name="append_core_memory", description="Append a new persistent rule, context, or decision to the Core Memory. Do this when you learn something about the user's preferences or the project's state that you want to remember across different executions.")
+def append_core_memory(content: str) -> str:
+    AGENT_PROGRESS.update("append_core_memory", f"content={_preview(content)}")
+    if not _PROJECT_SESSION or not _PROJECT_STORE:
+        return "Core memory not available (no active session)."
+    
+    current = getattr(_PROJECT_SESSION, "core_memory", "")
+    new_mem = current + ("\n" if current else "") + "- " + content
+    _PROJECT_SESSION.core_memory = new_mem
+    try:
+        _PROJECT_STORE.save(_PROJECT_SESSION)
+        return "Successfully appended to Core Memory."
+    except Exception as e:
+        return f"Error saving Core Memory: {e}"
+
+@as_tool(name="search_conversation_history", description="Search through the past conversations of this project using semantic search (RAG) to remember previous context, decisions, or user instructions. Use this when you need context about past tasks.")
+def search_conversation_history(query: str, limit: int = 5) -> str:
+    AGENT_PROGRESS.update("search_conversation_history", f"query={_preview(query)}")
+    if not _PROJECT_SESSION:
+        return "Archival search not available (no active session)."
+    
+    try:
+        from .archival import search_archival
+        results = search_archival(_PROJECT_SESSION.name, query, limit=limit)
+        if not results:
+            return f"No results found in archival memory for query: '{query}'"
+            
+        out = [f"Found {len(results)} results in Archival Memory:"]
+        for r in results:
+            out.append(f"[{r['timestamp']} | {r['role'].upper()}] {r['content']}")
+        return "\n".join(out)
+    except Exception as e:
+        return f"Error searching Archival Memory: {e}"

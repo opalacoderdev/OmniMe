@@ -10,8 +10,7 @@ from rich.panel import Panel
 from rich import box
 
 import abc
-
-
+import os
 class _SuppressMockToolCallErrors(logging.Filter):
     """Suppress the non-fatal LiteLLM serialization error caused by MockToolCall objects."""
 
@@ -21,8 +20,8 @@ class _SuppressMockToolCallErrors(logging.Filter):
 
 logging.getLogger("LiteLLM").addFilter(_SuppressMockToolCallErrors())
 
-from agenticblocks.blocks.llm.memgpt_agent import MemGPTAgentBlock
 from agenticblocks.blocks.llm.agent import AgentInput
+from agenticblocks.core.function_block import FunctionBlock
 from .tools import get_available_tools, AGENT_PROGRESS
 from .config import get_agent_llm_kwargs, get_agent_model, get_agent_debug, DEFAULT_MODEL, get_agent_max_heartbeats
 from . import terminal as T
@@ -80,7 +79,7 @@ class AutonomousOrchestratorStrategy(BaseOrchestratorStrategy):
         super().__init__(get_agent_model("orchestrator", model or DEFAULT_MODEL))
         self.tools = get_available_tools()
 
-    def _build_system_prompt(self, approved_plan: str = "", project_context: str = "") -> str:
+    def _build_system_prompt(self, approved_plan: str = "", project_context: str = "", session = None) -> str:
         import re as _re
 
         proj_path = "."
@@ -98,6 +97,15 @@ Path : {proj_path}
 You are working EXCLUSIVELY inside this project. Every file you read, write, or execute
 must live under `{proj_path}`. Never touch files outside this directory.
 """
+        # Fetch core memory
+        core_memory = getattr(session, "core_memory", "") if session else ""
+        memory_section = ""
+        if core_memory:
+            memory_section = f"""
+## CORE MEMORY
+This is your persistent memory across sessions. You MUST adhere to these rules and facts:
+{core_memory}
+"""
 
         plan_section = ""
         if approved_plan:
@@ -111,6 +119,7 @@ Use your tools to implement it fully before calling `send_message`.
 
         return f"""You are OpalaCoder — an autonomous software-engineering agent embedded inside a project workspace.
 {project_header}
+{memory_section}
 ## FIRST ACTION — always
 Before doing anything else, call `get_project_overview` to understand the current state of the project:
 its files, structure, and technology stack. Use that snapshot to make every decision that follows.
@@ -126,7 +135,7 @@ refactoring, and updating any existing code inside the project directory.
    dev command without asking for permission.
 3. **Fix bugs autonomously**: read the relevant file → identify the problem → fix in place.
    Do NOT recreate from scratch unless the file is irreparably broken.
-4. **Never start servers**: Do NOT run `npm start`, `npm run dev`, `flask run`, or any long-running process.
+4. **Never start servers**: Do NOT run `npm start`, `npm run dev`, `flask run`, `uvicorn`, or any long-running process.
 5. **Verify your work**: After writing code, run a quick syntax/lint check (e.g. `node --check file.js`,
    `python -m py_compile file.py`).
 6. **Use ask_human ONLY** for genuinely dangerous or irreversible operations (`rm -rf`, `sudo`,
@@ -135,7 +144,11 @@ refactoring, and updating any existing code inside the project directory.
    - If available, use `git_diff` to review your code changes.
    - If available, use `git_commit` to save milestones of your work logically.
    - You can use `run_command` with `git --git-dir=.opalacoder/.git --work-tree=. checkout <file>` to revert mistakes.
-8. **Report ONCE — but only after finishing**: Call `send_message` **exactly once**, and only after
+   - You can use `run_command` with `git --git-dir=.opalacoder/.git --work-tree=. checkout <file>` to revert mistakes.
+8. **Long-Term Memory (MemGPT-style)**:
+   - Use `read_core_memory` to remember global project rules. Use `append_core_memory` to save newly learned rules or decisions permanently.
+   - Use `search_conversation_history` (RAG) to search past user conversations and recover context from previous tasks whenever necessary.
+9. **Report ONCE — but only after finishing**: Call `send_message` **exactly once**, and only after
    you have fully completed every step of the plan (all files written, commands run, verifications done).
    NEVER call `send_message` to describe what you are *about to do* — that terminates execution immediately.
    The message must be a past-tense summary of what you *actually did*: files created/modified (relative paths),
@@ -171,11 +184,42 @@ refactoring, and updating any existing code inside the project directory.
         session = kwargs.get("session")
         store = kwargs.get("store")
 
+        project_path = getattr(session, "project_path", ".") or "."
+        checkpoint_dir = os.path.join(project_path, ".opalacoder")
+        checkpoint_path = os.path.join(checkpoint_dir, "session_state.json")
+        is_resume = False
+        saved_state = None
+
+        if os.path.exists(checkpoint_path):
+            from rich.prompt import Confirm
+            if Confirm.ask("[yellow]Sessão não finalizada detectada. Deseja retomar a execução anterior?[/yellow]", default=True):
+                import json
+                try:
+                    with open(checkpoint_path, "r") as f:
+                        saved_state = json.load(f)
+                    is_resume = True
+                except Exception as e:
+                    T.warning(f"Falha ao carregar sessão anterior: {e}")
+            else:
+                try:
+                    os.remove(checkpoint_path)
+                except Exception:
+                    pass
+
         project_context = session.context_header() if session and hasattr(session, "context_header") else ""
 
         approved_plan = ""
         if session and store:
-            approved_plan = await self._plan_and_refine(user_request, history, session, store)
+            if is_resume:
+                plan_file_path = os.path.join(project_path, "plan.md")
+                if os.path.exists(plan_file_path):
+                    try:
+                        with open(plan_file_path, "r", encoding="utf-8") as f:
+                            approved_plan = f.read()
+                    except Exception:
+                        pass
+            else:
+                approved_plan = await self._plan_and_refine(user_request, history, session, store)
 
         llm_kwargs = get_agent_llm_kwargs("orchestrator")
         max_hb_config = get_agent_max_heartbeats("orchestrator", 20)
@@ -186,22 +230,25 @@ refactoring, and updating any existing code inside the project directory.
         if approved_plan and get_complexity_inference_mode() == "double":
             from .agents import make_post_plan_evaluator
             evaluator = make_post_plan_evaluator(self.model)
+            eval_data = {}
             with T.spinner("Avaliando esforço do plano (Inferência Dupla)..."):
                 try:
                     res = await evaluator.run(AgentInput(prompt=approved_plan))
                     import json
-                    data = json.loads(res.response)
-                    
-                    if data.get("model") == "alternative" and self.model != ALTERNATIVE_MODEL:
-                        if ensure_api_key(ALTERNATIVE_MODEL):
-                            T.info(f"Plano complexo detectado. Promovendo orquestrador para {ALTERNATIVE_MODEL}...")
-                            self.model = ALTERNATIVE_MODEL
-                            
-                    if max_hb_config == "auto":
-                        steps = int(data.get("estimated_steps", 10))
-                        max_hb_config = min(steps * 3 + 5, 200)
+                    res_text = res.response.replace("```json", "").replace("```", "").strip()
+                    eval_data = json.loads(res_text)
                 except Exception as e:
                     T.warning(f"Falha na inferência dupla de complexidade: {e}")
+            
+            if eval_data:
+                if eval_data.get("model") == "alternative" and self.model != ALTERNATIVE_MODEL:
+                    if ensure_api_key(ALTERNATIVE_MODEL):
+                        T.info(f"Plano complexo detectado. Promovendo orquestrador para {ALTERNATIVE_MODEL}...")
+                        self.model = ALTERNATIVE_MODEL
+                        
+                if max_hb_config == "auto":
+                    steps = int(eval_data.get("estimated_steps", 10))
+                    max_hb_config = min(steps * 3 + 5, 200)
                     
         if max_hb_config == "auto":
             max_hb_config = 50  # Fallback for simple mode or error
@@ -222,11 +269,15 @@ refactoring, and updating any existing code inside the project directory.
         vcs_strategy = get_vcs_strategy(get_git_strategy(), project_path)
         vcs_strategy.setup()
         
+        from .tools import set_project_context
+        set_project_context(session, store)
+        
         agent_tools = self.tools + vcs_strategy.get_tools()
 
-        agent = MemGPTAgentBlock(
+        from .memgpt import OpalaMemGPTAgentBlock
+        agent = OpalaMemGPTAgentBlock(
             name="orchestrator",
-            system_prompt=self._build_system_prompt(approved_plan, project_context),
+            system_prompt=self._build_system_prompt(approved_plan, project_context, session),
             model=self.model,
             tools=agent_tools,
             litellm_kwargs=llm_kwargs,
@@ -234,26 +285,26 @@ refactoring, and updating any existing code inside the project directory.
             debug=get_agent_debug("orchestrator", False)
         )
 
-        project_path = getattr(session, "project_path", ".") or "."
-        checkpoint_dir = os.path.join(project_path, ".opalacoder")
-        checkpoint_path = os.path.join(checkpoint_dir, "session_state.json")
-        is_resume = False
-
-        if os.path.exists(checkpoint_path):
-            from rich.prompt import Confirm
-            if Confirm.ask("[yellow]Sessão não finalizada detectada. Deseja retomar a execução anterior?[/yellow]", default=True):
-                import json
-                try:
-                    with open(checkpoint_path, "r") as f:
-                        state = json.load(f)
-                    agent.internal_history = state.get("internal_history", [])
-                    agent.recursive_summary = state.get("recursive_summary", "")
-                    AGENT_PROGRESS.heartbeat = state.get("heartbeat", 0)
-                    is_resume = True
-                except Exception as e:
-                    T.warning(f"Falha ao carregar sessão anterior: {e}")
-            else:
-                os.remove(checkpoint_path)
+        if is_resume and saved_state:
+            agent.internal_history = saved_state.get("internal_history", [])
+            agent.recursive_summary = saved_state.get("recursive_summary", "")
+            AGENT_PROGRESS.heartbeat = saved_state.get("heartbeat", 0)
+            
+            # --- FIX: Prevent Gemini API BadRequestError on resume ---
+            # Se o sistema foi interrompido enquanto executava uma tool, o último
+            # histórico será o "tool_call" sem a respectiva resposta. Gemini rejeita isso.
+            if agent.internal_history:
+                last_msg = agent.internal_history[-1]
+                if last_msg.get("role") == "assistant" and last_msg.get("tool_calls"):
+                    import json
+                    for tc in last_msg.get("tool_calls", []):
+                        fn_name = tc.get("function", {}).get("name", "unknown")
+                        agent.internal_history.append({
+                            "role": "tool",
+                            "tool_call_id": tc.get("id"),
+                            "name": fn_name,
+                            "content": json.dumps({"error": "Process was interrupted during execution. Please verify state and retry."})
+                        })
 
         prompt = (
             f"[CONVERSATION HISTORY]\n{history}\n[END HISTORY]\n\n"
@@ -304,8 +355,8 @@ refactoring, and updating any existing code inside the project directory.
                         import json
                         with open(checkpoint_path, "w") as f:
                             json.dump(state, f)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        T.warning(f"Erro ao salvar checkpoint: {e}")
                 
                 await asyncio.sleep(0.25)
             AGENT_PROGRESS.live_context = None

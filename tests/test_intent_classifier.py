@@ -79,7 +79,7 @@ _VALID_INTENTS = {"greetings", "question", "plan", "chat", "command_hint"}
 def _classify(raw_response: str) -> str:
     """Replicate the REPL intent-parsing logic from cli.py."""
     _raw = raw_response.strip().lower()
-    intent = _raw.split()[0].rstrip(".,!?") if _raw else ""
+    intent = _raw.split()[0].strip(".,!?*\"'") if _raw else ""
     if not intent or intent not in _VALID_INTENTS:
         return "__unclear__"
     return intent
@@ -156,6 +156,12 @@ CLASSIFICATION_CASES = [
 @pytest.mark.parametrize("user_input,expected", CLASSIFICATION_CASES)
 def test_classifier_labels(user_input, expected):
     """End-to-end classification against the real ollama model."""
+    import urllib.request
+    try:
+        urllib.request.urlopen("http://localhost:11434", timeout=0.5)
+    except Exception:
+        pytest.skip("Ollama is not running/reachable.")
+
     classifier = make_intent_classifier()
 
     async def run():

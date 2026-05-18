@@ -49,6 +49,12 @@ def _init_schema(db_path: str) -> None:
                 FOREIGN KEY (project) REFERENCES projects(name) ON DELETE CASCADE
             );
         """)
+        
+        # Migração: tentar adicionar core_memory caso não exista
+        try:
+            conn.execute("ALTER TABLE projects ADD COLUMN core_memory TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
 
 
 @dataclass
@@ -64,6 +70,7 @@ class ProjectData:
     plan_text: str = ""
     subplans: list = field(default_factory=list)
     results: dict = field(default_factory=dict)
+    core_memory: str = ""
     history: list = field(default_factory=list)   # [{role, content}]
 
     def clear_state(self) -> None:
@@ -109,10 +116,10 @@ class ProjectStore:
             _skills = ["opalacoder"] + _skills
         with _conn(self.db_path) as conn:
             conn.execute(
-                "INSERT INTO projects (name, created_at, updated_at, mode, model, project_name, project_path, skills, description) VALUES (?,?,?,?,?,?,?,?,?)",
-                (name, now, now, mode, model, project_name, project_path, json.dumps(_skills), description),
+                "INSERT INTO projects (name, created_at, updated_at, mode, model, project_name, project_path, skills, description, core_memory) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (name, now, now, mode, model, project_name, project_path, json.dumps(_skills), description, ""),
             )
-        return ProjectData(name=name, mode=mode, model=model, project_name=project_name, project_path=project_path, skills=_skills, description=description)
+        return ProjectData(name=name, mode=mode, model=model, project_name=project_name, project_path=project_path, skills=_skills, description=description, core_memory="")
 
     def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "") -> ProjectData:
         self.delete(name)
@@ -154,6 +161,7 @@ class ProjectStore:
                 plan_text=row["plan_text"],
                 subplans=json.loads(row["subplans"]),
                 results=json.loads(row["results"]),
+                core_memory=row["core_memory"] if "core_memory" in row.keys() else "",
                 history=[dict(r) for r in hist_rows],
             )
 
@@ -165,7 +173,7 @@ class ProjectStore:
         with _conn(self.db_path) as conn:
             conn.execute(
                 """UPDATE projects SET updated_at=?, mode=?, model=?, project_name=?, project_path=?,
-                   skills=?, description=?, request=?, plan_text=?, subplans=?, results=? WHERE name=?""",
+                   skills=?, description=?, request=?, plan_text=?, subplans=?, results=?, core_memory=? WHERE name=?""",
                 (
                     now,
                     project.mode,
@@ -178,18 +186,35 @@ class ProjectStore:
                     project.plan_text,
                     json.dumps(project.subplans, ensure_ascii=False),
                     json.dumps(project.results, ensure_ascii=False),
+                    project.core_memory,
                     project.name,
                 ),
             )
 
     def append_message(self, project: ProjectData, role: str, content: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
+        message_id = None
         with _conn(self.db_path) as conn:
-            conn.execute(
+            cursor = conn.execute(
                 "INSERT INTO project_history (project, timestamp, role, content) VALUES (?,?,?,?)",
                 (project.name, now, role, content),
             )
+            message_id = cursor.lastrowid
+            
         project.history.append({"role": role, "content": content})
+        
+        # Envia também para o banco de dados vetorial
+        try:
+            from .archival import append_to_archival
+            append_to_archival(
+                project_name=project.name,
+                message_id=str(message_id),
+                role=role,
+                content=content,
+                timestamp=now
+            )
+        except Exception:
+            pass
 
 
 # Backward-compat alias

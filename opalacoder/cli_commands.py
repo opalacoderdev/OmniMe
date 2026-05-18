@@ -110,7 +110,7 @@ async def cmd_list(state: REPLState, _args: list[str]) -> None:
 
 @_registry.register("/load", usage="<name>", description="Load another project")
 async def cmd_load(state: REPLState, args: list[str]) -> str | None:
-    from .tools import set_project_path
+    from .tools import set_project_context
     from .skills import load_project_skills
     if not args:
         T.error("Usage: /load <name>")
@@ -122,7 +122,7 @@ async def cmd_load(state: REPLState, args: list[str]) -> str | None:
     loaded = state.store.load(name)
     if loaded:
         state.project = loaded
-        set_project_path(state.project.project_path)
+        set_project_context(state.project, state.store)
         state.project_skills = load_project_skills(state.project.project_path, state.project.skills)
         state.chat_agent = make_chat_memgpt_agent(state.project.model)
         T.success(f"Project '{name}' loaded.")
