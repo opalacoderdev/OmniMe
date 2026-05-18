@@ -4,10 +4,7 @@ import asyncio
 import logging
 import time
 from rich.live import Live
-from rich.table import Table
-from rich.text import Text
 from rich.panel import Panel
-from rich import box
 
 import abc
 import os
@@ -25,6 +22,36 @@ from agenticblocks.core.function_block import FunctionBlock
 from .tools import get_available_tools, AGENT_PROGRESS
 from .config import get_agent_llm_kwargs, get_agent_model, get_agent_debug, DEFAULT_MODEL, get_agent_max_heartbeats, get_agent_heartbeats_scale_factor
 from . import terminal as T
+from .i18n import _
+
+# Relative path inside the project directory used for checkpointing.
+CHECKPOINT_SUBPATH = os.path.join(".opalacoder", "session_state.json")
+
+# ─── Orchestrator registry ────────────────────────────────────────────────────
+
+_REGISTRY: dict[str, type["BaseOrchestratorStrategy"]] = {}
+
+
+def register_orchestrator(name: str):
+    """Class decorator that registers an orchestrator strategy under *name*."""
+    def decorator(cls: type) -> type:
+        _REGISTRY[name] = cls
+        return cls
+    return decorator
+
+
+def get_orchestrator(strategy: str, model: str) -> "BaseOrchestratorStrategy":
+    """Instantiate the orchestrator registered under *strategy*.
+
+    Raises ValueError for unknown names so misconfigured agents.yaml fails loudly.
+    """
+    cls = _REGISTRY.get(strategy)
+    if cls is None:
+        available = ", ".join(sorted(_REGISTRY)) or "(none)"
+        raise ValueError(
+            f"Unknown orchestrator strategy '{strategy}'. Available: {available}"
+        )
+    return cls(model=model)
 
 
 class BaseOrchestratorStrategy(abc.ABC):
@@ -74,6 +101,7 @@ def _build_progress_panel(progress: object, max_hb: int) -> Panel:
     )
 
 
+@register_orchestrator("autonomous")
 class AutonomousOrchestratorStrategy(BaseOrchestratorStrategy):
     def __init__(self, model: str | None = None):
         super().__init__(get_agent_model("orchestrator", model or DEFAULT_MODEL))
@@ -175,7 +203,7 @@ refactoring, and updating any existing code inside the project directory.
             with open(plan_file_path, "w", encoding="utf-8") as f:
                 f.write(approved_plan)
         except Exception as e:
-            T.warning(f"Não foi possível salvar plan.md no diretório do projeto: {e}")
+            T.warning(_("plan_save_failed", err=e))
             
         return approved_plan
 
@@ -192,14 +220,14 @@ refactoring, and updating any existing code inside the project directory.
 
         if os.path.exists(checkpoint_path):
             from rich.prompt import Confirm
-            if Confirm.ask("[yellow]Sessão não finalizada detectada. Deseja retomar a execução anterior?[/yellow]", default=True):
+            if Confirm.ask(f"[yellow]{_('unfinished_session_detected')}[/yellow]", default=True):
                 import json
                 try:
                     with open(checkpoint_path, "r") as f:
                         saved_state = json.load(f)
                     is_resume = True
                 except Exception as e:
-                    T.warning(f"Falha ao carregar sessão anterior: {e}")
+                    T.warning(_("checkpoint_load_failed", err=e))
             else:
                 try:
                     os.remove(checkpoint_path)
@@ -232,19 +260,19 @@ refactoring, and updating any existing code inside the project directory.
             from .agents import make_post_plan_evaluator
             evaluator = make_post_plan_evaluator(self.model)
             eval_data = {}
-            with T.spinner("Avaliando esforço do plano (Inferência Dupla)..."):
+            with T.spinner(_("evaluating_plan_effort")):
                 try:
                     res = await evaluator.run(AgentInput(prompt=approved_plan))
                     import json
                     res_text = res.response.replace("```json", "").replace("```", "").strip()
                     eval_data = json.loads(res_text)
                 except Exception as e:
-                    T.warning(f"Falha na inferência dupla de complexidade: {e}")
+                    T.warning(_("double_inference_failed", err=e))
             
             if eval_data:
                 if eval_data.get("model") == "alternative" and self.model != ALTERNATIVE_MODEL:
                     if ensure_api_key(ALTERNATIVE_MODEL):
-                        T.info(f"Plano complexo detectado. Promovendo orquestrador para {ALTERNATIVE_MODEL}...")
+                        T.info(_("complex_plan_promoted", model=ALTERNATIVE_MODEL))
                         self.model = ALTERNATIVE_MODEL
                         
                 if max_hb_config == "auto":
@@ -357,7 +385,7 @@ refactoring, and updating any existing code inside the project directory.
                         with open(checkpoint_path, "w") as f:
                             json.dump(state, f)
                     except Exception as e:
-                        T.warning(f"Erro ao salvar checkpoint: {e}")
+                        T.warning(_("checkpoint_save_error", err=e))
                 
                 await asyncio.sleep(0.25)
             AGENT_PROGRESS.live_context = None

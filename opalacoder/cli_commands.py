@@ -1,7 +1,7 @@
 """REPL command registry and handlers for OpalaCoder CLI."""
 
 from .project import ProjectStore, ProjectData
-from .agents import make_chat_memgpt_agent
+from .agents import make_chat_memgpt_agent, make_intent_classifier, make_complexity_evaluator
 from . import terminal as T
 from .i18n import _
 from rich.markup import escape as _escape
@@ -15,6 +15,9 @@ class REPLState:
         self.store = store
         self.project_skills = project_skills
         self.chat_agent = chat_agent
+        # Created once per session so we don't allocate a new LLMAgentBlock each turn.
+        self.intent_classifier = make_intent_classifier(project.model)
+        self.complexity_evaluator = make_complexity_evaluator(project.model)
 
     @property
     def display_name(self) -> str:

@@ -9,6 +9,7 @@ from agenticblocks.blocks.llm.agent import AgentInput
 from .memgpt import OpalaMemGPTAgentBlock
 from .profiles import infer_system_prompt
 from . import terminal as T
+from .i18n import _
 
 class ProfileExecutorStrategy:
     def __init__(self, model: str, profile_data: Dict[str, Any]):
@@ -25,13 +26,13 @@ class ProfileExecutorStrategy:
         
         # Write the profile as a YAML block inside plan.md
         profile_yaml = yaml.dump({"tasks": self.profile_data.get("tasks", {})}, allow_unicode=True, sort_keys=False)
-        plan_content = f"# Execution Profile Plan\n\nEdite as tarefas abaixo (formato YAML) conforme necessário e salve o arquivo.\n\n```yaml\n{profile_yaml}\n```\n"
-        
+        plan_content = f"# Execution Profile Plan\n\nEdit the tasks below (YAML format) as needed and save the file.\n\n```yaml\n{profile_yaml}\n```\n"
+
         with open(plan_path, "w", encoding="utf-8") as f:
             f.write(plan_content)
-            
-        T.info(f"Perfil de execução salvo como plano em '{plan_path}'.")
-        T.ask("Edite o arquivo se necessário, salve, e pressione Enter para continuar (ou digite /cancel para abortar)")
+
+        T.info(_("profile_plan_saved", path=plan_path))
+        T.ask(_("profile_edit_prompt"))
         
         # Read the file back
         with open(plan_path, "r", encoding="utf-8") as f:
@@ -46,7 +47,7 @@ class ProfileExecutorStrategy:
                 if updated_data and "tasks" in updated_data:
                     self.profile_data["tasks"] = updated_data["tasks"]
             except Exception as e:
-                T.warning(f"Falha ao interpretar o YAML editado: {e}. Usando o profile original.")
+                T.warning(_("profile_yaml_parse_failed", err=e))
 
         # Setup tools and VCS
         from .vcs import get_vcs_strategy
@@ -60,7 +61,7 @@ class ProfileExecutorStrategy:
             
         agent_tools = get_available_tools() + vcs_strategy.get_tools()
 
-        T.info("Construindo DAG de Execução do Profile...")
+        T.info(_("profile_building_dag"))
         
         graph = WorkflowGraph()
         tasks = self.profile_data.get("tasks", {})
@@ -98,7 +99,7 @@ class ProfileExecutorStrategy:
             for dep in depends_on:
                 graph.connect(dep, task_id)
         
-        T.info("Iniciando execução do Grafo...")
+        T.info(_("profile_starting_executor"))
         
         executor = WorkflowExecutor(graph)
         
@@ -140,7 +141,7 @@ class ProfileExecutorStrategy:
             except KeyboardInterrupt:
                 finished[0] = True
                 run_task.cancel()
-                error_holder.append(RuntimeError("Interrompido pelo usuário. A execução do Perfil (DAG) não pôde ser completada."))
+                error_holder.append(RuntimeError("Interrupted by user. Profile (DAG) execution could not be completed."))
             finally:
                 AGENT_PROGRESS.live_context = None
                 if not live.is_started:

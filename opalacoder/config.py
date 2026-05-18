@@ -66,6 +66,10 @@ def get_git_strategy() -> str:
     """Return the git strategy configured in agents.yaml ('hybrid', 'agent_driven', 'auto', 'none')."""
     return _AGENTS_CONFIG.get("git_strategy", "hybrid")
 
+def get_agent_strategy(agent_name: str) -> str:
+    """Return the orchestrator strategy name for *agent_name* from agents.yaml."""
+    return _AGENT_OVERRIDES.get(agent_name, {}).get("strategy", "autonomous")
+
 def get_complexity_inference_mode() -> str:
     """Return the complexity inference mode (simple or double)."""
     return _AGENTS_CONFIG.get("complexity_inference_mode", "simple")

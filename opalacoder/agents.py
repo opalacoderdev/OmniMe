@@ -170,31 +170,6 @@ def make_chat_memgpt_agent(model: str | None = None) -> MemGPTAgentBlock:
     )
 
 
-def make_confirmation_agent(model: str | None = None) -> LLMAgentBlock:
-    return _make_llm(
-        "confirmation_agent",
-        """You will receive:
-AGENT: <CURRENT PLAN>
-USER_RESPONSE: <USER RESPONSE>
-
-Your task: determine if the user APPROVED the plan or wants to MODIFY it.
-
-Answer ONLY with a single word: "yes" or "no".
-
-Strict rules:
-- Answer "yes" ONLY if the user expressed clear and unconditional approval.
-  Examples of approval: "yes", "ok", "approved", "proceed", "all good", "perfect".
-- Answer "no" if the user requested ANY change, addition, removal or fix,
-  even if politely or partially.
-  Examples of NO approval: "i want...", "add...", "remove...", "change...",
-  "only show...", "no need to...", "the app must...".
-
-Do not explain, do not add anything else. Just: yes or no.
-""",
-        model=model,
-        disable_lang_rule=True,
-    )
-
 
 def make_refinement_agent(model: str | None = None) -> LLMAgentBlock:
     return _make_llm(

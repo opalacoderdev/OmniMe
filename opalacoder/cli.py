@@ -8,13 +8,14 @@ import sys
 from . import __version__
 from .config import DEFAULT_MODEL, ALTERNATIVE_MODEL, DEFAULT_MAX_RETRIES, DEFAULT_MODE, DEFAULT_DB_PATH, DEFAULT_LANG
 from .project import ProjectStore, ProjectData
-from .agents import make_chat_memgpt_agent, make_intent_classifier, make_complexity_evaluator
+from .agents import make_chat_memgpt_agent
 from .api_keys import ensure_api_key
 from . import terminal as T
 from agenticblocks.blocks.llm.agent import AgentInput
 from .i18n import _, set_lang
 from rich.markup import escape as _escape
 from .cli_commands import REPLState, _registry
+from .orchestrator import CHECKPOINT_SUBPATH
 
 
 def _inject_project(project: ProjectData, prompt: str) -> str:
@@ -123,7 +124,7 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
             state.project.clear_state()
             store.save(state.project)
     else:
-        checkpoint_path = os.path.join(project.project_path, ".opalacoder", "session_state.json")
+        checkpoint_path = os.path.join(project.project_path, CHECKPOINT_SUBPATH)
         if os.path.exists(checkpoint_path):
             T.warning("[yellow]Foi detectada uma execução de agente não finalizada (checkpoint salvo).[/yellow]")
             choice = T.choose(_("resume_or_clear"), [_("resume"), _("clear")])
@@ -161,11 +162,9 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                     chat_output = chat_response_obj.response.strip() if chat_response_obj.response else "(no response)"
 
                 # 2. Classifier evaluates both the user's raw input and the chat agent's contextualized response
-                classifier = make_intent_classifier(state.project.model)
                 classifier_prompt = f"USER REQUEST: {user_input}\nCHAT AGENT RESPONSE (Context): {chat_output}"
-                
-                with T.spinner("Classifying intent..."):
-                    intent_res = await classifier.run(AgentInput(prompt=classifier_prompt))
+                with T.spinner(_("classifying_intent")):
+                    intent_res = await state.intent_classifier.run(AgentInput(prompt=classifier_prompt))
                     _raw = intent_res.response.strip().lower()
                     intent = _raw.split()[0].strip(".,!?*\"'") if _raw else ""
 
@@ -209,9 +208,8 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                     if state.project.model.startswith("ollama/"):
                         complexity = "alternative" if len(user_input.split()) > 200 else "default"
                     else:
-                        complexity_evaluator = make_complexity_evaluator(state.project.model)
                         with T.spinner(_("evaluating_complexity")):
-                            comp_res = await complexity_evaluator.run(AgentInput(prompt=user_input))
+                            comp_res = await state.complexity_evaluator.run(AgentInput(prompt=user_input))
                             raw_comp = comp_res.response.strip().lower()
                             if "alternative" in raw_comp:
                                 complexity = "alternative"
@@ -285,7 +283,8 @@ async def run_pipeline(
         role = "Assistant" if msg["role"] == "assistant" else "User"
         hist_text += f"{role}: {msg['content']}\n"
 
-    from .orchestrator import AutonomousOrchestratorStrategy
+    from .orchestrator import get_orchestrator
+    from .config import get_agent_strategy
     from .skills import get_relevant_skills_llm, SCOPE_ORCHESTRATOR
 
     orchestrator_skills = await get_relevant_skills_llm(
@@ -300,40 +299,32 @@ async def run_pipeline(
 
     from .profiles import load_profiles, resolve_profile
     from .profile_executor import ProfileExecutorStrategy
-    
+
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     global_profiles = load_profiles(os.path.join(repo_root, "profiles"))
-    
+
     local_profiles = {}
     if hasattr(project, "project_path") and project.project_path:
         local_profiles = load_profiles(os.path.join(project.project_path, "profiles"))
-        
+
     profiles = {**global_profiles, **local_profiles}
     selected_profile = await resolve_profile(request, profiles, model)
-    
+
     if selected_profile and selected_profile in profiles:
-        T.section("Execution Profile Selected")
-        T.info(f"Usando profile: {selected_profile}")
+        T.section(_("execution_profile_selected"))
+        T.info(f"Profile: {selected_profile}")
         orchestrator = ProfileExecutorStrategy(model=model, profile_data=profiles[selected_profile])
-        
-        final_response = await orchestrator.run(
-            user_request=enriched_request,
-            history=hist_text,
-            session=project,
-            store=store,
-            max_retries=max_retries,
-        )
     else:
-        from .orchestrator import AutonomousOrchestratorStrategy
-        orchestrator = AutonomousOrchestratorStrategy(model=model)
-    
-        final_response = await orchestrator.run(
-            user_request=enriched_request,
-            history=hist_text,
-            session=project,
-            store=store,
-            max_retries=max_retries,
-        )
+        strategy_name = get_agent_strategy("orchestrator")
+        orchestrator = get_orchestrator(strategy_name, model)
+
+    final_response = await orchestrator.run(
+        user_request=enriched_request,
+        history=hist_text,
+        session=project,
+        store=store,
+        max_retries=max_retries,
+    )
 
     T.section(_("phase5"))
 
