@@ -1,67 +1,46 @@
-**Fase 0: Elicitação de Requisitos (Atualizado - Python Local)**
+**Panorama Geral para Implementação do Projeto OpalaCoderDE**
+
+Abaixo está o plano técnico detalhado, dividido em fases, para continuar o desenvolvimento modular do projeto com base nas decisões anteriores (uso de  para frontend, , e integração local em Python).
 
 ---
-**Grupo 1 — Tecnologia e Dependências**
-1. **Pilha tecnológica**: Python local (backend + frontend integrado via **`Monaco Editor`** — open-source e modular).
-2. **Bibliotecas/Frameworks**:
-   - Editor: **`Monaco Editor`** (Web-based, suporte nativo a *syntax highlighting*, autocompletar, multi-abas).
-   - Chat: **`litellm`** (modular, com suporte a troca futura) + `FastAPI` (API interna para comunicação).
-   - *Alternativa*: Evitar dependências externas complexas além do necessário.
+
+1. **Configuração do Ambiente de Desenvolvimento**:
+   Instalar dependências obrigatórias e configurar o ambiente Python (virtualenv) para garantir compatibilidade entre módulos.
+   - Verificar versão do  (≥3.9) e instalar  para dependências.
+   - Instalar  (API),  (integração IA), e bibliotecas para integração do Monaco ( ou  para embed).
+
+2. **Integração do Monaco Editor**:
+   Implementar o embed do Monaco Editor no ambiente  (usando  para renderização web em janela nativa).
+   - Configurar linguagem padrão (Python/JS) e estilos do editor.
+   - Conectar eventos do Monaco (salvar arquivo, seleção de código) à API interna via .
+
+3. **Desenvolvimento do Módulo de Editor (Monaco + Terminal)**:
+   Extender funcionalidades nativas do Monaco:
+   - Adicionar suporte a autocompletar personalizado para palavras-chave de Python (integrado ao Monaco via extensão ou lógica personalizada).
+   - Criar interface de terminal integrado (usando  para executar comandos Python no console).
+
+4. **Desenvolvimento do Módulo de IA ()**:
+   Implementar a camada de abstração para :
+   - Criar um serviço interno () para envio/recebimento de prompts (com suporte a troca de modelos/serviços externos).
+   - Gerenciar contexto do chat (histórico, arquivo aberto atual) em .
+
+5. **API de Comunicação Interna ()**:
+   Estabelecer rotas para:
+   - Troca de mensagens entre o chat e o editor (ex: seleção de código para análise).
+   - Executar comandos do chat no editor (ex: destacar linha, aplicar refatoração).
+
+6. **Integração Frontend-Backend**:
+   Conectar eventos do Monaco (ex: "arquivo salvo") à API para enviar conteúdo ao chat.
+   - Atualizar a UI de chat com respostas recebidas via  (usando  para atualização dinâmica).
+   - Validar comunicação bidirecional entre módulos (testes com casos de uso mínimos).
+
+7. **Validação e Teste Básico**:
+   Executar testes unitários e integração para:
+   - Verificar fluxo de edição → chat → resposta → ação no editor.
+   - Testar suporte a múltiplas abas e contextos isolados (histórico por arquivo).
 
 ---
-**Grupo 2 — Requisitos Funcionais**
-3. **Editor de código**:
-   - *Obrigatório*: Syntax highlighting, autocompletar (palavras-chave + imports), multi-abas, split screen.
-   - *Nice-to-have*: Dif lado a lado, integração com terminal Python (`subprocess`).
-4. **Chat de agente**:
-   - *Obrigatório*: Integração com `litellm` (modular), histórico de conversas.
-   - *Nice-to-have*: Prompt personalizado, upload de arquivos (análise de código).
-5. **Integração**:
-   - Chat executa comandos no editor (ex: "refatorar função") e recebe código automaticamente ao salvar.
-
----
-**Grupo 3 — Não Funcionais**
-6. **Desempenho**: Otimizado para código médio (até 10KB), latência aceitável (<5s para respostas).
-7. **Acessibilidade**: Teclado-navigável (padrões Web + Python GUI), contraste básico.
-8. **Responsividade**: Desktop-only (janela ajustável).
-9. **Ambiente**: Backend local (Python + `FastAPI` para API interna), frontend integrado via **`Monaco Editor`** (WebView ou embed).
-
----
-**Resumo confirmado**:
-- **Editor**: Módulo externo **`Monaco Editor`** (Web-based, modular) + integração com terminal.
-- **Chat**: Agente modular via `litellm` + contexto de código.
-- **Integração**: Commands bidirecionais (editor ↔ chat).
-- **Tech**: Python puro, **`Monaco Editor`** (frontend), `litellm` (IA), `FastAPI` (comunicação).
-
----
-**Próximos passos**:
-1. **Fase 1: Estrutura do Projeto**
-   - Diretórios:
-     ```
-     /OpalaCoderDE
-     ├── core/
-     │   ├── editor/
-     │   │   └── monaco_integration.py  # Configuração do Monaco Editor
-     │   ├── agent/
-     │   │   ├── litellm_integration.py # Módulo litellm (modular)
-     │   │   └── context_manager.py    # Histórico + código selecionado
-     │   └── api/                      # FastAPI (comunicação)
-     ├── ui/
-     │   └── main_window.py            # tkinter (UI principal + WebView para Monaco)
-     ├── tests/
-     └── main.py
-     ```
-
-2. **Fase 2: Módulo Editor**
-   - Implementar:
-     - `monaco_integration.py` (configuração do Monaco Editor para Python/JS/etc.).
-     - Integração com `subprocess` para terminal Python.
-
-3. **Fase 3: Módulo Chat**
-   - Configurar:
-     - `litellm_integration.py` (abstração modular para `litellm`).
-     - `context_manager.py` (gerenciar histórico + código selecionado).
-
-4. **Fase 4: Integração**
-   - Conectar UI aos módulos via `FastAPI` (API interna para comunicação).
-   - Embed do Monaco Editor na janela `tkinter` (usar `WebView` ou `PyWebView`).
+**Notas Críticas**:
+- **Modularidade**: Todos os módulos (, , ) devem ser inicializados independentemente para facilitar futuras trocas (ex: substituir  por outro serviço).
+- **Embed Web**: Priorizar  para minimizar dívida técnica em relação ao  nativo.
+- **Backend Local**: Todos os dados (histórico de chat, configurações) devem ser armazenados em arquivos JSON localmente para persistência.
