@@ -120,6 +120,32 @@ def run_command(command: str) -> str:
         return f"Error running command: {e}"
 
 
+@as_tool(name="run_interactive_command", description="Run a command that requires user interaction (e.g. npm create, interactive scripts, prompts). The terminal control will be temporarily handed over to the user. Use this ONLY when a command needs human choices.")
+def run_interactive_command(command: str) -> str:
+    import sys
+    AGENT_PROGRESS.update("interactive_cmd", f"$ {_preview(command)}")
+    cwd = get_project_path()
+    
+    # Pause the live context if it exists to prevent UI tearing
+    if getattr(AGENT_PROGRESS, "live_context", None):
+        AGENT_PROGRESS.live_context.stop()
+        
+    try:
+        T.warning(f"\n[Interactive Mode]: Giving terminal control to user for command: {command}")
+        subprocess.run(
+            command,
+            shell=True,
+            cwd=cwd,
+        )
+        return "Interactive command completed. The user interacted with it successfully."
+    except Exception as e:
+        return f"Error running interactive command: {e}"
+    finally:
+        # Resume live context
+        if getattr(AGENT_PROGRESS, "live_context", None):
+            AGENT_PROGRESS.live_context.start()
+
+
 @as_tool(name="search_code", description="Search for a specific string across all files using grep. Searches inside the project directory by default.")
 def search_code(query: str, path: str = ".") -> str:
     resolved = _resolve_path(path)
@@ -348,6 +374,7 @@ def get_available_tools():
         write_file,
         write_content_pos,
         run_command,
+        run_interactive_command,
         search_code,
         ask_human,
         read_core_memory,

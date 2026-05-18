@@ -61,8 +61,10 @@ Do not implement, do not detail, do not suggest code.
 def make_intent_classifier(model: str | None = None) -> LLMAgentBlock:
     return _make_llm(
         "intent_classifier",
-        """You are an intent classification engine.
-Classify the user's message into EXACTLY ONE of the five categories below.
+        """You are a strict intent router. Your job is to classify the USER REQUEST.
+You will also receive RECENT CONTEXT (last 3 messages) to help you understand ambiguous requests (like "continue" or "fix it").
+
+Classify the USER REQUEST into EXACTLY ONE of these categories: below.
 Read each category carefully — they have clear, non-overlapping definitions.
 
 - "command_hint": The user's ENTIRE message is exactly one of these CLI command words,
@@ -79,17 +81,17 @@ Read each category carefully — they have clear, non-overlapping definitions.
   about code — WITHOUT requesting that anything be written, changed, or executed.
   Examples: "what does async mean?", "how does this function work?".
 
-- "plan": The user wants something to be built, changed, fixed, or deleted on disk.
-  This includes: creating files, adding features, modifying code, fixing bugs, refactoring,
-  approving a pending plan ("yes", "sim", "ok", "proceed"), or describing technical
-  requirements for a project to be built.
-  Examples: "create a calculator", "fix the login bug", "add a dark mode", "sim".
+- "plan": The user wants a COMPLETELY NEW feature, project, or bug fix to be built, changed, or deleted on disk.
+  Examples: "create a calculator", "fix the login bug", "add a dark mode".
+
+- "resume": The user explicitly asks to continue, resume, finish, or keep going with the PREVIOUS or CURRENT plan that was interrupted or left halfway.
+  Examples: "continue o que tinha feito antes", "resume the plan", "keep going", "finish it".
 
 - "chat": A conversational message with no programming task implied — opinions, jokes,
   philosophical discussion, follow-up small talk.
   Examples: "that's interesting", "I don't like Python", "what do you think about AI?".
 
-Respond with ONLY ONE WORD from the list: command_hint, greetings, question, plan, chat.
+Respond with ONLY ONE WORD from the list: command_hint, greetings, question, plan, resume, chat.
 No punctuation, no explanation.""",
         model=model,
         disable_lang_rule=True,
@@ -143,13 +145,16 @@ def make_chat_memgpt_agent(model: str | None = None) -> MemGPTAgentBlock:
         "Keep code identifiers in English."
     )
 
+    from .tools import read_core_memory, append_core_memory, search_conversation_history
+    
     system_prompt = (
         "You are OpalaCoder's conversational assistant, embedded inside a software project.\n"
-        "You have access to the conversation history and know which project the user is working on.\n"
-        "Answer programming questions, explain concepts, and discuss code in the context of that project.\n"
-        "When relevant, refer to the project's known structure and technology stack.\n"
+        "You operate using a MemGPT-style memory hierarchy:\n"
+        "1. **Core Memory**: Fast, persistent storage for crucial facts about the user and the project. You can read/write to it using `read_core_memory` and `append_core_memory`.\n"
+        "2. **Archival Memory**: An infinite, searchable vector database of all past conversations, executed plans, and system logs. You MUST use `search_conversation_history` to retrieve past context if the user asks you to 'continue', refers to 'what we were doing', or asks about a past error/plan.\n\n"
         "You do NOT build or execute projects; that is handled by the autonomous orchestrator "
-        "when the user explicitly requests it.\n"
+        "when the user explicitly requests a plan execution.\n"
+        "When the user mentions past events, always search your archival memory before answering.\n"
         "Be concise, friendly, and precise."
         + lang_rule
     )
@@ -158,7 +163,7 @@ def make_chat_memgpt_agent(model: str | None = None) -> MemGPTAgentBlock:
         name="chat_agent",
         system_prompt=system_prompt,
         model=get_agent_model("chat_agent", model or DEFAULT_MODEL),
-        tools=[],  # chat agent has no filesystem tools
+        tools=[read_core_memory, append_core_memory, search_conversation_history],
         litellm_kwargs=get_agent_llm_kwargs("chat_agent"),
         max_heartbeats=get_agent_max_heartbeats("chat_agent", 10),
         debug=get_agent_debug("chat_agent", False),

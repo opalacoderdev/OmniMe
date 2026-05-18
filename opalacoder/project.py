@@ -129,6 +129,11 @@ class ProjectStore:
         with _conn(self.db_path) as conn:
             conn.execute("DELETE FROM projects WHERE name = ?", (name,))
             conn.execute("DELETE FROM project_history WHERE project = ?", (name,))
+        try:
+            from .archival import clear_archival
+            clear_archival(name)
+        except Exception:
+            pass
 
     def rename(self, old_name: str, new_name: str) -> bool:
         if self.exists(new_name):

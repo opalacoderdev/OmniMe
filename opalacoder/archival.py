@@ -75,3 +75,19 @@ def search_archival(project_name: str, query: str, limit: int = 5) -> list[dict]
         import traceback
         traceback.print_exc()
         return []
+
+def clear_archival(project_name: str):
+    """
+    Exclui a coleção do ChromaDB associada ao projeto, limpando completamente a memória arquivada.
+    """
+    try:
+        client = _get_chroma_client()
+        safe_name = "".join(c if c.isalnum() else "_" for c in project_name).strip("_")
+        if not safe_name:
+            safe_name = "default_project"
+        try:
+            client.delete_collection(name=safe_name)
+        except ValueError:
+            pass
+    except Exception as e:
+        print(f"Error clearing archival memory: {e}")

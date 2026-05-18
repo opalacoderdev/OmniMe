@@ -1,0 +1,68 @@
+match_description: >
+  Use this profile when the user requests the creation of a web or frontend project
+  using React and Vite (e.g., "create a react site", "build a frontend app with vite and react").
+
+tasks:
+  init_project:
+    allowed_tools:
+      - run_interactive_command
+      - run_command
+    description: >
+      Initialize the base React project using Vite in the current directory. 
+      Use `npm create vite@latest .` to generate the core files.
+      Do not worry about starting the server yet.
+    system_prompt: >
+      You are a React and Vite expert. 
+      CRITICAL RULE: Before creating anything, use `run_command` (e.g., `ls -la`) to check if the project is already initialized (if `package.json` exists in the current directory). 
+      If it IS already initialized, DO NOT run the creation command again. Just report success and exit.
+      If it is NOT initialized, use the `run_interactive_command` tool with `npm create vite@latest .` to generate the project structure.
+    llm_params:
+      temperature: 0.1
+
+  install_deps:
+    depends_on:
+      - init_project
+    allowed_tools:
+      - run_command
+    description: >
+      Install standard dependencies (react, react-dom) and add commonly used dependencies like 
+      tailwind, lucide-react, and react-router-dom, if the user implies they are needed.
+      Execute `npm install`.
+    system_prompt: >
+      You are responsible for preparing the libraries for the React project. 
+      CRITICAL RULE: Check if `node_modules` exists using `run_command` (e.g., `ls -la`). 
+      If `node_modules` already exists and no new dependencies were requested, you can skip running `npm install`.
+      If new dependencies were requested, or `node_modules` is missing, use `run_command` to run `npm install`.
+
+  create_layout:
+    depends_on:
+      - install_deps
+    allowed_tools:
+      - run_command
+      - read_file
+      - write_file
+      - get_project_overview
+    description: >
+      Create the primary layout structure (e.g., App.jsx, src/layouts/MainLayout.jsx) 
+      preparing the areas where the main components will reside.
+    system_prompt: >
+      You are responsible for creating the main layout components.
+      CRITICAL RULE: First, use `run_command` (e.g. `ls src/layouts`) or `read_file` to check if the main layout file (e.g., `src/layouts/MainLayout.jsx` or `App.jsx`) has already been created and modified.
+      If the layout is already built, DO NOT recreate it or overwrite it. Just report success and exit.
+      Only create the files if they do not exist or are empty.
+
+  create_components:
+    depends_on:
+      - create_layout
+    allowed_tools:
+      - run_command
+      - read_file
+      - write_file
+      - get_project_overview
+    description: >
+      Create isolated UI components (e.g., Button.jsx, Header.jsx) inside src/components/.
+    system_prompt: >
+      You are a frontend developer focused on UI. Write isolated components, 
+      using modern React best practices (hooks, clear props).
+      CRITICAL RULE: First use `run_command` or `read_file` to see what components already exist in `src/components`.
+      If the exact requested components are already fully implemented, do not recreate them. Only create missing or incomplete components.

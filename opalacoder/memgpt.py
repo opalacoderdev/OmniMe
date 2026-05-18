@@ -219,6 +219,9 @@ You are running on an OS-like MemGPT architecture. You have a limited Main Conte
                     sanitized.append(msg_copy)
                 messages = sanitized
 
+            from .tools import AGENT_PROGRESS
+            AGENT_PROGRESS.last_tool = f"Calling {self.model} (processing context window)..."
+            
             if self.use_shared_router:
                 router = _get_shared_router(self.model)
                 response = await router.acompletion(model=self.model, messages=messages, **kwargs)
@@ -227,7 +230,14 @@ You are running on an OS-like MemGPT architecture. You have a limited Main Conte
 
             await self._emit_token_usage(response, step=heartbeats_used)
             message = response.choices[0].message
+
             
+            from .tools import AGENT_PROGRESS
+            AGENT_PROGRESS.heartbeat = heartbeats_used
+            if not message.tool_calls:
+                AGENT_PROGRESS.last_tool = "Thinking (LLM generating text)"
+                
+
             # --- RIGOROUS TRACE ---
             trace_path = os.path.expanduser("~/.opalacoder/memgpt_trace.log")
             try:
@@ -436,6 +446,8 @@ You are running on an OS-like MemGPT architecture. You have a limited Main Conte
                 break
 
         final_text = "\n".join(accumulated_responses)
+        if not final_text.strip():
+            final_text = f"Agent finished execution. Termination reason: {termination_reason}. Tool calls made: {tool_call_count}."
         output = AgentOutput(response=final_text, tool_calls_made=tool_call_count)
 
         if self.debug:

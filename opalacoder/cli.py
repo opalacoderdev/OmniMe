@@ -108,6 +108,10 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
     T.console.print(f"  [dim]Skills: {', '.join(project.skills)}[/dim]")
 
     chat_agent = make_chat_memgpt_agent(project.model)
+    if hasattr(chat_agent, "internal_history") and project.history:
+        for msg in project.history[-10:]:
+            chat_agent.internal_history.append({"role": msg["role"], "content": msg["content"]})
+
     state = REPLState(project, store, project_skills, chat_agent)
 
     if state.project.request and state.project.plan_text and not state.project.results:
@@ -149,13 +153,21 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                     continue
 
             else:
-                _VALID_INTENTS = {"greetings", "question", "plan", "chat", "command_hint"}
-                classifier = make_intent_classifier(state.project.model)
+                _VALID_INTENTS = {"greetings", "question", "plan", "resume", "chat", "command_hint"}
+                
+                # 1. Chat agent processes first (it has memory and RAG tools)
                 with T.spinner(_("agent_thinking")):
-                    intent_res = await classifier.run(AgentInput(prompt=user_input))
+                    chat_response_obj = await state.chat_agent.run(AgentInput(prompt=_inject_project(state.project, user_input)))
+                    chat_output = chat_response_obj.response.strip() if chat_response_obj.response else "(no response)"
+
+                # 2. Classifier evaluates both the user's raw input and the chat agent's contextualized response
+                classifier = make_intent_classifier(state.project.model)
+                classifier_prompt = f"USER REQUEST: {user_input}\nCHAT AGENT RESPONSE (Context): {chat_output}"
+                
+                with T.spinner("Classifying intent..."):
+                    intent_res = await classifier.run(AgentInput(prompt=classifier_prompt))
                     _raw = intent_res.response.strip().lower()
                     intent = _raw.split()[0].strip(".,!?*\"'") if _raw else ""
-
 
                 if not intent or intent not in _VALID_INTENTS:
                     T.console.print(f"[yellow]{_('intent_unclear')}[/yellow]")
@@ -164,6 +176,29 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                 if intent == "command_hint":
                     cmd_word = user_input.strip().split()[0].lower()
                     T.console.print(f"[yellow]{_('command_hint_suggestion', cmd=cmd_word)}[/yellow]")
+                    continue
+
+                # 3. If it's just a conversation, we print the chat response and are done.
+                if intent in ("greetings", "question", "chat"):
+                    T.console.print(f"\n[bold green]OpalaCoder:[/bold green] {chat_output}\n")
+                    store.append_message(state.project, "user", user_input)
+                    store.append_message(state.project, "assistant", chat_output)
+                    continue
+
+                # 4. If it's a resume or plan action, we also show what the chat agent said, then execute.
+                T.console.print(f"\n[bold green]OpalaCoder:[/bold green] {chat_output}\n")
+                store.append_message(state.project, "user", user_input)
+                store.append_message(state.project, "assistant", chat_output)
+
+                if intent == "resume":
+                    if not state.project.request:
+                        T.warning("Não há nenhum plano pendente ou requisição anterior para continuar.")
+                        continue
+                    T.info("Retomando a execução do plano anterior...")
+                    try:
+                        await run_pipeline(state.project, store, max_retries, request="[RESUME_EXECUTION]", active_model=state.project.model, project_skills=state.project_skills)
+                    except Exception as e:
+                        T.error(f"Erro ao retomar plano: {e}")
                     continue
 
                 if intent == "plan":
@@ -193,8 +228,11 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                     else:
                         active_model = state.project.model
 
+                    # For new plans, we augment the request with the Chat Agent's context so the orchestrator has the full picture
+                    augmented_request = f"Original Request: {user_input}\nChat Agent Context/Details: {chat_output}"
+                    
                     try:
-                        await run_pipeline(state.project, store, max_retries, request=user_input, active_model=active_model, project_skills=state.project_skills)
+                        await run_pipeline(state.project, store, max_retries, request=augmented_request, active_model=active_model, project_skills=state.project_skills)
                     except Exception as e:
                         if active_model != state.project.model:
                             T.error(_("alt_model_error", model=active_model, err=e))
@@ -202,16 +240,9 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                             if state.project.results or state.project.request:
                                 state.project.clear_state()
                                 store.save(state.project)
-                            await run_pipeline(state.project, store, max_retries, request=user_input, active_model=state.project.model, project_skills=state.project_skills)
+                            await run_pipeline(state.project, store, max_retries, request=augmented_request, active_model=state.project.model, project_skills=state.project_skills)
                         else:
                             raise
-                else:
-                    with T.spinner(_("agent_thinking")):
-                        response = await state.chat_agent.run(AgentInput(prompt=_inject_project(state.project, user_input)))
-                    answer = response.response.strip() if response.response else "(no response)"
-                    T.console.print(f"\n[bold green]OpalaCoder:[/bold green] {answer}\n")
-                    store.append_message(state.project, "user", user_input)
-                    store.append_message(state.project, "assistant", answer)
 
         except KeyboardInterrupt:
             T.info(_("repl_interrupted"))
@@ -267,15 +298,42 @@ async def run_pipeline(
             f"[USER REQUEST]:\n{request}\n[END USER REQUEST]"
         )
 
-    orchestrator = AutonomousOrchestratorStrategy(model=model)
-
-    final_response = await orchestrator.run(
-        user_request=enriched_request,
-        history=hist_text,
-        session=project,
-        store=store,
-        max_retries=max_retries,
-    )
+    from .profiles import load_profiles, resolve_profile
+    from .profile_executor import ProfileExecutorStrategy
+    
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    global_profiles = load_profiles(os.path.join(repo_root, "profiles"))
+    
+    local_profiles = {}
+    if hasattr(project, "project_path") and project.project_path:
+        local_profiles = load_profiles(os.path.join(project.project_path, "profiles"))
+        
+    profiles = {**global_profiles, **local_profiles}
+    selected_profile = await resolve_profile(request, profiles, model)
+    
+    if selected_profile and selected_profile in profiles:
+        T.section("Execution Profile Selected")
+        T.info(f"Usando profile: {selected_profile}")
+        orchestrator = ProfileExecutorStrategy(model=model, profile_data=profiles[selected_profile])
+        
+        final_response = await orchestrator.run(
+            user_request=enriched_request,
+            history=hist_text,
+            session=project,
+            store=store,
+            max_retries=max_retries,
+        )
+    else:
+        from .orchestrator import AutonomousOrchestratorStrategy
+        orchestrator = AutonomousOrchestratorStrategy(model=model)
+    
+        final_response = await orchestrator.run(
+            user_request=enriched_request,
+            history=hist_text,
+            session=project,
+            store=store,
+            max_retries=max_retries,
+        )
 
     T.section(_("phase5"))
 

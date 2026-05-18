@@ -111,3 +111,51 @@ async def confirm_plan(
         max_retries=max_retries,
         timeout=timeout,
     )
+# ─── StructuredLLMAgentBlock subclass ──────────────────────────────────────────
+
+from agenticblocks.blocks.llm.agent import LLMAgentBlock, AgentInput, AgentOutput
+from typing import Type, Any, Optional
+
+class StructuredAgentOutput(AgentOutput):
+    structured_output: Any = Field(default=None, description="Parsed Pydantic model instance")
+
+class StructuredLLMAgentBlock(LLMAgentBlock):
+    response_schema: Optional[Type[BaseModel]] = Field(default=None, description="Pydantic model class for structured parsing")
+
+    async def run(self, input: AgentInput) -> StructuredAgentOutput:
+        if self.response_schema is None:
+            parent_out = await super().run(input)
+            return StructuredAgentOutput(
+                response=parent_out.response,
+                tool_calls_made=parent_out.tool_calls_made
+            )
+            
+        # Use instructor with MD_JSON to ensure compat with small models
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": input.prompt}
+        ]
+        
+        try:
+            res = await _client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                response_model=self.response_schema,
+                max_retries=3,
+            )
+            
+            import json
+            response_text = json.dumps(res.model_dump()) if hasattr(res, "model_dump") else str(res)
+            return StructuredAgentOutput(
+                response=response_text,
+                structured_output=res
+            )
+        except Exception as e:
+            import rich.console
+            rich.console.Console().print(f"[red]StructuredLLMAgentBlock failed: {e}[/red]")
+            # Fallback to empty model instantiation if possible, or parent string response
+            return StructuredAgentOutput(
+                response=f"Error: {e}",
+                structured_output=None
+            )
+
