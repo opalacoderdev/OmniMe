@@ -108,6 +108,25 @@ Respond with ONLY ONE WORD from the list above. No punctuation, no explanation."
     )
 
 
+def make_post_plan_evaluator(model: str | None = None) -> LLMAgentBlock:
+    return _make_llm(
+        "post_plan_evaluator",
+        """You evaluate a finalized implementation plan to calculate the expected execution effort.
+You will receive the full text of an APPROVED PLAN.
+
+Your task is to analyze the steps, the scope of file modifications, and the logic required.
+Then output a JSON object with exactly two keys:
+1. "model": Choose "default" if the steps are standard, straightforward coding tasks. Choose "alternative" if the plan involves deep refactoring, new complex algorithms, heavy debugging, or high risk.
+2. "estimated_steps": An integer representing how many distinct actions/tools the agent might realistically need to run to finish this entire plan. E.g., reading a file is 1 step, writing is 1 step, running tests is 1 step. Be slightly pessimistic (overestimate).
+
+Output ONLY valid JSON. No markdown formatting, no comments, no extra text.
+Example: {"model": "default", "estimated_steps": 12}
+""",
+        model=model,
+        response_format={"type": "json_object"}
+    )
+
+
 def make_chat_memgpt_agent(model: str | None = None) -> MemGPTAgentBlock:
     """Create a MemGPT chat agent that maintains conversation history internally.
 

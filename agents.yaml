@@ -1,6 +1,8 @@
 default: ollama/ministral-3:14b
 alternative: gemini/gemini-3-flash-preview
 
+complexity_inference_mode: double
+
 # Global LLM defaults applied to all agents unless overridden below.
 llm_defaults:
   temperature: 0.7
@@ -69,7 +71,7 @@ agents:
   orchestrator:
     temperature: 0.2
     num_ctx: 16384
-    max_heartbeats: 100
+    max_heartbeats: auto
     debug: false
     strategy: autonomous
 
