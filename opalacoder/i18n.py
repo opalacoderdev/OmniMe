@@ -110,6 +110,11 @@ _STRINGS = {
         "alt_model_error": "Error using alternative model ({model}): {err}",
         "fallback_to_model": "Falling back to {model}",
         "using_model": "Using model: {model}",
+        "delete_dir_confirm": "Do you also want to delete the project directory ({path})?",
+        "dir_deleted": "Project directory '{path}' deleted.",
+        "dir_delete_failed": "Failed to delete directory: {err}",
+        "vcs_deleted": "Internal version control deleted.",
+        "vcs_delete_failed": "Failed to delete internal version control: {err}",
     },
     "pt": {
         "active_session": "Sessão Ativa: {name}",
@@ -218,6 +223,11 @@ _STRINGS = {
         "alt_model_error": "Erro ao usar modelo alternativo ({model}): {err}",
         "fallback_to_model": "Usando {model} como fallback",
         "using_model": "Usando o modelo: {model}",
+        "delete_dir_confirm": "Deseja deletar também o diretório do projeto ({path})?",
+        "dir_deleted": "Diretório do projeto '{path}' apagado.",
+        "dir_delete_failed": "Falha ao apagar o diretório: {err}",
+        "vcs_deleted": "Controle de versão interno apagado.",
+        "vcs_delete_failed": "Falha ao apagar controle de versão interno: {err}",
     }
 }
 

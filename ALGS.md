@@ -1,47 +1,47 @@
-# Algoritmos do OpalaCoder
+# OpalaCoder Algorithms
 
-Este documento descreve os principais algoritmos algorítmicos e fluxos de decisão adotados na arquitetura do OpalaCoder.
+This document describes the core algorithmic logic and decision flows adopted in OpalaCoder's architecture.
 
-## 1. Algoritmo de Inferência Dupla de Complexidade e Orçamento Dinâmico
+## 1. Double Inference Complexity Algorithm and Dynamic Budgeting
 
-O OpalaCoder implementa um modelo inovador conhecido como **Two-Stage Predictive Budgeting** (Alocação de Orçamento Preditiva em Duas Fases) para garantir máxima eficiência financeira e resolutiva de agentes LLMs. O objetivo deste algoritmo é não desperdiçar tokens de modelos caros no planejamento inicial se a tarefa for trivial, mas não comprometer a execução caso o plano detalhado revele armadilhas arquiteturais.
+OpalaCoder implements an innovative model known as **Two-Stage Predictive Budgeting** to ensure maximum financial and resolutive efficiency for LLM agents. The goal of this algorithm is to avoid wasting tokens from expensive models on initial planning if the task is trivial, but without compromising the execution if the detailed plan reveals architectural complexities.
 
-A execução é controlada pela configuração `complexity_inference_mode` localizada no `agents.yaml`, operando nos modos `simple` ou `double`.
+The execution is controlled by the `complexity_inference_mode` configuration located in `agents.yaml`, operating in either `simple` or `double` modes.
 
-### Fluxo Lógico (Modo `double`)
+### Logic Flow (`double` mode)
 
-O algoritmo segue as seguintes etapas procedurais:
+The algorithm follows these procedural steps:
 
-1. **Primeira Fase: Inferência Heurística Pré-Plano (Estratégia 1)**
-   - O usuário submete um prompt com seu pedido original.
-   - O `make_complexity_evaluator` recebe este pedido cru e retorna um de dois labels de complexidade: `"default"` ou `"alternative"`.
-   - Baseado neste label, o OpalaCoder escolhe o modelo base que gerará o "Panorama" (Phase 1) e conduzirá o Refinamento interativo (Phase 2).
-   - *Propósito:* Garantir que a capacidade cognitiva inicial do planejador seja equivalente à complexidade presumida pelo usuário, poupando processamento excessivo em pedidos curtos.
+1. **First Stage: Pre-Plan Heuristic Inference (Strategy 1)**
+   - The user submits a prompt with their original request.
+   - The `make_complexity_evaluator` receives this raw request and returns one of two complexity labels: `"default"` or `"alternative"`.
+   - Based on this label, OpalaCoder chooses the base model that will generate the "Landscape" (Phase 1) and conduct the interactive Refinement (Phase 2).
+   - *Purpose:* Ensure that the initial cognitive capacity of the planner is equivalent to the presumed complexity by the user, saving excessive processing on short and simple requests.
 
-2. **Loop de Refinamento de Plano**
-   - O plano transita por ciclos interativos de aprovação humana. O resultado final desta etapa é o texto `approved_plan`.
+2. **Plan Refinement Loop**
+   - The plan goes through interactive cycles of human approval. The final outcome of this step is the `approved_plan` text.
 
-3. **Segunda Fase: Avaliação JSON Pós-Plano (Estratégia 3)**
-   - Ao invés de saltar direto para a execução (como agentes concorrentes fariam), o OpalaCoder intercepta o pipeline antes do orquestrador inicializar.
-   - O `make_post_plan_evaluator` lê linha por linha o *`approved_plan`* finalizado pelo usuário. 
-   - A saída exigida deste agente é um formato estrito em JSON:
+3. **Second Stage: Post-Plan JSON Evaluation (Strategy 3)**
+   - Instead of jumping straight to execution (as competing agents would do), OpalaCoder intercepts the pipeline before the orchestrator initializes.
+   - The `make_post_plan_evaluator` reads the final `approved_plan` line by line.
+   - The expected output from this agent is a strict JSON format:
      ```json
      {
        "model": "default | alternative",
-       "estimated_steps": <inteiro>
+       "estimated_steps": <integer>
      }
      ```
-   - *Análise de Promoção de Execução (`model`)*: O algoritmo compara o modelo atual do orquestrador com a previsão JSON. Se o JSON concluir que a arquitetura traçada no plano é mais complexa do que aparentava no prompt (exigindo `"alternative"`) e o orquestrador estivesse setado como `"default"`, o algoritmo **promove (upgrade)** o orquestrador para o modelo alternativo *in-flight*, garantindo poder de raciocínio profundo para a etapa mais crítica.
-   - *Cálculo do Orçamento (`max_heartbeats == "auto"`)*: Se o config de orquestração ditar heartbeats estáticos, nada muda. Porém, se for estipulado como `"auto"`, entra em vigor o cálculo de teto:
+   - *Execution Promotion Analysis (`model`)*: The algorithm compares the orchestrator's current model with the JSON prediction. If the JSON concludes that the architecture outlined in the plan is more complex than it seemed in the prompt (requiring `"alternative"`) and the orchestrator was set to `"default"`, the algorithm **upgrades (promotes)** the orchestrator to the alternative model *in-flight*, guaranteeing deep reasoning power for the most critical stage.
+   - *Budget Calculation (`max_heartbeats == "auto"`)*: If the orchestration config dictates static heartbeats, nothing changes. However, if it is set to `"auto"`, the ceiling calculation takes effect:
      ```python
      max_hb_config = min(estimated_steps * 3 + 5, 200)
      ```
-     O número estimado de passos (read_file, write_file, run_command) extraído semanticamente pelo LLM é multiplicado por uma margem de segurança (3) mais um delta fixo (5), sempre limitado pelo limite lógico máximo (200), coibindo ciclos infinitos de alucinação.
+     The estimated number of steps (e.g., read_file, write_file, run_command) semantically extracted by the LLM is multiplied by a safety margin (3) plus a fixed delta (5), always capped by the maximum logical limit (200), preventing infinite hallucination loops.
 
-4. **Execução**
-   - O `AutonomousOrchestratorStrategy` herda o `model` reajustado e o `max_heartbeats` calculado organicamente e dispara as instâncias do MemGPT.
+4. **Execution**
+   - The `AutonomousOrchestratorStrategy` inherits the readjusted `model` and the organically calculated `max_heartbeats`, and triggers the MemGPT instances.
 
-### Fallback Mode (Modo `simple`)
-Se a configuração estiver em `simple` ou se a Extração JSON do *Post-Plan Evaluator* falhar por alucinação formativa:
-- A promoção de modelo in-flight é ignorada.
-- Se os heartbeats estiverem em `"auto"`, aplica-se um teto estático de contingência `max_hb_config = 50`.
+### Fallback Mode (`simple` mode)
+If the configuration is set to `simple` or if the JSON Extraction of the *Post-Plan Evaluator* fails due to formatting hallucination:
+- In-flight model promotion is ignored.
+- If heartbeats are set to `"auto"`, a static contingency ceiling of `max_hb_config = 50` is applied.

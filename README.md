@@ -1,242 +1,210 @@
 # OpalaCoder
 
-**OpalaCoder** é um agente de codificação autônomo com planejamento interativo, execução modular e memória de sessão persistente. Projetado para funcionar bem com modelos pequenos e menos autônomos, mantendo a aparência de um agente totalmente autônomo.
+**OpalaCoder** is an autonomous coding agent with interactive planning, modular execution, and persistent project memory. It is designed to work well with small and less autonomous models while maintaining the feel of a fully autonomous agent. It is built using the **AgenticBlocks.IO** framework.
 
 ---
 
-## Funcionalidades
+## Features
 
-### Roteador Semântico Avançado (Chain of Thought)
-Utiliza um LLM para roteamento semântico com raciocínio interno (Chain of Thought). Ele traduz mentalmente a demanda do usuário para o inglês primeiro, para então deduzir de forma assertiva a intenção da ação, roteando a execução perfeitamente mesmo em comandos multilíngues (português, espanhol, etc) e injetando apenas o contexto das **Skills** necessárias (`skills/*.md`).
+### Project-Centric Context Management
+OpalaCoder centers around **projects** rather than transient chat sessions. Every interaction happens within a named project with a fixed filesystem path. This anchors the LLM context, loads only project-relevant skills, scopes all file and terminal operations, and persists history effectively for both small local models and large hosted APIs.
 
-### Seleção Dinâmica de Modelo (Supervisor)
-O OpalaCoder avalia dinamicamente a complexidade da demanda. Para tarefas triviais, usa um modelo local rápido (`ollama/mistral-nemo`). Se a tarefa exigir refatoração arquitetural ou lógicas complexas avançadas, ele faz fallback automático para um modelo alternativo mais poderoso configurado via chave de API.
+### Advanced Semantic Router (Chain of Thought)
+Uses an LLM for semantic routing with internal reasoning (Chain of Thought). It translates user demands to English internally, correctly deduces the intent, and seamlessly routes execution even for multilingual commands, injecting only the necessary context from specific **Skills** (`skills/*.md`).
 
-### Planejamento interativo
-O agente recebe uma demanda em linguagem natural, gera um panorama de alto nível e entra em um loop de refinamento com o usuário até o plano ser aprovado. O plano aprovado é então decomposto automaticamente em subetapas executáveis (subplanos).
+### Dynamic Model Selection (Double Inference Architecture)
+OpalaCoder dynamically evaluates task complexity. For trivial tasks, it uses a fast default model (e.g., `ollama/mistral-nemo`). If the task requires architectural refactoring or advanced complex logic, it automatically falls back to a more powerful alternative model configured via API keys.
 
-### Execução com retry
-Cada subplano é executado sequencialmente, respeitando dependências entre etapas. Se uma etapa falhar, o agente tenta novamente até o limite configurável de tentativas (padrão: 3), injetando o erro anterior no contexto para que o modelo tente uma abordagem alternativa.
+### Interactive Planning
+The agent receives a natural language demand, generates a high-level landscape plan, and enters a refinement loop with the user until the plan is approved. The approved plan is then automatically decomposed into executable sub-steps (subplans).
 
-### Três modos de execução
+### Execution with Retry & Strategy Routing
+OpalaCoder delegates orchestration to specialized strategies. Small models use a deterministic execution pipeline (DAG), while capable models can use a fully autonomous agent loop. If a sub-step fails, the agent retries (up to a configurable limit) by injecting the previous error into the context for self-correction.
 
-| Modo   | Comportamento |
+### Execution Modes
+
+| Mode   | Behavior |
 |--------|---------------|
-| `plan` | Gera o plano e pede aprovação do usuário antes de executar (padrão) |
-| `auto` | Executa tudo sem interrupções — ideal para pipelines automatizados |
-| `edit` | Pede confirmação do usuário apenas para operações sensíveis (criação/deleção de arquivos, chamadas de rede, etc.) |
+| `plan` | Generates a plan and asks for user approval before executing (default) |
+| `auto` | Executes everything without interruptions — ideal for automated pipelines |
+| `edit` | Requests user confirmation only for sensitive operations (file creation/deletion, network calls, etc.) |
 
-### Sessões persistentes e Comandos CLI
-Cada execução pertence a uma sessão nomeada com memória contínua. Durante o chat com o OpalaCoder, você pode interagir com o gerenciador de estado usando comandos nativos:
-- `/help` ou `/h`: Mostra os comandos disponíveis.
-- `/clear`: Limpa a memória e o histórico da sessão atual.
-- `/rename <novo_nome>`: Renomeia a sessão ativa.
-- `/list`: Lista todas as sessões guardadas no SQLite.
-- `/load <nome>` e `/delete <nome>`: Carrega ou exclui sessões antigas.
-- `/exit`: Sai da aplicação.
+### Persistent Projects and CLI Commands
+Each execution belongs to a named project with continuous memory. During the chat with OpalaCoder, you can interact with the state manager using native commands:
+- `/help` or `/h`: Shows available commands.
+- `/clear`: Clears the memory and history of the current project.
+- `/rename <new_name>`: Renames the active project.
+- `/list`: Lists all projects saved in SQLite.
+- `/load <name>` and `/delete <name>`: Loads or deletes old projects. (Deleting also asks to delete the project directory).
+- `/skills`: Lists available skills and highlights the active ones for the project.
+- `/addskill <name>` and `/rmskill <name>`: Adds or removes specific skills for the current project.
+- `/undo`: Reverts the last change made by the agent via internal shadow VCS.
+- `/commit <msg>`: Forces a commit to the local shadow git control.
+- `/exit` or `/quit`: Exits the application.
 
-### Terminal elegante
-Saída formatada com [Rich](https://github.com/Texel-io/rich): banners, spinners de progresso, painéis de plano, tabela de status por subplano e relatório de erros destacado.
+### Shadow Git (VCS)
+Every project comes with an isolated "Shadow Git" (`.opalacoder/.git`) that automatically checkpoints the codebase before and after execution. This allows for safe iteration without muddying the user's main git repository, and enables the `/undo` command.
 
-### Arquitetura modular
-O código é dividido em módulos independentes e fáceis de depurar:
+### Elegant Terminal
+Formatted output with [Rich](https://github.com/Texel-io/rich): banners, progress spinners, plan panels, per-subplan status tables, and highlighted error reports.
 
-```
+### Modular Architecture
+The code is divided into independent, easy-to-debug modules:
+
+```text
 opalacoder/
-├── config.py       configurações globais (modelo, retries, modo, db)
-├── terminal.py     output Rich (banners, spinners, painéis, tabelas)
-├── session.py      gerenciamento de sessões SQLite
-├── subplan.py      modelo Subplan, parser de saída LLM, sort topológico
-├── agents.py       factories dos agentes LLM
-├── planner.py      pipeline: panorama → refinamento → decomposição
-├── executor.py     execução com retry e gating por modo
-└── cli.py          argparse + bootstrap de sessão + orquestração
+├── config.py       Global settings (model, retries, mode, db, VCS)
+├── terminal.py     Rich output (banners, spinners, panels, tables)
+├── project.py      SQLite project management and state
+├── vcs.py          Internal shadow Git strategies (auto, hybrid, agent-driven)
+├── agents.py       LLM agent factories
+├── planner.py      Pipeline: panorama → refinement → decomposition
+├── orchestrator.py Strategy-based execution (deterministic vs autonomous)
+└── cli.py          Argparse + project bootstrap + REPL
 ```
 
 ---
 
-## Requisitos
+## Requirements
 
 - Python 3.11+
-- [agenticblocks](https://github.com/gilzamir/agenticblocks) instalado no ambiente virtual
+- [agenticblocks](https://github.com/gilzamir/agenticblocks) installed in the virtual environment
 - [Rich](https://github.com/Texel-io/rich): `pip install rich`
-- Um servidor LLM acessível (ex.: [Ollama](https://ollama.com) com `mistral-nemo`, ou qualquer modelo suportado pelo [litellm](https://docs.litellm.ai))
+- An accessible LLM server (e.g., [Ollama](https://ollama.com) with `mistral-nemo`, or any model supported by [litellm](https://docs.litellm.ai))
 
 ---
 
-## Instalação
+## Installation
 
 ```bash
-# Clone o repositório
-git clone <url-do-repositorio>
+# Clone the repository
+git clone <repository-url>
 cd OpalaCoder
 
-# Crie e ative o ambiente virtual
+# Create and activate the virtual environment
 python -m venv .env
 source .env/bin/activate          # Linux/macOS
 # .env\Scripts\activate           # Windows
 
-# Instale as dependências
-pip install agenticblocks rich python-dotenv
+# Install the dependencies
+pip install -r requirements.txt
 ```
 
-### Variáveis de ambiente (opcional)
+### Environment Variables (Optional)
 
-Crie um arquivo `.env` na raiz do projeto para sobrescrever os padrões:
+Create a `.env` file in the project root to override defaults:
 
 ```env
-# Modelo LLM padrão (qualquer string suportada pelo litellm)
+# Default LLM model (any litellm supported string)
 OPALA_MODEL=ollama/mistral-nemo
 ```
 
 ---
 
-## Como executar
+## How to Run
 
 ```bash
-# Ative o ambiente virtual
+# Activate the virtual environment
 source .env/bin/activate
 
-# Execução padrão (modo plan)
+# Default execution (plan mode)
 python main.py
 
-# Escolher o modo de execução
+# Choose execution mode
 python main.py --mode auto
 python main.py --mode plan
 python main.py --mode edit
 
-# Usar outro modelo
+# Use another model
 python main.py --model ollama/llama3
 
-# Aumentar o número de tentativas por subplano
-python main.py --max-retries 5
+# Custom database path
+python main.py --db /path/to/projects.db
 
-# Banco de dados em caminho customizado
-python main.py --db /caminho/para/sessoes.db
-
-# Ver versão
+# Show version
 python main.py --version
 
-# Ajuda
+# Help
 python main.py --help
 ```
 
 ---
 
-## Fluxo de uma sessão
+## Project Flow
 
-```
-1. Banner + escolha do modo
+```text
+1. Banner + Mode Selection
        ↓
-2. Nome da sessão
-   ├── Nova sessão  → prossegue
-   └── Existente   → retomar ou sobrescrever
+2. Project Configuration
+   ├── New Project   → Name, Path, Description -> LLM selects skills
+   └── Existing      → Load context and skills
        ↓
-3. Usuário digita a demanda
+3. User enters demand
        ↓
-4. Agente gera panorama (plano de alto nível)
+4. Agent generates landscape (high-level plan)
        ↓
-5. Loop de refinamento (modos plan/edit)
-   ├── Usuário aprova → avança
-   └── Usuário sugere mudanças → agente refina e volta ao passo 5
+5. Refinement loop (plan/edit modes)
+   ├── User approves → proceeds
+   └── User suggests changes → agent refines and loops back to step 5
        ↓
-6. Decomposição em subplanos (SP-1, SP-2, …)
+6. Decomposition into subplans (SP-1, SP-2, …)
        ↓
-7. Execução sequencial por dependência
-   └── Para cada subplano:
-       ├── (edit) operação sensível? → pede confirmação
-       ├── Executa o código gerado
-       ├── Sucesso → próximo subplano
-       └── Falha → retry até max_retries, então notifica erro
+7. Sequential execution by dependency
+   └── For each subplan:
+       ├── Pre-run VCS checkpoint
+       ├── Executes generated code (AgenticBlocks WorkflowGraph)
+       ├── Success → Next subplan
+       └── Failure → Retry up to max_retries, then report error
+       ├── Post-run VCS checkpoint
        ↓
-8. Agregação: síntese final integrada de todos os resultados
+8. Aggregation: Final synthesized result of the operation
        ↓
-9. Resultado exibido + sessão salva
-```
-
----
-
-## Exemplos de uso
-
-```
-$ python main.py --mode plan
-
-    _    ____  ____          _
-   / \  | __ )/ ___|___   __| | ___
-  / _ \ |  _ \ |   / _ \ / _` |/ _ \
- / ___ \| |_) | |__| (_) | (_| |  __/
-/_/   \_\____/ \____\___/ \__,_|\___|
-
-  version 0.1.0  mode: plan
-
-─────────────────── Sessão ─────────────────────
-Sessões existentes:
-  meu-projeto   2025-05-15  mode=plan
-
-? Nome da sessão
-  → novo-projeto
-
-? Qual é a demanda de codificação?
-  → Criar uma API REST em FastAPI com CRUD de usuários e banco SQLite
-
-─────────────────── Fase 1 — Panorama ──────────
-💭 Gerando panorama do plano…
-╭─────────────── Plano Gerado ──────────────────╮
-│ 1. Estrutura do Projeto: Criar pastas e        │
-│    arquivos base (main.py, models.py, etc.)    │
-│ 2. Modelo de Dados: Definir esquema SQLite      │
-│ ...                                            │
-╰───────────────────────────────────────────────╯
-
-? O plano está ok? → sim
-✓ Plano aprovado!
-...
+9. Result displayed + project saved
 ```
 
 ---
 
-## Configuração avançada
+## Advanced Configuration
 
-### Alterar o modelo padrão
+### Build & Test Commands
+Run tests in the `tests` directory after implementing a new feature:
 
-Edite `opala/config.py`:
-
-```python
-DEFAULT_MODEL = "ollama/mistral-nemo"  # altere aqui
+```bash
+python -m pytest
 ```
 
-Ou use a variável de ambiente `OPALA_MODEL`.
+### Change the Default Model
 
-### Alterar o número padrão de retentativas
+Edit `opalacoder/config.py`:
 
 ```python
-DEFAULT_MAX_RETRIES = 3  # em opala/config.py
+DEFAULT_MODEL = "ollama/mistral-nemo"  # change here
 ```
 
-Ou passe `--max-retries N` na linha de comando.
+Or use the environment variable `OPALA_MODEL`.
 
-### Adicionar operações sensíveis customizadas
+### Sensitive Operations
 
-Em `opalacoder/config.py`:
+In `opalacoder/config.py`:
 
 ```python
 SENSITIVE_OPS = {
     "write_file", "delete_file", "run_shell",
     "send_network_request", "create_user", "delete_user",
-    # adicione aqui palavras-chave de operações que devem pedir confirmação no modo edit
+    # add keywords here for operations that require confirmation in edit mode
 }
 ```
 
 ---
 
-## Segurança
+## Security
 
-- O modo `edit` exige confirmação explícita para operações que afetam o sistema de arquivos, a rede ou contas de usuário.
-- Código gerado é executado localmente via `exec()` (modo `local`). Para maior isolamento, o `CodePlanExecutorBlock` da biblioteca AgenticBlocks suporta execução em contêiner Docker — edite `make_executor_block` em `opalacoder/agents.py` trocando `execution_mode="local"` por `execution_mode="docker"`.
-- Nunca execute o agente em modo `auto` com acesso a sistemas de produção sem revisar os subplanos gerados.
+- The `edit` mode requires explicit confirmation for operations affecting the filesystem, network, or user accounts.
+- Generated code is executed locally. For greater isolation, the `CodePlanExecutorBlock` from the AgenticBlocks library supports execution in a Docker container — edit `make_executor_block` in `opalacoder/agents.py` changing `execution_mode="local"` to `execution_mode="docker"`.
+- Never run the agent in `auto` mode with access to production systems without reviewing the generated subplans.
 
 ---
 
-## Licença
+## License
 
 MIT

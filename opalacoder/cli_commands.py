@@ -142,7 +142,28 @@ async def cmd_delete(state: REPLState, args: list[str]) -> str | None:
     if not state.store.exists(name):
         T.error(f"Project '{name}' not found.")
         return "continue"
+    
+    project_to_delete = state.store.load(name)
     state.store.delete(name)
+
+    import os
+    import shutil
+    if project_to_delete and project_to_delete.project_path and os.path.exists(project_to_delete.project_path):
+        if T.confirm(_("delete_dir_confirm", path=project_to_delete.project_path), default=False):
+            try:
+                shutil.rmtree(project_to_delete.project_path)
+                T.success(_("dir_deleted", path=project_to_delete.project_path))
+            except Exception as e:
+                T.error(_("dir_delete_failed", err=str(e)))
+        else:
+            opalacoder_dir = os.path.join(project_to_delete.project_path, ".opalacoder")
+            if os.path.exists(opalacoder_dir):
+                try:
+                    shutil.rmtree(opalacoder_dir)
+                    T.success(_("vcs_deleted"))
+                except Exception as e:
+                    T.error(_("vcs_delete_failed", err=str(e)))
+
     T.success(f"Project '{name}' deleted.")
     if state.project.name == name:
         T.info("Current project was deleted. Please restart OpalaCoder.")
