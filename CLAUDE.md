@@ -1,1 +1,1 @@
-Read the file AGENT.md.
+LOAD the file AGENT.md.

@@ -1,0 +1,254 @@
+"""Version Control System (VCS) strategies for OpalaCoder."""
+
+import os
+import subprocess
+from abc import ABC, abstractmethod
+from typing import List, Callable
+from agenticblocks.core.function_block import as_tool
+
+from . import terminal as T
+from .tools import AGENT_PROGRESS, _preview, get_project_path
+
+# ─── Base Strategy ────────────────────────────────────────────────────────────
+
+class VersionControlStrategy(ABC):
+    def __init__(self, project_path: str):
+        self.project_path = os.path.abspath(project_path)
+
+    @abstractmethod
+    def setup(self):
+        """Initialize VCS environment (e.g. create shadow git, gitignore)."""
+        pass
+
+    @abstractmethod
+    def pre_run(self, context_msg: str):
+        """Called before the agent starts executing its plan."""
+        pass
+
+    @abstractmethod
+    def post_run(self, success: bool, msg: str = ""):
+        """Called after the agent finishes its execution."""
+        pass
+
+    @abstractmethod
+    def get_tools(self) -> List[Callable]:
+        """Return a list of git tools available to the agent."""
+        pass
+
+    @abstractmethod
+    def manual_commit(self, message: str) -> tuple[bool, str]:
+        """Manually commit changes to the VCS."""
+        pass
+
+    @abstractmethod
+    def undo_last(self) -> tuple[bool, str]:
+        """Undo the last change in the VCS."""
+        pass
+
+
+# ─── Shadow Git Helper ────────────────────────────────────────────────────────
+
+def _run_shadow_git(command: str) -> subprocess.CompletedProcess:
+    """Run a Git command using the internal shadow git directory."""
+    project_path = get_project_path()
+    shadow_dir = os.path.join(project_path, ".opalacoder", ".git")
+    
+    # Ensure git dir config is passed
+    full_cmd = f"git --git-dir={shadow_dir} --work-tree={project_path} {command}"
+    
+    return subprocess.run(
+        full_cmd,
+        shell=True,
+        capture_output=True,
+        text=True,
+        cwd=project_path
+    )
+
+def _init_shadow_git(project_path: str):
+    """Initialize the shadow git repository if it doesn't exist."""
+    shadow_base = os.path.join(project_path, ".opalacoder")
+    shadow_dir = os.path.join(shadow_base, ".git")
+    gitignore_path = os.path.join(shadow_base, ".gitignore")
+    
+    os.makedirs(shadow_base, exist_ok=True)
+    
+    if not os.path.exists(shadow_dir):
+        # Init repo
+        cmd = f"git --git-dir={shadow_dir} --work-tree={project_path} init"
+        subprocess.run(cmd, shell=True, capture_output=True, cwd=project_path)
+        
+        # Configure excludes file
+        if not os.path.exists(gitignore_path):
+            with open(gitignore_path, "w", encoding="utf-8") as f:
+                f.write(".env\nnode_modules/\n__pycache__/\n.venv/\n")
+                
+        cmd_exclude = f"git --git-dir={shadow_dir} --work-tree={project_path} config core.excludesFile {gitignore_path}"
+        subprocess.run(cmd_exclude, shell=True, capture_output=True, cwd=project_path)
+        
+        # Initial commit
+        _run_shadow_git("add .")
+        _run_shadow_git("commit -m 'Initial checkpoint (Auto)'")
+
+def _auto_checkpoint(message: str):
+    """Automatically create a checkpoint in the shadow git."""
+    _run_shadow_git("add .")
+    res = _run_shadow_git(f"commit -m '{message}'")
+    return res.returncode == 0
+
+
+# ─── Agent Git Tools ──────────────────────────────────────────────────────────
+
+@as_tool(name="git_status", description="Get the status of the internal version control. Shows modified/added files.")
+def git_status() -> str:
+    AGENT_PROGRESS.update("git_status")
+    res = _run_shadow_git("status -s")
+    return res.stdout if res.stdout.strip() else "Working tree clean."
+
+@as_tool(name="git_diff", description="Get the diff of the internal version control to see exact code changes.")
+def git_diff() -> str:
+    AGENT_PROGRESS.update("git_diff")
+    res = _run_shadow_git("diff")
+    return res.stdout if res.stdout.strip() else "No changes."
+
+@as_tool(name="git_commit", description="Commit all current changes to the internal version control. Use this to save milestones.")
+def git_commit(message: str) -> str:
+    AGENT_PROGRESS.update("git_commit", _preview(message))
+    _run_shadow_git("add .")
+    res = _run_shadow_git(f'commit -m "{message}"')
+    if res.returncode == 0:
+        return f"Successfully committed: {message}"
+    return f"Failed to commit or nothing to commit. Stderr: {res.stderr}"
+
+
+# ─── Concrete Strategies ──────────────────────────────────────────────────────
+
+class AutoGitStrategy(VersionControlStrategy):
+    """Deterministic mode: Shadow Git initialized, pre/post checkpoints enforced, NO tools given to agent."""
+    
+    def setup(self):
+        _init_shadow_git(self.project_path)
+        T.info("Modo Auto VCS: Repositório interno inicializado/verificado.")
+
+    def pre_run(self, context_msg: str):
+        _auto_checkpoint("Pre-run checkpoint: Before executing plan")
+        
+    def post_run(self, success: bool, msg: str = ""):
+        status = "Success" if success else "Failed"
+        _auto_checkpoint(f"Post-run checkpoint: {status}. {msg}")
+
+    def get_tools(self) -> List[Callable]:
+        return []  # No tools for the agent in auto mode
+
+    def manual_commit(self, message: str) -> tuple[bool, str]:
+        _run_shadow_git("add .")
+        res = _run_shadow_git(f"commit -m '{message}'")
+        if res.returncode == 0:
+            return True, "Committed."
+        return False, res.stderr
+
+    def undo_last(self) -> tuple[bool, str]:
+        res = _run_shadow_git("rev-parse HEAD~1")
+        if res.returncode != 0:
+            return False, "Cannot undo. No previous checkpoints."
+        _run_shadow_git("reset --hard HEAD~1")
+        _run_shadow_git("clean -fd")
+        return True, "Last change undone."
+
+
+class HybridGitStrategy(VersionControlStrategy):
+    """Hybrid mode: Shadow Git initialized, agent has tools, orchestrator ensures safety checkpoints."""
+    
+    def setup(self):
+        _init_shadow_git(self.project_path)
+        T.info("Modo Hybrid VCS: Repositório interno pronto. Agente tem ferramentas de Git.")
+
+    def pre_run(self, context_msg: str):
+        _auto_checkpoint("Pre-run checkpoint: Before executing plan")
+        
+    def post_run(self, success: bool, msg: str = ""):
+        status = "Success" if success else "Failed"
+        _auto_checkpoint(f"Post-run checkpoint: {status}. {msg}")
+
+    def get_tools(self) -> List[Callable]:
+        return [git_status, git_diff, git_commit]
+
+    def manual_commit(self, message: str) -> tuple[bool, str]:
+        _run_shadow_git("add .")
+        res = _run_shadow_git(f"commit -m '{message}'")
+        if res.returncode == 0:
+            return True, "Committed."
+        return False, res.stderr
+
+    def undo_last(self) -> tuple[bool, str]:
+        res = _run_shadow_git("rev-parse HEAD~1")
+        if res.returncode != 0:
+            return False, "Cannot undo. No previous checkpoints."
+        _run_shadow_git("reset --hard HEAD~1")
+        _run_shadow_git("clean -fd")
+        return True, "Last change undone."
+
+
+class AgentDrivenGitStrategy(VersionControlStrategy):
+    """Agent-driven mode: Orchestrator does nothing automatically. Agent gets tools and decides when to use them."""
+    
+    def setup(self):
+        _init_shadow_git(self.project_path)
+        T.info("Modo Agent-Driven VCS: Agente tem controle total sobre o repositório interno.")
+
+    def pre_run(self, context_msg: str):
+        pass
+        
+    def post_run(self, success: bool, msg: str = ""):
+        pass
+
+    def get_tools(self) -> List[Callable]:
+        return [git_status, git_diff, git_commit]
+
+    def manual_commit(self, message: str) -> tuple[bool, str]:
+        _run_shadow_git("add .")
+        res = _run_shadow_git(f"commit -m '{message}'")
+        if res.returncode == 0:
+            return True, "Committed."
+        return False, res.stderr
+
+    def undo_last(self) -> tuple[bool, str]:
+        res = _run_shadow_git("rev-parse HEAD~1")
+        if res.returncode != 0:
+            return False, "Cannot undo. No previous checkpoints."
+        _run_shadow_git("reset --hard HEAD~1")
+        _run_shadow_git("clean -fd")
+        return True, "Last change undone."
+
+
+class NoGitStrategy(VersionControlStrategy):
+    """Null strategy: No version control at all."""
+    
+    def setup(self):
+        pass
+
+    def pre_run(self, context_msg: str):
+        pass
+        
+    def post_run(self, success: bool, msg: str = ""):
+        pass
+
+    def get_tools(self) -> List[Callable]:
+        return []
+
+    def manual_commit(self, message: str) -> tuple[bool, str]:
+        return False, "VCS is disabled."
+
+    def undo_last(self) -> tuple[bool, str]:
+        return False, "VCS is disabled."
+
+
+def get_vcs_strategy(strategy_name: str, project_path: str) -> VersionControlStrategy:
+    """Factory method to get the selected strategy."""
+    strategies = {
+        "auto": AutoGitStrategy,
+        "hybrid": HybridGitStrategy,
+        "agent_driven": AgentDrivenGitStrategy,
+        "none": NoGitStrategy
+    }
+    klass = strategies.get(strategy_name.lower(), HybridGitStrategy)
+    return klass(project_path)

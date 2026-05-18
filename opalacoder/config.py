@@ -61,6 +61,10 @@ _NON_LITELLM_FIELDS = {"model", "max_heartbeats", "debug", "strategy"}
 
 from typing import Union
 
+def get_git_strategy() -> str:
+    """Return the git strategy configured in agents.yaml ('hybrid', 'agent_driven', 'auto', 'none')."""
+    return _AGENTS_CONFIG.get("git_strategy", "hybrid")
+
 def get_complexity_inference_mode() -> str:
     """Return the complexity inference mode (simple or double)."""
     return _AGENTS_CONFIG.get("complexity_inference_mode", "simple")

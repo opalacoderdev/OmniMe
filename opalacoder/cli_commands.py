@@ -220,7 +220,37 @@ async def cmd_rmskill(state: REPLState, args: list[str]) -> str | None:
     T.success(f"Skill '{skill_name}' removed from project.")
 
 
-@_registry.register("/exit", "/quit", description="Exit OpalaCoder")
+@_registry.register("/undo", description=_("undo_desc"))
+async def cmd_undo(state: REPLState, _args: list[str]) -> str | None:
+    from .vcs import get_vcs_strategy
+    from .config import get_git_strategy
+    vcs = get_vcs_strategy(get_git_strategy(), state.project.project_path)
+    success, msg = vcs.undo_last()
+    if success:
+        T.success(_("undo_success"))
+    else:
+        T.error(_("undo_fail") + f" ({msg})")
+    return "continue"
+
+
+@_registry.register("/commit", usage="<message>", description=_("commit_desc"))
+async def cmd_commit(state: REPLState, args: list[str]) -> str | None:
+    if not args:
+        T.error("Usage: /commit <message>")
+        return "continue"
+    message = " ".join(args).strip('"\'')
+    from .vcs import get_vcs_strategy
+    from .config import get_git_strategy
+    vcs = get_vcs_strategy(get_git_strategy(), state.project.project_path)
+    success, msg = vcs.manual_commit(message)
+    if success:
+        T.success(_("commit_success"))
+    else:
+        T.error(_("commit_fail", err=msg))
+    return "continue"
+
+
+@_registry.register("/exit", "/quit", description=_("exit_desc"))
 async def cmd_exit(_state: REPLState, _args: list[str]) -> str:
     T.info(_("exiting"))
     return "break"

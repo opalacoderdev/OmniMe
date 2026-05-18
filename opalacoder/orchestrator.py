@@ -131,7 +131,11 @@ refactoring, and updating any existing code inside the project directory.
    `python -m py_compile file.py`).
 6. **Use ask_human ONLY** for genuinely dangerous or irreversible operations (`rm -rf`, `sudo`,
    credentials, files outside the project).
-7. **Report ONCE — but only after finishing**: Call `send_message` **exactly once**, and only after
+7. **Internal Version Control**: You may have access to git tools (if allowed by the user strategy) that operate on an internal "Shadow Git".
+   - If available, use `git_diff` to review your code changes.
+   - If available, use `git_commit` to save milestones of your work logically.
+   - You can use `run_command` with `git --git-dir=.opalacoder/.git --work-tree=. checkout <file>` to revert mistakes.
+8. **Report ONCE — but only after finishing**: Call `send_message` **exactly once**, and only after
    you have fully completed every step of the plan (all files written, commands run, verifications done).
    NEVER call `send_message` to describe what you are *about to do* — that terminates execution immediately.
    The message must be a past-tense summary of what you *actually did*: files created/modified (relative paths),
@@ -148,6 +152,18 @@ refactoring, and updating any existing code inside the project directory.
 
         T.section("Phase 2 — Plan Refinement")
         approved_plan = await refine_plan(user_request, panorama_text, self.model, session, store)
+        
+        # Save the plan to the project directory
+        import os
+        project_path = getattr(session, "project_path", ".") or "."
+        plan_file_path = os.path.join(project_path, "plan.md")
+        try:
+            os.makedirs(project_path, exist_ok=True)
+            with open(plan_file_path, "w", encoding="utf-8") as f:
+                f.write(approved_plan)
+        except Exception as e:
+            T.warning(f"Não foi possível salvar plan.md no diretório do projeto: {e}")
+            
         return approved_plan
 
     async def run(self, user_request: str, history: str, **kwargs) -> str:
@@ -199,20 +215,52 @@ refactoring, and updating any existing code inside the project directory.
         AGENT_PROGRESS.last_args = ""
         AGENT_PROGRESS.start_time = time.monotonic()
 
+        project_path = getattr(session, "project_path", ".") or "."
+        
+        from .vcs import get_vcs_strategy
+        from .config import get_git_strategy
+        vcs_strategy = get_vcs_strategy(get_git_strategy(), project_path)
+        vcs_strategy.setup()
+        
+        agent_tools = self.tools + vcs_strategy.get_tools()
+
         agent = MemGPTAgentBlock(
             name="orchestrator",
             system_prompt=self._build_system_prompt(approved_plan, project_context),
             model=self.model,
-            tools=self.tools,
+            tools=agent_tools,
             litellm_kwargs=llm_kwargs,
             max_heartbeats=max_hb,
             debug=get_agent_debug("orchestrator", False)
         )
 
+        project_path = getattr(session, "project_path", ".") or "."
+        checkpoint_dir = os.path.join(project_path, ".opalacoder")
+        checkpoint_path = os.path.join(checkpoint_dir, "session_state.json")
+        is_resume = False
+
+        if os.path.exists(checkpoint_path):
+            from rich.prompt import Confirm
+            if Confirm.ask("[yellow]Sessão não finalizada detectada. Deseja retomar a execução anterior?[/yellow]", default=True):
+                import json
+                try:
+                    with open(checkpoint_path, "r") as f:
+                        state = json.load(f)
+                    agent.internal_history = state.get("internal_history", [])
+                    agent.recursive_summary = state.get("recursive_summary", "")
+                    AGENT_PROGRESS.heartbeat = state.get("heartbeat", 0)
+                    is_resume = True
+                except Exception as e:
+                    T.warning(f"Falha ao carregar sessão anterior: {e}")
+            else:
+                os.remove(checkpoint_path)
+
         prompt = (
             f"[CONVERSATION HISTORY]\n{history}\n[END HISTORY]\n\n"
             f"[USER TASK]:\n{user_request}\n[END USER TASK]"
         )
+        if is_resume:
+            prompt = "SYSTEM EVENT: O sistema foi reiniciado devido a uma interrupção. Verifique seu histórico recente e retome a execução do plano usando as ferramentas."
 
         result_holder: list[str] = []
         agent_holder: list = []
@@ -220,6 +268,7 @@ refactoring, and updating any existing code inside the project directory.
 
         async def _run_agent():
             try:
+                vcs_strategy.pre_run(prompt)
                 out = await agent.run(AgentInput(prompt=prompt))
                 result_holder.append(out.response)
                 agent_holder.append(agent)
@@ -229,6 +278,7 @@ refactoring, and updating any existing code inside the project directory.
         # Start the agent as a background task so we can update the live panel
         agent_task = asyncio.create_task(_run_agent())
 
+        last_history_len = 0
         with Live(
             _build_progress_panel(AGENT_PROGRESS, max_hb),
             console=T.console,
@@ -239,6 +289,24 @@ refactoring, and updating any existing code inside the project directory.
             while not agent_task.done():
                 if live.is_started:
                     live.update(_build_progress_panel(AGENT_PROGRESS, max_hb))
+                
+                # Checkpointing logic
+                current_history_len = len(agent.internal_history)
+                if current_history_len != last_history_len:
+                    last_history_len = current_history_len
+                    try:
+                        os.makedirs(checkpoint_dir, exist_ok=True)
+                        state = {
+                            "internal_history": agent.internal_history,
+                            "recursive_summary": getattr(agent, "recursive_summary", ""),
+                            "heartbeat": AGENT_PROGRESS.heartbeat
+                        }
+                        import json
+                        with open(checkpoint_path, "w") as f:
+                            json.dump(state, f)
+                    except Exception:
+                        pass
+                
                 await asyncio.sleep(0.25)
             AGENT_PROGRESS.live_context = None
             
@@ -247,8 +315,18 @@ refactoring, and updating any existing code inside the project directory.
                 live.start()
             live.update(_build_progress_panel(AGENT_PROGRESS, max_hb))
 
+        # Limpa o checkpoint se finalizou com sucesso
+        if os.path.exists(checkpoint_path) and not error_holder:
+            try:
+                os.remove(checkpoint_path)
+            except Exception:
+                pass
+
         if error_holder:
+            vcs_strategy.post_run(success=False, msg=str(error_holder[0]))
             return f"Agent execution encountered an error: {error_holder[0]}"
+            
+        vcs_strategy.post_run(success=True, msg="Agent completed execution.")
 
         raw = result_holder[0] if result_holder else ""
         if not raw.strip() and agent_holder:
