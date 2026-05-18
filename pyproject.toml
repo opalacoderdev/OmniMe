@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opalacoder"
+version = "0.1.0"
+description = "Autonomous coding agent with interactive planning and modular execution"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Gil Zamir", email = "gilzamir@example.com" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "agenticblocks.io",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "rich>=13.0.0",
+    "numpy>=1.21.0",
+    "instructor>=1.15.1",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/gilzamir/OpalaCoder"
+"Bug Tracker" = "https://github.com/gilzamir/OpalaCoder/issues"
+
+[project.scripts]
+opalacoder = "opalacoder.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["opalacoder"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"agents.yaml" = "opalacoder/agents.yaml"
+"skills" = "opalacoder/skills"

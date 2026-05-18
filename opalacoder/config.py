@@ -25,6 +25,7 @@ if global_env.exists():
 def _load_agents_config() -> dict:
     # Search for agents.yaml next to this file (project root), then fall back to cwd.
     candidates = [
+        pathlib.Path(__file__).parent / "agents.yaml",
         pathlib.Path(__file__).parent.parent / "agents.yaml",
         pathlib.Path(os.getcwd()) / "agents.yaml",
     ]

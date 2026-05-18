@@ -16,10 +16,13 @@ def _skill_search_dirs(project_path: str = "") -> list[str]:
     # 1. Project's own skills dir
     if project_path:
         dirs.append(os.path.join(project_path, "skills"))
-    # 2. OpalaCoder repo skills dir (next to the opalacoder package)
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # 2. Package skills dir (when installed via wheel)
+    package_dir = os.path.dirname(os.path.abspath(__file__))
+    dirs.append(os.path.join(package_dir, "skills"))
+    # 3. Repo root skills dir (when running from source)
+    repo_root = os.path.dirname(package_dir)
     dirs.append(os.path.join(repo_root, "skills"))
-    # 3. User global skills
+    # 4. User global skills
     dirs.append(os.path.expanduser("~/.opalacoder/skills"))
     return dirs
 
