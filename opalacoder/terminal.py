@@ -8,6 +8,7 @@ from rich.table import Table
 from rich.rule import Rule
 from rich import print as rprint
 from contextlib import contextmanager
+import os
 import sys
 
 from .i18n import _
@@ -171,6 +172,67 @@ def choose(prompt: str, options: list[str]) -> str:
 
 
 # ─── Subplan progress table ───────────────────────────────────────────────────
+
+# ─── Workflow debug output (enabled via OPALACODER_WORKFLOW_DEBUG=1) ──────────
+
+_WORKFLOW_DEBUG = os.environ.get("OPALACODER_WORKFLOW_DEBUG", "0") == "1"
+
+
+def debug_oracle(schema_name: str, attempt: int, raw_content: str) -> None:
+    if not _WORKFLOW_DEBUG:
+        return
+    from rich.markup import escape
+    console.print(
+        f"\n[bold cyan]┌─ ORACLE [{schema_name}] attempt {attempt + 1} — RAW OUTPUT ─┐[/bold cyan]"
+    )
+    console.print(escape(raw_content[:2000]))
+    console.print("[bold cyan]└──────────────────────────────────────────────────────────┘[/bold cyan]")
+
+
+def debug_oracle_error(schema_name: str, attempt: int, error: str, raw_content: str) -> None:
+    if not _WORKFLOW_DEBUG:
+        return
+    from rich.markup import escape
+    console.print(
+        f"\n[bold red]┌─ ORACLE [{schema_name}] attempt {attempt + 1} — PARSE ERROR ─┐[/bold red]"
+    )
+    console.print(f"[red]Error:[/red] {escape(error)}")
+    console.print(f"[dim]Raw content:[/dim] {escape(raw_content[:1000])}")
+    console.print("[bold red]└──────────────────────────────────────────────────────────┘[/bold red]")
+
+
+def debug_worker_start(task_id: str, description: str, model: str) -> None:
+    if not _WORKFLOW_DEBUG:
+        return
+    from rich.markup import escape
+    console.print(
+        f"\n[bold green]┌─ WORKER [{task_id}] model={model} ─┐[/bold green]"
+    )
+    console.print(f"[dim]Task:[/dim] {escape(description[:500])}")
+    console.print("[bold green]│ executing…[/bold green]")
+
+
+def debug_worker_project_path(task_id: str, project_path: str) -> None:
+    if not _WORKFLOW_DEBUG:
+        return
+    from rich.markup import escape
+    console.print(f"[bold green]│ project_path:[/bold green] {escape(project_path)}")
+
+
+def debug_worker_tool_calls(task_id: str, count: int) -> None:
+    if not _WORKFLOW_DEBUG:
+        return
+    color = "green" if count > 0 else "red"
+    console.print(f"[bold {color}]│ tool_calls_made: {count}[/bold {color}]")
+
+
+def debug_worker_result(task_id: str, result: str) -> None:
+    if not _WORKFLOW_DEBUG:
+        return
+    from rich.markup import escape
+    console.print(f"[bold green]│ Result:[/bold green] {escape(result[:1000])}")
+    console.print("[bold green]└──────────────────────────────────────────────────────────┘[/bold green]")
+
 
 def subplan_status_table(statuses: list[tuple[str, str, str]]) -> None:
     """statuses: [(sp_id, objective, status_label), ...]"""

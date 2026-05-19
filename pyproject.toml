@@ -24,6 +24,8 @@ dependencies = [
     "rich>=13.0.0",
     "numpy>=1.21.0",
     "instructor>=1.15.1",
+    "tree-sitter>=0.25.0",
+    "tree-sitter-language-pack>=1.8.0",
 ]
 
 [project.urls]

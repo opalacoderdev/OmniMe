@@ -61,6 +61,31 @@ def _preview(value: object, max_len: int = 60) -> str:
     return s[:max_len] + "…" if len(s) > max_len else s
 
 
+def _auto_lint(resolved_path: str) -> str:
+    """Run a quick syntax check and return the output, or empty string if clean."""
+    ext = os.path.splitext(resolved_path)[1].lower()
+    if ext == ".py":
+        res = subprocess.run(
+            ["python", "-m", "py_compile", resolved_path],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return (res.stdout + res.stderr).strip()
+    if ext in {".js", ".ts", ".jsx", ".tsx"}:
+        try:
+            res = subprocess.run(
+                ["node", "--check", resolved_path],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            return (res.stdout + res.stderr).strip()
+        except FileNotFoundError:
+            return ""
+    return ""
+
+
 # ─── Tools ───────────────────────────────────────────────────────────────────
 
 @as_tool(name="read_file", description="Read the contents of a file in the project workspace. Relative paths are resolved from the project directory.")
@@ -82,6 +107,17 @@ def write_file(path: str, content: str) -> str:
         Path(resolved).parent.mkdir(parents=True, exist_ok=True)
         with open(resolved, "w", encoding="utf-8") as f:
             f.write(content)
+        try:
+            from .code_index import CODE_INDEX
+            CODE_INDEX.rebuild_file(resolved)
+        except Exception:
+            pass
+        lint_output = _auto_lint(resolved)
+        if lint_output:
+            return (
+                f"Successfully wrote to {resolved}, but lint check found errors:\n"
+                f"{lint_output}\n\nPlease fix the syntax errors."
+            )
         return f"Successfully wrote to {resolved}."
     except Exception as e:
         return f"Error writing {resolved}: {e}"
@@ -277,9 +313,24 @@ def get_file_overview(path: str) -> str:
     resolved = _resolve_path(path)
     AGENT_PROGRESS.update("get_file_overview", f"path={_preview(resolved)}")
     try:
+        # Try index-backed overview first (works for any language)
+        try:
+            from .code_index import CODE_INDEX
+            project_root = get_project_path()
+            rel = os.path.relpath(resolved, project_root)
+            syms = CODE_INDEX.symbols_in_file(rel)
+            if syms:
+                overview = [f"File: {path}"]
+                for sym in syms:
+                    prefix = "  " if sym.kind == "method" else ""
+                    overview.append(f"{prefix}{sym.kind} '{sym.name}' (line {sym.line})")
+                return "\n".join(overview)
+        except Exception:
+            pass
+
         with open(resolved, "r", encoding="utf-8") as f:
             content = f.read()
-            
+
         if not path.endswith(".py"):
             lines = content.splitlines()
             preview = "\n".join(lines[:100])
@@ -287,23 +338,23 @@ def get_file_overview(path: str) -> str:
 
         tree = ast.parse(content)
         overview = [f"File: {path}"]
-        
+
         for node in ast.iter_child_nodes(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 start = node.lineno
                 end = node.end_lineno
                 overview.append(f"{node.__class__.__name__} '{node.name}' (lines {start}-{end})")
-                
+
                 if isinstance(node, ast.ClassDef):
                     for subnode in node.body:
                         if isinstance(subnode, (ast.FunctionDef, ast.AsyncFunctionDef)):
                             sub_start = subnode.lineno
                             sub_end = subnode.end_lineno
                             overview.append(f"  Method '{subnode.name}' (lines {sub_start}-{sub_end})")
-        
+
         if len(overview) == 1:
             overview.append("No classes or functions found.")
-            
+
         return "\n".join(overview)
     except Exception as e:
         return f"Error generating overview for {resolved}: {e}"

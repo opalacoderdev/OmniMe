@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -A 30 \"checkAndEnforceHardFail\\\\|improve.*loop\\\\|composite.*tool\" /tmp/smallcode/bin/smallcode.js | head -60)",
+      "Read(//tmp/smallcode/bin/**)",
+      "Bash(python -c ' *)"
+    ]
+  }
+}

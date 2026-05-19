@@ -129,6 +129,9 @@ _STRINGS = {
         "profile_yaml_parse_failed": "Failed to parse edited YAML: {err}. Using original profile.",
         "profile_building_dag": "Building Profile Execution DAG...",
         "profile_starting_executor": "Starting Graph execution...",
+        "workflow_escalating": "Primary model failed — escalating to {model}",
+        "workflow_edit_not_found": "edit_file: old_str not found in {path}",
+        "workflow_edit_ambiguous": "edit_file: old_str matches {n} locations in {path} — be more specific",
     },
     "pt": {
         "active_session": "Sessão Ativa: {name}",
@@ -256,6 +259,9 @@ _STRINGS = {
         "profile_yaml_parse_failed": "Falha ao interpretar o YAML editado: {err}. Usando o profile original.",
         "profile_building_dag": "Construindo DAG de Execução do Profile...",
         "profile_starting_executor": "Iniciando execução do Grafo...",
+        "workflow_escalating": "Modelo primário falhou — escalando para {model}",
+        "workflow_edit_not_found": "edit_file: old_str não encontrado em {path}",
+        "workflow_edit_ambiguous": "edit_file: old_str encontrado em {n} locais em {path} — seja mais específico",
     }
 }
 

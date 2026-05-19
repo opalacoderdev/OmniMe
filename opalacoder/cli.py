@@ -8,7 +8,7 @@ import sys
 from . import __version__
 from .config import DEFAULT_MODEL, ALTERNATIVE_MODEL, DEFAULT_MAX_RETRIES, DEFAULT_MODE, DEFAULT_DB_PATH, DEFAULT_LANG
 from .project import ProjectStore, ProjectData
-from .agents import make_chat_memgpt_agent
+from .agents import make_chat_memgpt_agent, enricher_system_prompt, synthesizer_system_prompt
 from .api_keys import ensure_api_key
 from . import terminal as T
 from agenticblocks.blocks.llm.agent import AgentInput
@@ -21,6 +21,37 @@ from .orchestrator import CHECKPOINT_SUBPATH
 def _inject_project(project: ProjectData, prompt: str) -> str:
     """Prepend project context to every prompt sent to agents."""
     return project.context_header() + prompt
+
+
+async def _synthesize_and_respond(state, store, orchestrator_result: str) -> None:
+    """Pass orchestrator result to MemGPT for memory storage and user-facing synthesis.
+
+    MemGPT is the only agent that speaks to the user. After an orchestrator finishes,
+    it receives the raw result, stores important facts in long-term memory (via its
+    append_core_memory tool), and produces a clear summary for the user.
+    """
+    T.section(_("phase5"))
+
+    if not orchestrator_result or not orchestrator_result.strip():
+        orchestrator_result = "(Orchestrator completed without output.)"
+
+    synthesis_prompt = (
+        f"[ORCHESTRATOR RESULT]\n{orchestrator_result}\n[END RESULT]\n\n"
+        "The orchestrator has finished executing. You MUST:\n"
+        "1. Use `append_core_memory` to save any important new facts "
+        "(files created/modified, patterns established, decisions made).\n"
+        "2. Call `send_message` with a concise, user-friendly summary of what was accomplished."
+    )
+
+    # Switch to Mode B — synthesizer speaks to the user
+    state.chat_agent.system_prompt = synthesizer_system_prompt()
+    with T.spinner(_("agent_thinking")):
+        synthesis_obj = await state.chat_agent.run(AgentInput(prompt=synthesis_prompt))
+        user_response = synthesis_obj.response.strip() if synthesis_obj.response else orchestrator_result
+
+    T.console.print(f"\n[bold green]OpalaCoder:[/bold green] {user_response}\n")
+    store.append_message(state.project, "assistant", user_response)
+    store.save(state.project)
 
 
 # ─── Project startup menu ─────────────────────────────────────────────────────
@@ -109,9 +140,16 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
     T.console.print(f"  [dim]Skills: {', '.join(project.skills)}[/dim]")
 
     chat_agent = make_chat_memgpt_agent(project.model)
+    _VALID_ROLES = {"user", "assistant", "system", "tool"}
     if hasattr(chat_agent, "internal_history") and project.history:
         for msg in project.history[-10:]:
-            chat_agent.internal_history.append({"role": msg["role"], "content": msg["content"]})
+            role = msg["role"]
+            content = msg["content"]
+            if role not in _VALID_ROLES:
+                # Remap orchestration log roles to assistant so LiteLLM accepts them
+                # but the content (plan/task summaries) is still visible to the chat agent.
+                role = "assistant"
+            chat_agent.internal_history.append({"role": role, "content": content})
 
     state = REPLState(project, store, project_skills, chat_agent)
 
@@ -119,7 +157,8 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
         T.warning(_("pending_demand", request=state.project.request[:50]))
         choice = T.choose(_("resume_or_clear"), [_("resume"), _("clear")])
         if choice == _("resume"):
-            await run_pipeline(state.project, store, max_retries, project_skills=state.project_skills)
+            result = await run_pipeline(state.project, store, max_retries, project_skills=state.project_skills)
+            await _synthesize_and_respond(state, store, result)
         else:
             state.project.clear_state()
             store.save(state.project)
@@ -129,7 +168,8 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
             T.warning("[yellow]Foi detectada uma execução de agente não finalizada (checkpoint salvo).[/yellow]")
             choice = T.choose(_("resume_or_clear"), [_("resume"), _("clear")])
             if choice == _("resume"):
-                await run_pipeline(state.project, store, max_retries, request="[RESUME_EXECUTION]", project_skills=state.project_skills)
+                result = await run_pipeline(state.project, store, max_retries, request="[RESUME_EXECUTION]", project_skills=state.project_skills)
+                await _synthesize_and_respond(state, store, result)
             else:
                 try:
                     os.remove(checkpoint_path)
@@ -156,13 +196,15 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
             else:
                 _VALID_INTENTS = {"greetings", "question", "plan", "resume", "chat", "command_hint"}
                 
-                # 1. Chat agent processes first (it has memory and RAG tools)
+                # 1. Enricher: chat agent in Mode A — retrieves memory and enriches the user message.
+                #    Output goes to the classifier, NOT to the user.
+                state.chat_agent.system_prompt = enricher_system_prompt()
                 with T.spinner(_("agent_thinking")):
-                    chat_response_obj = await state.chat_agent.run(AgentInput(prompt=_inject_project(state.project, user_input)))
-                    chat_output = chat_response_obj.response.strip() if chat_response_obj.response else "(no response)"
+                    enriched_obj = await state.chat_agent.run(AgentInput(prompt=_inject_project(state.project, user_input)))
+                    enriched_output = enriched_obj.response.strip() if enriched_obj.response else user_input
 
-                # 2. Classifier evaluates both the user's raw input and the chat agent's contextualized response
-                classifier_prompt = f"USER REQUEST: {user_input}\nCHAT AGENT RESPONSE (Context): {chat_output}"
+                # 2. Classifier receives original message + enriched context
+                classifier_prompt = f"USER REQUEST: {user_input}\nENRICHED CONTEXT: {enriched_output}"
                 with T.spinner(_("classifying_intent")):
                     intent_res = await state.intent_classifier.run(AgentInput(prompt=classifier_prompt))
                     _raw = intent_res.response.strip().lower()
@@ -177,25 +219,42 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                     T.console.print(f"[yellow]{_('command_hint_suggestion', cmd=cmd_word)}[/yellow]")
                     continue
 
-                # 3. If it's just a conversation, we print the chat response and are done.
+                # 3. Conversation intents — switch to synthesizer mode so the agent speaks to the user.
                 if intent in ("greetings", "question", "chat"):
+                    state.chat_agent.system_prompt = synthesizer_system_prompt()
+                    with T.spinner(_("agent_thinking")):
+                        chat_resp_obj = await state.chat_agent.run(AgentInput(prompt=_inject_project(state.project, user_input)))
+                        chat_output = chat_resp_obj.response.strip() if chat_resp_obj.response else enriched_output
                     T.console.print(f"\n[bold green]OpalaCoder:[/bold green] {chat_output}\n")
                     store.append_message(state.project, "user", user_input)
                     store.append_message(state.project, "assistant", chat_output)
                     continue
 
-                # 4. If it's a resume or plan action, we also show what the chat agent said, then execute.
-                T.console.print(f"\n[bold green]OpalaCoder:[/bold green] {chat_output}\n")
+                # 4. Plan / resume — enriched_output carries memory context for the orchestrator.
+                #    User input is saved; enriched_output goes to orchestrator as context only.
                 store.append_message(state.project, "user", user_input)
-                store.append_message(state.project, "assistant", chat_output)
 
                 if intent == "resume":
-                    if not state.project.request:
-                        T.warning("Não há nenhum plano pendente ou requisição anterior para continuar.")
-                        continue
-                    T.info("Retomando a execução do plano anterior...")
+                    if state.project.request:
+                        T.info("Retomando a execução do plano anterior...")
+                        resume_request = "[RESUME_EXECUTION]"
+                    else:
+                        # No in-memory request: use enriched memory context to reconstruct what to do.
+                        # The enricher already retrieved relevant past work from archival memory.
+                        T.info("Retomando com base no contexto de memória...")
+                        resume_request = (
+                            f"Original Request: {user_input}\n"
+                            f"Memory Context (from chat agent):\n{enriched_output}\n\n"
+                            "Based on the memory context above, continue or complete the previous implementation."
+                        )
                     try:
-                        await run_pipeline(state.project, store, max_retries, request="[RESUME_EXECUTION]", active_model=state.project.model, project_skills=state.project_skills)
+                        orchestrator_result = await run_pipeline(
+                            state.project, store, max_retries,
+                            request=resume_request,
+                            active_model=state.project.model,
+                            project_skills=state.project_skills,
+                        )
+                        await _synthesize_and_respond(state, store, orchestrator_result)
                     except Exception as e:
                         T.error(f"Erro ao retomar plano: {e}")
                     continue
@@ -211,10 +270,7 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                         with T.spinner(_("evaluating_complexity")):
                             comp_res = await state.complexity_evaluator.run(AgentInput(prompt=user_input))
                             raw_comp = comp_res.response.strip().lower()
-                            if "alternative" in raw_comp:
-                                complexity = "alternative"
-                            else:
-                                complexity = "default"
+                            complexity = "alternative" if "alternative" in raw_comp else "default"
 
                     if complexity == "alternative":
                         if ensure_api_key(ALTERNATIVE_MODEL):
@@ -226,11 +282,20 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                     else:
                         active_model = state.project.model
 
-                    # For new plans, we augment the request with the Chat Agent's context so the orchestrator has the full picture
-                    augmented_request = f"Original Request: {user_input}\nChat Agent Context/Details: {chat_output}"
-                    
+                    # enriched_output carries memory context from the enricher for the orchestrator
+                    augmented_request = (
+                        f"Original Request: {user_input}\n"
+                        f"Memory Context (from chat agent):\n{enriched_output}"
+                    )
+
                     try:
-                        await run_pipeline(state.project, store, max_retries, request=augmented_request, active_model=active_model, project_skills=state.project_skills)
+                        orchestrator_result = await run_pipeline(
+                            state.project, store, max_retries,
+                            request=augmented_request,
+                            active_model=active_model,
+                            project_skills=state.project_skills,
+                        )
+                        await _synthesize_and_respond(state, store, orchestrator_result)
                     except Exception as e:
                         if active_model != state.project.model:
                             T.error(_("alt_model_error", model=active_model, err=e))
@@ -238,7 +303,13 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                             if state.project.results or state.project.request:
                                 state.project.clear_state()
                                 store.save(state.project)
-                            await run_pipeline(state.project, store, max_retries, request=augmented_request, active_model=state.project.model, project_skills=state.project_skills)
+                            orchestrator_result = await run_pipeline(
+                                state.project, store, max_retries,
+                                request=augmented_request,
+                                active_model=state.project.model,
+                                project_skills=state.project_skills,
+                            )
+                            await _synthesize_and_respond(state, store, orchestrator_result)
                         else:
                             raise
 
@@ -266,22 +337,25 @@ async def run_pipeline(
     request: str = None,
     active_model: str = None,
     project_skills: list = None,
-) -> None:
+) -> str:
     model = active_model or project.model
     T.info(_("using_model", model=model))
 
     if not request:
-        return
+        return ""
 
     T.section(_("new_demand"))
     store.append_message(project, "user", request)
     project.request = request
     store.save(project)
 
+    _VALID_ROLES = {"user", "assistant", "system", "tool"}
     hist_text = ""
     for msg in project.history[-10:-1]:
-        role = "Assistant" if msg["role"] == "assistant" else "User"
-        hist_text += f"{role}: {msg['content']}\n"
+        if msg["role"] == "user":
+            hist_text += f"User: {msg['content']}\n"
+        elif msg["role"] in _VALID_ROLES or msg["role"].startswith("system_"):
+            hist_text += f"Assistant: {msg['content']}\n"
 
     from .orchestrator import get_orchestrator
     from .config import get_agent_strategy
@@ -326,12 +400,12 @@ async def run_pipeline(
         max_retries=max_retries,
     )
 
-    T.section(_("phase5"))
-
+    # Save raw orchestrator output to archival (subconscious record)
     store.append_message(project, "assistant", final_response)
-    T.show_result(final_response)
+
     project.clear_state()
     store.save(project)
+    return final_response
 
 
 # ─── CLI entrypoint ───────────────────────────────────────────────────────────

@@ -74,7 +74,7 @@ def test_orchestrator_calls_refine_plan():
     with (
         patch("opalacoder.planner.generate_panorama", new=AsyncMock(return_value="Phase 1: Do stuff")),
         patch("opalacoder.planner.refine_plan", new=mock_refine),
-        patch("opalacoder.orchestrator.T.section"),
+        patch("opalacoder.autonomous_orchestrator.T.section"),
         patch("builtins.open", MagicMock()),
         patch("os.makedirs", MagicMock()),
     ):
@@ -240,7 +240,7 @@ def test_orchestrator_passes_correct_session_and_store():
     with (
         patch("opalacoder.planner.generate_panorama", new=AsyncMock(return_value="Phase 1")),
         patch("opalacoder.planner.refine_plan", new=fake_refine),
-        patch("opalacoder.orchestrator.T.section"),
+        patch("opalacoder.autonomous_orchestrator.T.section"),
         patch("builtins.open", MagicMock()),
         patch("os.makedirs", MagicMock()),
     ):

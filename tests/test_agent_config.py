@@ -31,23 +31,32 @@ PLANNING_AGENTS = [
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("agent", CLASSIFIER_AGENTS)
-def test_classifier_has_think_false(agent):
-    """Classifier agents must disable gemma4 thinking mode.
-    Without think=false, gemma4 returns empty content via the OpenAI-compatible
-    endpoint (ollama issue #15288), causing silent misclassification."""
+def test_classifier_disables_thinking(agent):
+    """Classifier agents must disable gemma4 thinking mode via reasoning_effort.
+
+    litellm maps reasoning_effort to the ollama `think` field. Values outside
+    {"low","medium","high"} (e.g. "none") produce think=false on the wire.
+    Without this, gemma4 on ollama returns output in the reasoning field and
+    leaves message.content empty, causing silent misclassification (ollama #15288).
+    """
     kwargs = get_agent_llm_kwargs(agent)
-    assert kwargs.get("think") is False, (
-        f"{agent} must have think=false to work correctly with ollama/gemma4"
+    effort = kwargs.get("reasoning_effort")
+    thinking_enabled = effort in {"low", "medium", "high"}
+    assert not thinking_enabled, (
+        f"{agent} must have reasoning_effort set to a non-thinking value (e.g. 'none'), "
+        f"got {effort!r}"
     )
 
 
 @pytest.mark.parametrize("agent", PLANNING_AGENTS)
 def test_planning_agent_does_not_disable_thinking(agent):
-    """Planning agents should not have think=false — extended reasoning improves
+    """Planning agents should not disable thinking — extended reasoning improves
     the quality of plans and execution strategies."""
     kwargs = get_agent_llm_kwargs(agent)
-    assert kwargs.get("think") is not False, (
-        f"{agent} must not have think=false"
+    effort = kwargs.get("reasoning_effort")
+    thinking_disabled = effort is not None and effort not in {"low", "medium", "high"}
+    assert not thinking_disabled, (
+        f"{agent} must not disable thinking (reasoning_effort={effort!r})"
     )
 
 

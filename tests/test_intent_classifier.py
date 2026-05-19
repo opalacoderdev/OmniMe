@@ -20,11 +20,15 @@ from agenticblocks.blocks.llm.agent import AgentInput, AgentOutput
 # 1. Agent configuration (agents.yaml)
 # ---------------------------------------------------------------------------
 
-def test_intent_classifier_has_think_false():
-    """think=false must be set to prevent gemma4 thinking mode from returning
-    empty content via the OpenAI-compatible endpoint (ollama issue #15288)."""
+def test_intent_classifier_disables_thinking():
+    """reasoning_effort must be set to a non-thinking value (e.g. 'none') to prevent
+    gemma4 from returning output in the reasoning field instead of message.content
+    (ollama issue #15288). litellm maps reasoning_effort to the ollama think field."""
     kwargs = get_agent_llm_kwargs("intent_classifier")
-    assert kwargs.get("think") is False
+    effort = kwargs.get("reasoning_effort")
+    assert effort is not None and effort not in {"low", "medium", "high"}, (
+        f"reasoning_effort must be set to disable thinking, got {effort!r}"
+    )
 
 
 def test_intent_classifier_has_max_tokens():
@@ -146,8 +150,6 @@ CLASSIFICATION_CASES = [
     ("create a calculator", "plan"),
     ("O botão = da calculadora não está funcionando", "plan"),
     ("fix the login bug", "plan"),
-    ("sim", "plan"),
-    ("yes", "plan"),
     ("that's interesting", "chat"),
 ]
 

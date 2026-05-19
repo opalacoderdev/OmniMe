@@ -84,18 +84,23 @@ def _fast_approval(user_response: str) -> bool | None:
 
 
 _TOOL_CALL_PATTERN = re.compile(
-    r"(`{1,3}[^`]*`{1,3}|\b(?:ask_human|input|print|get_preferences)\s*\([^)]*\))",
+    r"(`{1,3}.*?`{1,3}|\b(?:ask_human|input|print|get_preferences)\s*\(.*?\))",
     re.DOTALL,
 )
 _PREAMBLE_PATTERN = re.compile(
     r"^.*?(?:before (?:creating|planning)|need to (?:run|conduct|perform)|requirements elicitation)[^\n]*\n+",
     re.IGNORECASE | re.DOTALL,
 )
+_TOOL_CALL_BLOCK_PATTERN = re.compile(
+    r"\*\*Tool Call:\*\*.*",
+    re.DOTALL,
+)
 
 
 def _sanitize_panorama(text: str) -> str:
     """Strip tool calls and elicitation preambles from raw LLM panorama output."""
     text = _PREAMBLE_PATTERN.sub("", text)
+    text = _TOOL_CALL_BLOCK_PATTERN.sub("", text)
     text = _TOOL_CALL_PATTERN.sub("", text)
     # Collapse leftover blank lines
     text = re.sub(r"\n{3,}", "\n\n", text)

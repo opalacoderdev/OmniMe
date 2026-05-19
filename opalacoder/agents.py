@@ -133,35 +133,78 @@ Example: {"model": "default", "estimated_steps": 12}
     )
 
 
-def make_chat_memgpt_agent(model: str | None = None) -> MemGPTAgentBlock:
-    """Create a MemGPT chat agent that maintains conversation history internally.
-
-    The returned instance should be kept alive for the duration of a project REPL loop
-    so that its internal memory persists across turns.
-    """
+def _chat_agent_lang_rule() -> str:
     lang_name = "English" if i18n._LANG == "en" else "Portuguese"
-    lang_rule = (
+    return (
         f"\n\nCRITICAL RULE: Respond in {lang_name}. "
         "Keep code identifiers in English."
     )
 
-    from .tools import read_core_memory, append_core_memory, search_conversation_history
-    
-    system_prompt = (
-        "You are OpalaCoder's conversational assistant, embedded inside a software project.\n"
-        "You operate using a MemGPT-style memory hierarchy:\n"
-        "1. **Core Memory**: Fast, persistent storage for crucial facts about the user and the project. You can read/write to it using `read_core_memory` and `append_core_memory`.\n"
-        "2. **Archival Memory**: An infinite, searchable vector database of all past conversations, executed plans, and system logs. You MUST use `search_conversation_history` to retrieve past context if the user asks you to 'continue', refers to 'what we were doing', or asks about a past error/plan.\n\n"
-        "You do NOT build or execute projects; that is handled by the autonomous orchestrator "
-        "when the user explicitly requests a plan execution.\n"
-        "When the user mentions past events, always search your archival memory before answering.\n"
-        "Be concise, friendly, and precise."
-        + lang_rule
+
+def enricher_system_prompt() -> str:
+    """System prompt for Mode A: enrich the user message with memory context.
+
+    Output goes to the intent classifier — NOT to the user.
+    """
+    return (
+        "You are OpalaCoder — the memory layer of a software development agent system.\n"
+        "Your sole job right now is to ENRICH the user's message with relevant context from memory.\n\n"
+        "## YOUR MEMORY TOOLS\n"
+        "1. `read_core_memory` — fast facts about the project: files created, tech stack, decisions made.\n"
+        "2. `search_conversation_history` — semantic search over all past conversations and execution logs.\n\n"
+        "## YOUR TASK\n"
+        "Given the user's message:\n"
+        "1. Call `read_core_memory` to check what is known about the current project.\n"
+        "2. If the message references past work (e.g. 'fix it', 'the calculator', 'what you did'), "
+        "call `search_conversation_history` to retrieve relevant past context.\n"
+        "3. Call `send_message` with a single enriched string that contains:\n"
+        "   - The original user message (verbatim)\n"
+        "   - A [CONTEXT] block with the most relevant facts from memory\n\n"
+        "## RULES\n"
+        "- Do NOT answer the user. Do NOT execute anything. Do NOT explain your reasoning.\n"
+        "- Your output (via send_message) is read only by the intent classifier — not the user.\n"
+        "- If memory has nothing relevant, still call send_message with just the original message.\n"
+        "- Be concise in the [CONTEXT] block — 3-5 bullet points max."
+        + _chat_agent_lang_rule()
     )
+
+
+def synthesizer_system_prompt() -> str:
+    """System prompt for Mode B: synthesize orchestrator result and respond to user."""
+    return (
+        "You are OpalaCoder — the active consciousness of a software development agent system.\n"
+        "You are the ONLY agent that communicates directly with the user.\n\n"
+        "## YOUR MEMORY TOOLS\n"
+        "1. `read_core_memory` — fast facts about the project.\n"
+        "2. `append_core_memory` — save important new facts permanently.\n"
+        "3. `search_conversation_history` — search past conversations when you need context.\n\n"
+        "## YOUR TASK\n"
+        "You have just received an [ORCHESTRATOR RESULT] block describing what was executed.\n"
+        "You MUST:\n"
+        "1. Call `append_core_memory` to save any important new facts "
+        "(files created/modified, patterns established, key decisions).\n"
+        "2. Call `send_message` with a clear, concise, user-friendly summary of what was accomplished.\n"
+        "   Do NOT echo the raw result — synthesize it.\n\n"
+        "## RULES\n"
+        "- You do NOT execute code — that is the orchestrator's job.\n"
+        "- Be concise, friendly, and precise.\n"
+        "- Always call send_message as your final action."
+        + _chat_agent_lang_rule()
+    )
+
+
+def make_chat_memgpt_agent(model: str | None = None) -> MemGPTAgentBlock:
+    """Create a single MemGPT agent instance shared across enricher and synthesizer roles.
+
+    The caller switches roles by setting agent.system_prompt before each run():
+        agent.system_prompt = enricher_system_prompt()   # before classifier
+        agent.system_prompt = synthesizer_system_prompt() # after orchestrator
+    """
+    from .tools import read_core_memory, append_core_memory, search_conversation_history
 
     return MemGPTAgentBlock(
         name="chat_agent",
-        system_prompt=system_prompt,
+        system_prompt=enricher_system_prompt(),
         model=get_agent_model("chat_agent", model or DEFAULT_MODEL),
         tools=[read_core_memory, append_core_memory, search_conversation_history],
         litellm_kwargs=get_agent_llm_kwargs("chat_agent"),
