@@ -1,0 +1,16 @@
+{
+  "id": "wwebjs__whatsapp-web.js__issue201761",
+  "repo_full": "wwebjs/whatsapp-web.js",
+  "clone_url": "https://github.com/wwebjs/whatsapp-web.js.git",
+  "issue_number": 201761,
+  "issue_title": "window.require(...).canCheckStatusRankingPosterGating is not a function",
+  "issue_body": "## Issue Description\nwhile the app is running, sometimes it sends an error like this:\n\nTypeError: window.require(...).canCheckStatusRankingPosterGating is not a function window.WWebJS.sendMessage\n\n## Reproduction Steps\nthis is an intermittent issue.\n\n1. Start the app\n2. Complete the authentication if you have not done\n3. Keep the app running\n4. The error sometimes comes up\n\n## Code Sample\n```typescript\n\n```\n\n## User Setup\n\n| WhatsApp | Type |\n|---|---|\n| **Account Type** | WhatsApp Business |\n| **Authentication Strategy** | LocalAuth |\n| **WhatsApp Web Version** | 0000000 |\n| **whatsapp-web.js Version** | 1.34.7 |\n\n| Environment | Version |\n|---|---|\n| **Browser Type** | Chrome |\n| **Browser Version** | 146.0.7680.31 |\n| **Phone OS Version** | Android 12 |\n| **Running OS Version** | MacOS 26 |\n| **Node.js Version** | 18.19.0 |\n\n## Checklist\n- [x] **I use the latest released version of whatsapp-web.js.**\n- [x] I have searched existing issues and confirmed this is not a duplicate.\n- [x] I have verified this is a library issue, not a problem with my code.",
+  "issue_url": "https://github.com/wwebjs/whatsapp-web.js/issues/201761",
+  "pr_number": 201762,
+  "pr_url": "https://github.com/wwebjs/whatsapp-web.js/pull/201762",
+  "base_commit": "2dc9466facb027caee19dbf285e0a2763f5373bb",
+  "changed_files": [
+    "src/util/Injected/Utils.js"
+  ],
+  "patch": "@@ -546,9 +546,7 @@ exports.LoadUtils = () => {\n                     messageSecret: window.crypto.getRandomValues(\n                         new Uint8Array(32),\n                     ),\n-                    cannotBeRanked: window\n-                        .require('WAWebStatusGatingUtils')\n-                        .canCheckStatusRankingPosterGating(),\n+                    cannotBeRanked: window.require('WAWebStatusGatingUtils')?.canCheckStatusRankingPosterGating ? window.require('WAWebStatusGatingUtils').canCheckStatusRankingPosterGating() : false,\n                 },\n             );\n "
+}

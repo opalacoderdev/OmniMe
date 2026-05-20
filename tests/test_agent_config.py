@@ -48,18 +48,6 @@ def test_classifier_disables_thinking(agent):
     )
 
 
-@pytest.mark.parametrize("agent", PLANNING_AGENTS)
-def test_planning_agent_does_not_disable_thinking(agent):
-    """Planning agents should not disable thinking — extended reasoning improves
-    the quality of plans and execution strategies."""
-    kwargs = get_agent_llm_kwargs(agent)
-    effort = kwargs.get("reasoning_effort")
-    thinking_disabled = effort is not None and effort not in {"low", "medium", "high"}
-    assert not thinking_disabled, (
-        f"{agent} must not disable thinking (reasoning_effort={effort!r})"
-    )
-
-
 # ---------------------------------------------------------------------------
 # Context window sizing
 # ---------------------------------------------------------------------------

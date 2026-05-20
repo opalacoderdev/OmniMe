@@ -1,66 +1,66 @@
 # OpalaCoder
 
-**OpalaCoder** is an autonomous coding agent with interactive planning, modular execution, and persistent project memory. It is designed to work well with small and less autonomous models while maintaining the feel of a fully autonomous agent. It is built using the **AgenticBlocks.IO** framework.
+**OpalaCoder** is an autonomous coding agent with interactive planning, modular execution, and persistent project memory. It is designed to work well with small local models while maintaining the feel of a fully autonomous agent. Built on the **[AgenticBlocks.IO](https://github.com/gilzamir/agenticblocks)** framework.
 
 ---
 
 ## Features
 
 ### Project-Centric Context Management
-OpalaCoder centers around **projects** rather than transient chat sessions. Every interaction happens within a named project with a fixed filesystem path. This anchors the LLM context, loads only project-relevant skills, scopes all file and terminal operations, and persists history effectively for both small local models and large hosted APIs.
+OpalaCoder centers around **projects** rather than transient chat sessions. Every interaction happens within a named project with a fixed filesystem path. This anchors the LLM context, loads only project-relevant skills, scopes all file and terminal operations, and persists history — keeping prompts small and focused even for constrained local models.
 
-### Advanced Semantic Router (Chain of Thought)
-Uses an LLM for semantic routing with internal reasoning (Chain of Thought). It translates user demands to English internally, correctly deduces the intent, and seamlessly routes execution even for multilingual commands, injecting only the necessary context from specific **Skills** (`skills/*.md`).
-
-### Dynamic Model Selection (Double Inference Architecture)
-OpalaCoder dynamically evaluates task complexity. For trivial tasks, it uses a fast default model (e.g., `ollama/mistral-nemo`). If the task requires architectural refactoring or advanced complex logic, it automatically falls back to a more powerful alternative model configured via API keys.
+### Plan → Execute → Verify Loop
+The agent generates a structured plan (decomposed into typed `Task` objects), executes each task command with a focused `LLMAgentBlock` worker, and verifies the result against actual file contents. If verification fails, corrective tasks are injected and the loop continues.
 
 ### Interactive Planning
-The agent receives a natural language demand, generates a high-level landscape plan, and enters a refinement loop with the user until the plan is approved. The approved plan is then automatically decomposed into executable sub-steps (subplans).
+After generating a high-level plan, OpalaCoder enters a refinement loop with the user. The approved plan is then automatically decomposed into atomic executable steps. Each worker receives a self-contained context block (goal, related files, operational context, command) so it never needs to infer cross-file contracts.
 
-### Execution with Retry & Strategy Routing
-OpalaCoder delegates orchestration to specialized strategies. Small models use a deterministic execution pipeline (DAG), while capable models can use a fully autonomous agent loop. If a sub-step fails, the agent retries (up to a configurable limit) by injecting the previous error into the context for self-correction.
+### Auto-lint Self-Correction
+`edit_file` and `write_file` run `node --check` (JS/TS) or `py_compile` (Python) after every write. Syntax errors are returned as tool output so the worker can self-correct within the same execution loop — no human intervention needed.
 
-### Execution Modes
+### Shadow Git (`/undo`)
+Every project has an isolated shadow git (`.opalacoder/.git`) that checkpoints the codebase automatically before plan execution. `/undo` restores the previous state without touching the user's main git repository.
 
-| Mode   | Behavior |
-|--------|---------------|
-| `plan` | Generates a plan and asks for user approval before executing (default) |
-| `auto` | Executes everything without interruptions — ideal for automated pipelines |
-| `edit` | Requests user confirmation only for sensitive operations (file creation/deletion, network calls, etc.) |
+### Semantic Intent Router
+Uses an LLM classifier to route user messages to the correct handler: `plan`, `question`, `chat`, `greetings`, `resume`, or `command_hint`. Correctly handles multilingual input and status/history questions without misclassifying them as development tasks.
+
+### Dynamic Model Selection
+Evaluates task complexity and automatically uses the `alternative` model (configurable in `agents.yaml`) for tasks that require deeper reasoning.
 
 ### Persistent Projects and CLI Commands
-Each execution belongs to a named project with continuous memory. During the chat with OpalaCoder, you can interact with the state manager using native commands:
-- `/help` or `/h`: Shows available commands.
-- `/clear`: Clears the memory and history of the current project.
-- `/rename <new_name>`: Renames the active project.
-- `/list`: Lists all projects saved in SQLite.
-- `/load <name>` and `/delete <name>`: Loads or deletes old projects. (Deleting also asks to delete the project directory).
-- `/skills`: Lists available skills and highlights the active ones for the project.
-- `/addskill <name>` and `/rmskill <name>`: Adds or removes specific skills for the current project.
-- `/undo`: Reverts the last change made by the agent via internal shadow VCS.
-- `/commit <msg>`: Forces a commit to the local shadow git control.
-- `/exit` or `/quit`: Exits the application.
 
-### Shadow Git (VCS)
-Every project comes with an isolated "Shadow Git" (`.opalacoder/.git`) that automatically checkpoints the codebase before and after execution. This allows for safe iteration without muddying the user's main git repository, and enables the `/undo` command.
-
-### Elegant Terminal
-Formatted output with [Rich](https://github.com/Texel-io/rich): banners, progress spinners, plan panels, per-subplan status tables, and highlighted error reports.
+| Command | Description |
+|---|---|
+| `/help` | Show available commands |
+| `/clear` | Clear memory and history of the current project |
+| `/rename <name>` | Rename the active project |
+| `/list` | List all saved projects |
+| `/load <name>` | Load an existing project |
+| `/delete <name>` | Delete a project (optionally deletes its directory) |
+| `/skills` | List available skills and active ones for the project |
+| `/addskill <name>` / `/rmskill <name>` | Add or remove skills |
+| `/undo` | Revert the last agent change via shadow VCS |
+| `/commit <msg>` | Manually commit to the shadow git |
+| `/exit` / `/quit` | Exit the application |
 
 ### Modular Architecture
-The code is divided into independent, easy-to-debug modules:
 
 ```text
 opalacoder/
-├── config.py       Global settings (model, retries, mode, db, VCS)
-├── terminal.py     Rich output (banners, spinners, panels, tables)
-├── project.py      SQLite project management and state
-├── vcs.py          Internal shadow Git strategies (auto, hybrid, agent-driven)
-├── agents.py       LLM agent factories
-├── planner.py      Pipeline: panorama → refinement → decomposition
-├── orchestrator.py Strategy-based execution (deterministic vs autonomous)
-└── cli.py          Argparse + project bootstrap + REPL
+├── config.py              Global settings (model, retries, git strategy)
+├── terminal.py            Rich output (banners, spinners, panels, tables)
+├── project.py             SQLite project management and state
+├── vcs.py                 Shadow git strategies (auto, hybrid, agent-driven, none)
+├── agents.py              LLM agent factories
+├── planner.py             Panorama → refinement → plan decomposition
+├── orchestrator.py        Strategy registry and base class
+├── workflow_orchestrator.py  WorkflowOrchestratorStrategy (default)
+├── workflow_tools.py      Worker tools: edit_file, read_file, find_symbol, send_message
+├── tools.py               Base tools: write_file, run_command, search_code
+├── code_index.py          Multi-language symbol index (SQLite-backed, incremental)
+├── skills.py              Skill loading, selection, and routing
+├── embeddings.py          Sentence-transformer embeddings for intent fallback
+└── cli.py                 Argparse + project bootstrap + REPL
 ```
 
 ---
@@ -68,39 +68,38 @@ opalacoder/
 ## Requirements
 
 - Python 3.11+
-- [agenticblocks](https://github.com/gilzamir/agenticblocks) installed in the virtual environment
-- [Rich](https://github.com/Texel-io/rich): `pip install rich`
-- An accessible LLM server:
-  - **Ollama Recommended Version**: `0.24.0`
-  - **Recommended Main & Alternative Model**: `ollama/gemma4:latest` (or latest Gemma models)
-  - **Tested models for simpler tasks**: `ollama/ministral-3:14b` and `ollama/mistral-nemo:latest`
-  - Or any model supported by [litellm](https://docs.litellm.ai)
+- [agenticblocks](https://github.com/gilzamir/agenticblocks) (install from source)
+- An Ollama instance with the default model available:
+  - **Default model**: `ministral-3:14b`
+  - **Alternative model** (complex tasks): also `ministral-3:14b` by default; change in `agents.yaml`
+  - Other tested models: `gemma4:latest`, `mistral-nemo:latest`
+  - Any model supported by [litellm](https://docs.litellm.ai) works
+- **Recommended Ollama version**: `0.24.0+`
 
 ---
 
 ## Installation
 
 ```bash
-# Clone the repository
-git clone <repository-url>
+git clone https://github.com/gilzamir/OpalaCoder
 cd OpalaCoder
 
-# Create and activate the virtual environment
 python -m venv .env
 source .env/bin/activate          # Linux/macOS
 # .env\Scripts\activate           # Windows
 
-# Install the dependencies
+# Install agenticblocks from source first
+pip install -e /path/to/agenticblocks
+
+# Install OpalaCoder dependencies
 pip install -r requirements.txt
 ```
 
 ### Environment Variables (Optional)
 
-Create a `.env` file in the project root to override defaults:
-
 ```env
-# Default LLM model (any litellm supported string)
-OPALA_MODEL=ollama/mistral-nemo
+# Override default model (any litellm-supported string)
+OPALA_MODEL=ollama/ministral-3:14b
 ```
 
 ---
@@ -108,27 +107,14 @@ OPALA_MODEL=ollama/mistral-nemo
 ## How to Run
 
 ```bash
-# Activate the virtual environment
 source .env/bin/activate
 
-# Default execution (plan mode)
-python main.py
-
-# Choose execution mode
-python main.py --mode auto
-python main.py --mode plan
-python main.py --mode edit
-
-# Use another model
-python main.py --model ollama/llama3
-
-# Custom database path
-python main.py --db /path/to/projects.db
-
-# Show version
+python main.py                        # default (plan mode)
+python main.py --mode auto            # no interruptions
+python main.py --mode edit            # confirm sensitive operations
+python main.py --model ollama/gemma4  # override model
+python main.py --db /path/to/db       # custom database path
 python main.py --version
-
-# Help
 python main.py --help
 ```
 
@@ -136,76 +122,73 @@ python main.py --help
 
 ## Project Flow
 
-```text
+```
 1. Banner + Mode Selection
-       ↓
 2. Project Configuration
-   ├── New Project   → Name, Path, Description -> LLM selects skills
-   └── Existing      → Load context and skills
-       ↓
+   ├── New  → Name, Path, Description → LLM selects skills
+   └── Load → restore context and skills
 3. User enters demand
-       ↓
-4. Agent generates landscape (high-level plan)
-       ↓
-5. Refinement loop (plan/edit modes)
-   ├── User approves → proceeds
-   └── User suggests changes → agent refines and loops back to step 5
-       ↓
-6. Decomposition into subplans (SP-1, SP-2, …)
-       ↓
-7. Sequential execution by dependency
-   └── For each subplan:
-       ├── Pre-run VCS checkpoint
-       ├── Executes generated code (AgenticBlocks WorkflowGraph)
-       ├── Success → Next subplan
-       └── Failure → Retry up to max_retries, then report error
-       ├── Post-run VCS checkpoint
-       ↓
-8. Aggregation: Final synthesized result of the operation
-       ↓
-9. Result displayed + project saved
+4. Intent classification (plan / question / chat / ...)
+5. [plan] Generate panorama (high-level plan)
+6. Refinement loop — user approves or requests changes
+7. Plan decomposed into Tasks
+8. Pre-execution VCS checkpoint (shadow git)
+9. For each Task → for each command:
+   ├── LLMAgentBlock worker executes with tools
+   ├── edit_file / write_file → auto-lint → self-correction
+   └── send_message terminates worker immediately
+10. Verification oracle reads files on disk
+    ├── done=True  → finish
+    └── done=False → inject correction tasks → back to step 9
+11. Result displayed + project saved
 ```
 
 ---
 
-## Advanced Configuration
+## Configuration (`agents.yaml`)
 
-### Build & Test Commands
-Run tests in the `tests` directory after implementing a new feature:
+The main configuration file. Key fields:
+
+```yaml
+default: ollama/ministral-3:14b      # default model for all agents
+alternative: ollama/ministral-3:14b  # model for complex tasks
+git_strategy: auto                   # auto | hybrid | agent_driven | none
+
+agents:
+  orchestrator:
+    num_ctx: 16384
+    max_heartbeats: 20   # max tasks in the plan
+    strategy: workflow
+  worker:
+    num_ctx: 16384
+    reasoning_effort: "none"  # must stay "none" for tool_calls to be populated
+```
+
+Full per-agent overrides for `temperature`, `max_tokens`, `num_ctx`, `reasoning_effort`, and `debug` are supported for every agent role.
+
+---
+
+## Benchmark
+
+A JS bug-fix benchmark is included in `scripts/`:
 
 ```bash
-python -m pytest
+# Collect instances from GitHub (requires gh CLI authenticated)
+python scripts/collect_jsbench.py --limit 50 --out datasets/jsbench
+
+# Evaluate OpalaCoder on collected instances
+python scripts/eval_jsbench.py --limit 10
 ```
 
-### Change the Default Model
-
-Edit `opalacoder/config.py`:
-
-```python
-DEFAULT_MODEL = "ollama/mistral-nemo"  # change here
-```
-
-Or use the environment variable `OPALA_MODEL`.
-
-### Sensitive Operations
-
-In `opalacoder/config.py`:
-
-```python
-SENSITIVE_OPS = {
-    "write_file", "delete_file", "run_shell",
-    "send_network_request", "create_user", "delete_user",
-    # add keywords here for operations that require confirmation in edit mode
-}
-```
+Results are written to `datasets/jsbench_results.json` with per-instance pass/fail and a summary fix rate.
 
 ---
 
-## Security
+## Build & Test
 
-- The `edit` mode requires explicit confirmation for operations affecting the filesystem, network, or user accounts.
-- Generated code is executed locally. For greater isolation, the `CodePlanExecutorBlock` from the AgenticBlocks library supports execution in a Docker container — edit `make_executor_block` in `opalacoder/agents.py` changing `execution_mode="local"` to `execution_mode="docker"`.
-- Never run the agent in `auto` mode with access to production systems without reviewing the generated subplans.
+```bash
+python -m pytest tests/ -q
+```
 
 ---
 

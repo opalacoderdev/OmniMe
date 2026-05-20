@@ -1,0 +1,16 @@
+{
+  "id": "NSCC-ITC-Assessment__GrillMyCode__issue34",
+  "repo_full": "NSCC-ITC-Assessment/GrillMyCode",
+  "clone_url": "https://github.com/NSCC-ITC-Assessment/GrillMyCode.git",
+  "issue_number": 34,
+  "issue_title": "DEFAULT_ASSIGNMENT_CONTEXT_MAX_CHARS missing",
+  "issue_body": "### Problem area\n\nAction fails to run / exits with an error\n\n### Action version\n\n@main\n\n### AI provider\n\nopenrouter\n\n### Trigger event\n\nworkflow_dispatch\n\n### Expected behaviour\n\nThe action should run without error.\n\n### Actual behaviour\n\nThe following error appeared:\n\nfile:///action/src/inputs.js:14\n  DEFAULT_ASSIGNMENT_CONTEXT_MAX_CHARS,\n  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nSyntaxError: The requested module './constants.js' does not provide an export named 'DEFAULT_ASSIGNMENT_CONTEXT_MAX_CHARS'\n    at #asyncInstantiate (node:internal/modules/esm/module_job:327:21)\n    at async ModuleJob.run (node:internal/modules/esm/module_job:431:5)\n    at async node:internal/modules/esm/loader:636:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\n\n### Relevant workflow snippet\n\n```yaml\nn/a\n```\n\n### Actions run log\n\n```text\n\n```\n\n### Has this ever worked?\n\nYes — it worked before and recently broke\n\n### Additional context\n\n_No response_",
+  "issue_url": "https://github.com/NSCC-ITC-Assessment/GrillMyCode/issues/34",
+  "pr_number": 35,
+  "pr_url": "https://github.com/NSCC-ITC-Assessment/GrillMyCode/pull/35",
+  "base_commit": "214f4be9aa7750f495d80cc06ce89caeb9413947",
+  "changed_files": [
+    "src/constants.js"
+  ],
+  "patch": "@@ -118,6 +118,13 @@ export const COMMENT_REMOVER_BIN = '/usr/local/bin/rmcm';\n  */\n export const MIN_QUESTIONS = 1;\n \n+/**\n+ * Default maximum total characters read from all assignment_context files\n+ * combined. Overridable via the assignment_context_max_chars action input.\n+ * Prevents large files from flooding the prompt.\n+ */\n+export const DEFAULT_ASSIGNMENT_CONTEXT_MAX_CHARS = 20000;\n+\n /**\n  * Azure OpenAI REST API version sent as the api-version query parameter.\n  * Update this when Microsoft releases a newer stable GA version."
+}

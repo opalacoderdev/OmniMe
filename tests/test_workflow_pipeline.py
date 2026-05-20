@@ -94,7 +94,7 @@ async def test_workflow_creates_files(tmp_path, capsys):
     index_html = os.path.join(project_path, "index.html")
     style_css = os.path.join(project_path, "style.css")
 
-    # Oracle sequence: plan call → verify call
+    # Oracle sequence: 1 planner + 1 reviewer per task (2 tasks = 3 oracle calls)
     oracle_calls: list[dict] = []
     oracle_responses = iter([
         _plan_response([
@@ -107,7 +107,8 @@ async def test_workflow_creates_files(tmp_path, capsys):
                        context="index.html has no classes yet — only a bare body reset is needed.",
                        depends_on=["t1"]),
         ]),
-        _verify_done_response("index.html and style.css created successfully."),
+        _verify_done_response("index.html created successfully."),   # review t1
+        _verify_done_response("style.css created successfully."),    # review t2
     ])
 
     async def fake_acompletion(**kwargs):
@@ -175,11 +176,12 @@ async def test_workflow_creates_files(tmp_path, capsys):
     for i, w in enumerate(worker_calls):
         print(f"  [{i}] task: {w['task_description']!r}")
 
-    assert len(oracle_calls) >= 1, "Oracle (planner) was never called."
+    # planner (1) + reviewer per task (2) = 3 oracle calls
+    assert len(oracle_calls) >= 3, f"Expected ≥3 oracle calls (1 planner + 2 reviewers), got {len(oracle_calls)}."
     assert len(worker_calls) == 2, f"Expected 2 worker calls, got {len(worker_calls)}."
     assert Path(index_html).exists(), f"index.html was not created in {project_path}."
     assert Path(style_css).exists(), f"style.css was not created in {project_path}."
-    assert "index.html" in result or "successfully" in result.lower(), \
+    assert "task" in result.lower() or "created" in result.lower() or "completed" in result.lower(), \
         f"Final result does not mention completion: {result!r}"
 
 
@@ -249,7 +251,7 @@ async def test_planner_oracle_receives_snapshot_and_request(tmp_path):
 
 @pytest.mark.anyio
 async def test_verifier_oracle_receives_worker_reports(tmp_path):
-    """The verifier prompt must contain the worker result reports."""
+    """The reviewer oracle prompt must contain the worker result for the reviewed task."""
     project_path = str(tmp_path)
     verify_prompt: list[str] = []
     call_count = [0]
@@ -290,9 +292,9 @@ async def test_verifier_oracle_receives_worker_reports(tmp_path):
             store=FakeStore(),
         )
 
-    assert verify_prompt, "Verifier oracle was never called."
+    assert verify_prompt, "Reviewer oracle was never called."
     assert "Created app.js with console.log." in verify_prompt[0], \
-        "Worker report not present in verifier prompt."
+        "Worker report not present in reviewer prompt."
 
 
 # ---------------------------------------------------------------------------

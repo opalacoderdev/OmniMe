@@ -1,10 +1,10 @@
-default: ollama/gemma4:latest
-alternative: ollama/gemma4:latest
+default: ollama/ministral-3:14b
+alternative: ollama/ministral-3:14b
 
 complexity_inference_mode: double
 git_strategy: auto
 
-heartbeats_scale_factor: 2
+heartbeats_scale_factor: 1
 
 # Global LLM defaults applied to all agents unless overridden below.
 llm_defaults:
@@ -22,8 +22,8 @@ llm_defaults:
 #   landscape_planner    — high-level strategic planner
 #   refinement_agent     — refines plan based on user feedback
 #   skill_selector       — routes request to the appropriate skills
-#   confirmation_agent   — checks if user approved the plan
-#   orchestrator         — autonomous MemGPT agent that executes the approved plan
+#   orchestrator         — drives the plan→execute→review loop (JSON oracle calls)
+#   worker               — LLMAgentBlock that executes each task command with tools
 
 agents:
   # reasoning_effort controls Gemma4's thinking mode on ollama (via litellm mapping).
@@ -68,16 +68,17 @@ agents:
     num_ctx: 4096
     reasoning_effort: "none"
 
-  confirmation_agent:
-    temperature: 0
-    max_tokens: 64
-    num_ctx: 2048
-    reasoning_effort: "none"
-
   orchestrator:
     temperature: 1.0
     num_ctx: 16384
-    max_heartbeats: 100
+    max_heartbeats: 20  # max tasks in the plan; simple fixes use 1-3, complex projects use 5-10
     debug: false
     strategy: workflow
+
+  worker:
+    temperature: 1.0
+    max_tokens: 8128
+    num_ctx: 16384       # larger context so workers see full files when reading
+    reasoning_effort: "none"  # must stay "none": tool_calls field is empty when thinking is on
+    debug: false
 

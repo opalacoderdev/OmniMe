@@ -3,7 +3,13 @@
     "allow": [
       "Bash(grep -A 30 \"checkAndEnforceHardFail\\\\|improve.*loop\\\\|composite.*tool\" /tmp/smallcode/bin/smallcode.js | head -60)",
       "Read(//tmp/smallcode/bin/**)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Read(//home/gilzamir/**)",
+      "Bash(sed -n '/DEBUG PLAN JSON/,/\\\\/DEBUG PLAN JSON/p' /home/gilzamir/log.log)",
+      "Read(//home/gilzamir/micalc/**)"
+    ],
+    "additionalDirectories": [
+      "/home/gilzamir"
     ]
   }
 }

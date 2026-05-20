@@ -1,0 +1,16 @@
+{
+  "id": "goodjoblife__GoodJobShare__issue1695",
+  "repo_full": "goodjoblife/GoodJobShare",
+  "clone_url": "https://github.com/goodjoblife/GoodJobShare.git",
+  "issue_number": 1695,
+  "issue_title": "formatSalaryRange shows 'null' when salary amount is below range size",
+  "issue_body": "## Bug\n\n`formatSalaryRange({ amount: 35000, type: 'month' })` returns `'月薪 null ~ 6萬'` instead of the expected `'月薪 0 ~ 6萬'`.\n\nhttps://www.goodjob.life/companies/%E9%BA%A5%E7%95%B6%E5%8B%9E\n\n<img width=\"1476\" height=\"493\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/932c292f-a517-4e4d-8efc-e773303167df\" />\n\n## Root Cause\n\nIn `src/components/common/formatter.js`, `getSalaryAmountRangeSize('month')` returns `60000` as the range size. For any amount below 60,000:\n\n```\nhead = Math.floor(35000 / 60000) * 60000 = 0\n```\n\n`numToChineseReadableString(0)` returns `null` (it guards `num <= 0`), and the template literal in `formatSalaryAmountRange` converts `null` to the string `\"null\"`.\n\n## Steps to Reproduce\n\n```js\nformatSalaryRange({ amount: 35000, type: 'month' })\n// returns '月薪 null ~ 6萬'\n```\n\n## Expected\n\n```\n'月薪 0 ~ 6萬'\n```",
+  "issue_url": "https://github.com/goodjoblife/GoodJobShare/issues/1695",
+  "pr_number": 1696,
+  "pr_url": "https://github.com/goodjoblife/GoodJobShare/pull/1696",
+  "base_commit": "40bd28bd87ef06948cbe56e85cc4df39b2f97fb8",
+  "changed_files": [
+    "src/utils/formUtils.js"
+  ],
+  "patch": "@@ -3,9 +3,12 @@\n  * @param {Integer} num the number to be converted\n  */\n export const numToChineseReadableString = num => {\n-  if (num <= 0) {\n+  if (num < 0) {\n     return null;\n   }\n+  if (num === 0) {\n+    return '0';\n+  }\n   const base = [1, 10000, 100000000];\n   const baseWord = ['', '萬', '億'];\n "
+}

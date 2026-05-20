@@ -50,8 +50,10 @@ INTENT_ANCHORS = {
     ],
     "question": [
         "how does python work", "what is a closure", "explain react hooks", "why is this happening",
+        "what have we done so far", "what did we change", "what is the current status",
         "como o python funciona", "o que é isso", "explique", "por que isso acontece",
-        "cómo funciona", "qué es", "explica"
+        "o que já fizemos", "qual é o status", "quais mudanças foram feitas",
+        "cómo funciona", "qué es", "explica", "qué hemos hecho"
     ]
 }
 

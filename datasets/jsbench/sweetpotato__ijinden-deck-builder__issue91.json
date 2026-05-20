@@ -1,0 +1,16 @@
+{
+  "id": "sweetpotato__ijinden-deck-builder__issue91",
+  "repo_full": "sweetpotato/ijinden-deck-builder",
+  "clone_url": "https://github.com/sweetpotato/ijinden-deck-builder.git",
+  "issue_number": 91,
+  "issue_title": "TypeError: manualChunks is not a function の解消",
+  "issue_body": "https://github.com/sweetpotato/ijinden-deck-builder/actions/runs/25966969614/job/76332139081\n\n```\nRun npm run build\n> ijinden-deck-builder@0.0.0 build\n> vite build\nvite v8.0.13 building client environment for production...\nWarning: Invalid output options (1 issue found)\n- For the \"manualChunks\". Invalid type: Expected Function but received Object. \n\ntransforming...✓ 464 modules transformed.\n<anonymous_script>:0\nTypeError: manualChunks is not a function\n    at name (file:///home/runner/work/ijinden-deck-builder/ijinden-deck-builder/node_modules/rolldown/dist/shared/rolldown-build-BVD3dIdE.mjs:3067:10)\n    at name (file:///home/runner/work/ijinden-deck-builder/ijinden-deck-builder/node_modules/rolldown/dist/shared/rolldown-build-BVD3dIdE.mjs:3078:54)\nNode.js v24.15.0\nError: Process completed with exit code 1.\n```\n",
+  "issue_url": "https://github.com/sweetpotato/ijinden-deck-builder/issues/91",
+  "pr_number": 92,
+  "pr_url": "https://github.com/sweetpotato/ijinden-deck-builder/pull/92",
+  "base_commit": "1e62b20adfedb639dd26031d6d5aeec706b0920d",
+  "changed_files": [
+    "vite.config.js"
+  ],
+  "patch": "@@ -16,8 +16,25 @@ export default defineConfig({\n         }),\n       ],\n       output: {\n-        manualChunks: {\n-          vendor: ['dexie', 'react-dom/client', 'react-router'],\n+        codeSplitting: {\n+          groups: [\n+            {\n+              name: 'cards',\n+              test: 'cards.json',\n+            },\n+            {\n+              name: 'dexie',\n+              test: 'dexie',\n+            },\n+            {\n+              name: 'react-dom',\n+              test: 'react-dom',\n+            },\n+            {\n+              name: 'react-reconciler',\n+              test: 'react-reconciler',\n+            },\n+          ],\n         },\n       },\n     },"
+}

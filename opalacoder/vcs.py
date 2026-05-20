@@ -48,14 +48,12 @@ class VersionControlStrategy(ABC):
 
 # ─── Shadow Git Helper ────────────────────────────────────────────────────────
 
-def _run_shadow_git(command: str) -> subprocess.CompletedProcess:
+def _run_shadow_git(command: str, project_path: str | None = None) -> subprocess.CompletedProcess:
     """Run a Git command using the internal shadow git directory."""
-    project_path = get_project_path()
+    if project_path is None:
+        project_path = get_project_path()
     shadow_dir = os.path.join(project_path, ".opalacoder", ".git")
-    
-    # Ensure git dir config is passed
     full_cmd = f"git --git-dir={shadow_dir} --work-tree={project_path} {command}"
-    
     return subprocess.run(
         full_cmd,
         shell=True,
@@ -89,10 +87,10 @@ def _init_shadow_git(project_path: str):
         _run_shadow_git("add .")
         _run_shadow_git("commit -m 'Initial checkpoint (Auto)'")
 
-def _auto_checkpoint(message: str):
+def _auto_checkpoint(message: str, project_path: str | None = None):
     """Automatically create a checkpoint in the shadow git."""
-    _run_shadow_git("add .")
-    res = _run_shadow_git(f"commit -m '{message}'")
+    _run_shadow_git("add .", project_path)
+    res = _run_shadow_git(f"commit -m '{message}'", project_path)
     return res.returncode == 0
 
 
@@ -124,80 +122,77 @@ def git_commit(message: str) -> str:
 
 class AutoGitStrategy(VersionControlStrategy):
     """Deterministic mode: Shadow Git initialized, pre/post checkpoints enforced, NO tools given to agent."""
-    
+
     def setup(self):
         _init_shadow_git(self.project_path)
-        T.info("Modo Auto VCS: Repositório interno inicializado/verificado.")
 
     def pre_run(self, context_msg: str):
-        _auto_checkpoint("Pre-run checkpoint: Before executing plan")
-        
+        _auto_checkpoint("Pre-run checkpoint: Before executing plan", self.project_path)
+
     def post_run(self, success: bool, msg: str = ""):
         status = "Success" if success else "Failed"
-        _auto_checkpoint(f"Post-run checkpoint: {status}. {msg}")
+        _auto_checkpoint(f"Post-run checkpoint: {status}. {msg}", self.project_path)
 
     def get_tools(self) -> List[Callable]:
-        return []  # No tools for the agent in auto mode
+        return []
 
     def manual_commit(self, message: str) -> tuple[bool, str]:
-        _run_shadow_git("add .")
-        res = _run_shadow_git(f"commit -m '{message}'")
+        _run_shadow_git("add .", self.project_path)
+        res = _run_shadow_git(f"commit -m '{message}'", self.project_path)
         if res.returncode == 0:
             return True, "Committed."
         return False, res.stderr
 
     def undo_last(self) -> tuple[bool, str]:
-        res = _run_shadow_git("rev-parse HEAD~1")
+        res = _run_shadow_git("rev-parse HEAD~1", self.project_path)
         if res.returncode != 0:
             return False, "Cannot undo. No previous checkpoints."
-        _run_shadow_git("reset --hard HEAD~1")
-        _run_shadow_git("clean -fd")
+        _run_shadow_git("reset --hard HEAD~1", self.project_path)
+        _run_shadow_git("clean -fd", self.project_path)
         return True, "Last change undone."
 
 
 class HybridGitStrategy(VersionControlStrategy):
     """Hybrid mode: Shadow Git initialized, agent has tools, orchestrator ensures safety checkpoints."""
-    
+
     def setup(self):
         _init_shadow_git(self.project_path)
-        T.info("Modo Hybrid VCS: Repositório interno pronto. Agente tem ferramentas de Git.")
 
     def pre_run(self, context_msg: str):
-        _auto_checkpoint("Pre-run checkpoint: Before executing plan")
-        
+        _auto_checkpoint("Pre-run checkpoint: Before executing plan", self.project_path)
+
     def post_run(self, success: bool, msg: str = ""):
         status = "Success" if success else "Failed"
-        _auto_checkpoint(f"Post-run checkpoint: {status}. {msg}")
+        _auto_checkpoint(f"Post-run checkpoint: {status}. {msg}", self.project_path)
 
     def get_tools(self) -> List[Callable]:
         return [git_status, git_diff, git_commit]
 
     def manual_commit(self, message: str) -> tuple[bool, str]:
-        _run_shadow_git("add .")
-        res = _run_shadow_git(f"commit -m '{message}'")
+        _run_shadow_git("add .", self.project_path)
+        res = _run_shadow_git(f"commit -m '{message}'", self.project_path)
         if res.returncode == 0:
             return True, "Committed."
         return False, res.stderr
 
     def undo_last(self) -> tuple[bool, str]:
-        res = _run_shadow_git("rev-parse HEAD~1")
+        res = _run_shadow_git("rev-parse HEAD~1", self.project_path)
         if res.returncode != 0:
             return False, "Cannot undo. No previous checkpoints."
-        _run_shadow_git("reset --hard HEAD~1")
-        _run_shadow_git("clean -fd")
+        _run_shadow_git("reset --hard HEAD~1", self.project_path)
+        _run_shadow_git("clean -fd", self.project_path)
         return True, "Last change undone."
 
 
 class AgentDrivenGitStrategy(VersionControlStrategy):
     """Agent-driven mode: Orchestrator does nothing automatically. Agent gets tools and decides when to use them."""
-    
+
     def setup(self):
         _init_shadow_git(self.project_path)
-        T.info("Modo Agent-Driven VCS: Agente tem controle total sobre o repositório interno.")
 
     def pre_run(self, context_msg: str):
         pass
-        
+
     def post_run(self, success: bool, msg: str = ""):
         pass
 
@@ -205,18 +200,18 @@ class AgentDrivenGitStrategy(VersionControlStrategy):
         return [git_status, git_diff, git_commit]
 
     def manual_commit(self, message: str) -> tuple[bool, str]:
-        _run_shadow_git("add .")
-        res = _run_shadow_git(f"commit -m '{message}'")
+        _run_shadow_git("add .", self.project_path)
+        res = _run_shadow_git(f"commit -m '{message}'", self.project_path)
         if res.returncode == 0:
             return True, "Committed."
         return False, res.stderr
 
     def undo_last(self) -> tuple[bool, str]:
-        res = _run_shadow_git("rev-parse HEAD~1")
+        res = _run_shadow_git("rev-parse HEAD~1", self.project_path)
         if res.returncode != 0:
             return False, "Cannot undo. No previous checkpoints."
-        _run_shadow_git("reset --hard HEAD~1")
-        _run_shadow_git("clean -fd")
+        _run_shadow_git("reset --hard HEAD~1", self.project_path)
+        _run_shadow_git("clean -fd", self.project_path)
         return True, "Last change undone."
 
 

@@ -1,0 +1,18 @@
+{
+  "id": "404-PF__New-Tab__issue235",
+  "repo_full": "404-PF/New-Tab",
+  "clone_url": "https://github.com/404-PF/New-Tab.git",
+  "issue_number": 235,
+  "issue_title": "Modern font and color pickers fire duplicate change events",
+  "issue_body": "## Summary\n\nThe custom font and color pickers notify listeners twice for a single selection.\n\n## Problem\n\n`ModernFontPicker.selectFont()` and `ModernColorPicker.selectColor()` already dispatch a change/input event on the original control. The bootstrap callbacks in `initModernFontPickers()` and `initModernColorPickers()` dispatch the same event again, so downstream handlers can run twice.\n\n## Expected\n\nEach selection should emit one update event.\n\n## Steps to Reproduce\n\n1. Open Settings.\n2. Change a font or color using the modern picker.\n3. Observe duplicate save/render behavior in any listener attached to the original control.\n\n## Acceptance Criteria\n\n- [ ] Font selection emits one change event.\n- [ ] Color selection emits one input event.\n- [ ] Duplicate downstream updates are removed.\n\n## Notes\n\nThis is redundant event dispatch, not a UI refresh issue.",
+  "issue_url": "https://github.com/404-PF/New-Tab/issues/235",
+  "pr_number": 276,
+  "pr_url": "https://github.com/404-PF/New-Tab/pull/276",
+  "base_commit": "7df555fd83fb54492e82101aa66be237f0f3bcec",
+  "changed_files": [
+    "src/ui/color-picker.js",
+    "src/ui/font-picker.js",
+    "tests/settings.test.js"
+  ],
+  "patch": "@@ -208,11 +208,6 @@ function initModernColorPickers() {\n     const picker = new ModernColorPicker({\n       element: input,\n       defaultColor: input.value || '#ffffff',\n-      onColorSelect: (color) => {\n-        // Trigger any existing handlers\n-        const event = new Event('input', { bubbles: true });\n-        input.dispatchEvent(event);\n-      }\n     });\n     colorPickers.push(picker);\n   });\n@@ -266,11 +266,6 @@ function initModernFontPickers() {\n     const picker = new ModernFontPicker({\n       element: select,\n       defaultFont: select.value || '-apple-system, BlinkMacSystemFont, \\'Segoe UI\\', Roboto, sans-serif',\n-      onFontSelect: (font) => {\n-        // Trigger any existing handlers\n-        const event = new Event('change', { bubbles: true });\n-        select.dispatchEvent(event);\n-      }\n     });\n     fontPickers.push(picker);\n   });\n@@ -6,6 +6,8 @@ import vm from 'vm';\n import { injectScript } from './helpers/inject-script.js';\n \n beforeAll(() => {\n+  injectScript('src/ui/color-picker.js');\n+  injectScript('src/ui/font-picker.js');\n   injectScript('src/ui/settings.js');\n });\n \n@@ -126,6 +128,38 @@ describe('Utility functions', () => {\n   });\n });\n \n+describe('Modern picker events', () => {\n+  it('emits one change event for font selection', () => {\n+    const events = [];\n+    const fontSelect = document.getElementById('clock-font-picker');\n+\n+    fontSelect.addEventListener('change', () => {\n+      events.push('change');\n+    });\n+\n+    initModernFontPickers();\n+    document.querySelector('.font-option').click();\n+\n+    expect(events).toHaveLength(1);\n+  });\n+\n+  it('emits one input event for color selection', () => {\n+    const events = [];\n+    const colorInput = document.getElementById('clock-color-picker');\n+    colorInput.type = 'color';\n+    colorInput.value = '#000000';\n+\n+    colorInput.addEventListener('input', () => {\n+      events.push('input');\n+    });\n+\n+    initModernColorPickers();\n+    document.querySelector('.color-chip').click();\n+\n+    expect(events).toHaveLength(1);\n+  });\n+});\n+\n describe('applyBg stale background regression', () => {\n   beforeEach(() => {\n     localStorage.setItem('homepageBg', 'stale-bg-id');"
+}

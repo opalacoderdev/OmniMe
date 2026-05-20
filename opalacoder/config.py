@@ -41,7 +41,7 @@ def _load_agents_config() -> dict:
 _AGENTS_CONFIG = _load_agents_config()
 
 # Model used for all agents (can be overridden via CLI --model)
-DEFAULT_MODEL = _AGENTS_CONFIG.get("default", os.getenv("OPALA_MODEL", "ollama/mistral-nemo"))
+DEFAULT_MODEL = _AGENTS_CONFIG.get("default", os.getenv("OPALA_MODEL", "ollama/ministral-3:14b"))
 ALTERNATIVE_MODEL = _AGENTS_CONFIG.get("alternative", "gemini/gemini-3.1-flash-lite")
 
 # Global LLM defaults (temperature, max_tokens, num_ctx) — can be set in agents.yaml

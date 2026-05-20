@@ -1,12 +1,10 @@
 """Tests for the plan refinement loop (planner.refine_plan).
 
 Verifies that:
-1. refine_plan is actually called by run_pipeline
-2. Immediate approval (fast-path) returns the plan unchanged
-3. Empty Enter approves immediately
-4. A feedback cycle correctly refines the plan and the LLM is called
-5. Cancellation (UserCancelled) propagates correctly
-6. refine_plan receives the correct session/store objects from run_pipeline
+1. Immediate approval (fast-path) returns the plan unchanged
+2. Empty Enter approves immediately
+3. A feedback cycle correctly refines the plan and the LLM is called
+4. Cancellation (UserCancelled) propagates correctly
 """
 
 import asyncio
@@ -62,31 +60,7 @@ def _common_patches():
 
 
 # ---------------------------------------------------------------------------
-# 1. refine_plan is called by run_pipeline
-# ---------------------------------------------------------------------------
-
-def test_orchestrator_calls_refine_plan():
-    """_plan_and_refine must invoke refine_plan (the plan refinement loop)."""
-    project = _make_project()
-    store = _make_store()
-    mock_refine = AsyncMock(return_value="approved plan")
-
-    with (
-        patch("opalacoder.planner.generate_panorama", new=AsyncMock(return_value="Phase 1: Do stuff")),
-        patch("opalacoder.planner.refine_plan", new=mock_refine),
-        patch("opalacoder.autonomous_orchestrator.T.section"),
-        patch("builtins.open", MagicMock()),
-        patch("os.makedirs", MagicMock()),
-    ):
-        from opalacoder.orchestrator import AutonomousOrchestratorStrategy
-        strategy = AutonomousOrchestratorStrategy(model="fake/model")
-        _run(strategy._plan_and_refine("build a calculator", "", project, store))
-
-    mock_refine.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# 2. Fast-path approval: plan returned unchanged
+# 1. Fast-path approval: plan returned unchanged
 # ---------------------------------------------------------------------------
 
 def test_refine_plan_fast_approval_returns_unchanged():
@@ -119,7 +93,7 @@ def test_refine_plan_fast_approval_returns_unchanged():
 
 
 # ---------------------------------------------------------------------------
-# 3. Empty Enter = fast approval
+# 2. Empty Enter = fast approval
 # ---------------------------------------------------------------------------
 
 def test_refine_plan_empty_enter_approves():
@@ -150,7 +124,7 @@ def test_refine_plan_empty_enter_approves():
 
 
 # ---------------------------------------------------------------------------
-# 4. One refinement cycle: feedback → LLM refines → user approves
+# 3. One refinement cycle: feedback → LLM refines → user approves
 # ---------------------------------------------------------------------------
 
 def test_refine_plan_one_cycle_then_approve():
@@ -192,7 +166,7 @@ def test_refine_plan_one_cycle_then_approve():
 
 
 # ---------------------------------------------------------------------------
-# 5. Cancellation propagates UserCancelled
+# 4. Cancellation propagates UserCancelled
 # ---------------------------------------------------------------------------
 
 def test_refine_plan_cancel_raises():
@@ -221,32 +195,3 @@ def test_refine_plan_cancel_raises():
                 store=store,
             ))
 
-
-# ---------------------------------------------------------------------------
-# 6. run_pipeline forwards the real project and store to refine_plan
-# ---------------------------------------------------------------------------
-
-def test_orchestrator_passes_correct_session_and_store():
-    """_plan_and_refine must forward its project and store objects into refine_plan."""
-    project = _make_project(name="my_proj")
-    store = _make_store()
-    captured = {}
-
-    async def fake_refine(request, plan_text, model, session, store_arg):
-        captured["session"] = session
-        captured["store"] = store_arg
-        return plan_text
-
-    with (
-        patch("opalacoder.planner.generate_panorama", new=AsyncMock(return_value="Phase 1")),
-        patch("opalacoder.planner.refine_plan", new=fake_refine),
-        patch("opalacoder.autonomous_orchestrator.T.section"),
-        patch("builtins.open", MagicMock()),
-        patch("os.makedirs", MagicMock()),
-    ):
-        from opalacoder.orchestrator import AutonomousOrchestratorStrategy
-        strategy = AutonomousOrchestratorStrategy(model="fake/model")
-        _run(strategy._plan_and_refine("do stuff", "", project, store))
-
-    assert captured.get("session") is project, "refine_plan received wrong session object"
-    assert captured.get("store") is store, "refine_plan received wrong store object"

@@ -26,11 +26,14 @@ _DECOMPOSE_HINT = (
     description=(
         "Atomic find-replace inside a file, followed by an automatic syntax/lint check. "
         "Provide the exact text to replace (old_str) and its replacement (new_str). "
-        "old_str must appear exactly once in the file. "
+        "To DELETE a line entirely, set new_str to an empty string and old_str to the full line content "
+        "(including the newline if needed), and use the `line` parameter to target the right occurrence. "
+        "If old_str appears on multiple lines, supply the optional `line` parameter (1-based) "
+        "to target the specific occurrence near that line number. "
         "Prefer this over the read_file + write_file sequence — it is more reliable for small models."
     ),
 )
-def edit_file(path: str, old_str: str, new_str: str) -> str:
+def edit_file(path: str, old_str: str, new_str: str, line: int = 0) -> str:
     resolved = _resolve_path(path)
     AGENT_PROGRESS.update("edit_file", f"path={_preview(resolved)}")
 
@@ -45,13 +48,39 @@ def edit_file(path: str, old_str: str, new_str: str) -> str:
     count = content.count(old_str)
     if count == 0:
         return f"Error: old_str not found in {path}. Double-check the exact text to replace."
-    if count > 1:
-        return (
-            f"Error: old_str matches {count} locations in {path}. "
-            "Add more surrounding context to make it unique."
-        )
 
-    new_content = content.replace(old_str, new_str, 1)
+    if count > 1:
+        if line <= 0:
+            return (
+                f"Error: old_str matches {count} locations in {path}. "
+                "Supply the `line` parameter (1-based line number) to target the right occurrence, "
+                "or add more surrounding context to make old_str unique."
+            )
+        # Find the occurrence closest to the given line number
+        lines = content.splitlines(keepends=True)
+        # Build character offset for each line start
+        offsets = []
+        pos = 0
+        for ln in lines:
+            offsets.append(pos)
+            pos += len(ln)
+
+        target_offset = offsets[min(line - 1, len(offsets) - 1)]
+        # Find all occurrence positions
+        positions = []
+        search_from = 0
+        while True:
+            idx = content.find(old_str, search_from)
+            if idx == -1:
+                break
+            positions.append(idx)
+            search_from = idx + 1
+
+        # Pick the occurrence closest to target_offset
+        best = min(positions, key=lambda p: abs(p - target_offset))
+        new_content = content[:best] + new_str + content[best + len(old_str):]
+    else:
+        new_content = content.replace(old_str, new_str, 1)
     try:
         with open(resolved, "w", encoding="utf-8") as f:
             f.write(new_content)

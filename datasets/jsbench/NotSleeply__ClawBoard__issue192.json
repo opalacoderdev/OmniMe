@@ -1,0 +1,16 @@
+{
+  "id": "NotSleeply__ClawBoard__issue192",
+  "repo_full": "NotSleeply/ClawBoard",
+  "clone_url": "https://github.com/NotSleeply/ClawBoard.git",
+  "issue_number": 192,
+  "issue_title": "fix: playNotificationSound 重复定义导致通知静音 + registerGlobalShortcut 重复调用覆盖用户配置",
+  "issue_body": "## 问题描述\n\n两个相关 bug 影响通知和快捷键功能：\n\n### Bug 1: playNotificationSound 重复定义\n\nsrc/main/index.js 中 playNotificationSound 函数被定义了两次：\n\n1. **第一次定义**（约第 2200 行附近）：包含跨平台声音播放逻辑（调用 Platform.getNotificationSoundCommand() + exec），是真正可用的实现。\n2. **第二次定义**（文件末尾附近）：函数体只是 \return { success: true }，什么都不做。\n\n由于 JS 的函数提升机制，第二次定义覆盖了第一次，导致**通知声音永远无法播放**，静默失败。\n\n### Bug 2: registerGlobalShortcut 重复调用\n\n^Gpp.whenReady() 回调中，\registerGlobalShortcut 被调用了两次：\n\n\\\\\\js\n// 第一次调用，传入用户设置\nregisterGlobalShortcut(settings);\n\n// ... 中间有其他初始化代码 ...\n\n// 第二次调用，无参数！使用默认快捷键覆盖\nregisterGlobalShortcut();\n\\\\\\\n\n第二次调用会先 unregister 用户配置的快捷键，再注册默认的 \\CommandOrControl+Shift+V\\，导致**用户自定义快捷键配置被覆盖**。\n\n## 复现步骤\n\n### Bug 1\n1. 设置 → 开启通知声音\n2. 复制内容触发通知\n3. 通知弹出但无声音\n\n### Bug 2\n1. 设置 → 修改全局快捷键为自定义值\n2. 重启应用\n3. 自定义快捷键不生效，被还原为默认值\n\n## 修复方案\n\n- 删除 \\playNotificationSound\\ 的第二次空定义\n- 删除 \\\registerGlobalShortcut()\\ 的第二次无参调用",
+  "issue_url": "https://github.com/NotSleeply/ClawBoard/issues/192",
+  "pr_number": 193,
+  "pr_url": "https://github.com/NotSleeply/ClawBoard/pull/193",
+  "base_commit": "ae6bb44f20bc828b16888a9d3687bf442663bd83",
+  "changed_files": [
+    "src/main/index.js"
+  ],
+  "patch": "@@ -2178,9 +2178,6 @@ app.whenReady().then(async () => {\n   // 注册 IPC\n   setupIPC();\n \n-  // 注册全局快捷键 Ctrl+Shift+V\n-  registerGlobalShortcut();\n-\n   app.on(\"activate\", () => {\n     if (BrowserWindow.getAllWindows().length === 0) {\n       createWindow();\n@@ -2691,17 +2688,6 @@ ipcMain.handle(\"update-shortcut\", async (event, shortcut) => {\n   }\n });\n \n-// v0.29.0: 通知与声音功能\n-// 播放提示音\n-function playNotificationSound() {\n-  try {\n-    // Electron Notification 使用系统默认音效，silent 参数控制是否静音\n-    return { success: true };\n-  } catch (e) {\n-    log.error(\"播放提示音失败:\", e);\n-  }\n-}\n-\n // 获取通知设置\n ipcMain.handle(\"get-notification-settings\", async () => {\n   try {"
+}

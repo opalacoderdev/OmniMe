@@ -1,0 +1,17 @@
+{
+  "id": "GeneGulanesJr__LaPis__issue58",
+  "repo_full": "GeneGulanesJr/LaPis",
+  "clone_url": "https://github.com/GeneGulanesJr/LaPis.git",
+  "issue_number": 58,
+  "issue_title": "Test: code-analysis pr-risk signal values exceed 1.0 threshold",
+  "issue_body": "## Problem\n\n`test/code-analysis.test.js` test \"should compute risk profile with signal breakdown\" has a flaky assertion:\n\n```javascript\nexpect(r.signals[key]).toBeLessThanOrEqual(1);\n```\n\nThis fails when the local repo has uncommitted changes, because `changed_files` becomes an unbounded count (e.g., 2 files changed → signal value 2, which exceeds the 1.0 threshold).\n\n## Root cause\nThe `pr-risk` command computes `changed_files` as a raw count, not a normalized 0-1 signal. When there are uncommitted changes in the working directory, `changed_files` can be any positive integer, violating the test expectation that all signals are ≤ 1.0.\n\n## Fix options\n1. Normalize `changed_files` to a 0-1 range (e.g., `min(changed_files / max_changed_files, 1)`)\n2. Skip the `≤ 1` assertion for `changed_files` (it is intentionally a raw count in some contexts)\n3. Mock the git state in the test so `changed_files` is deterministic\n\n## Labels\nbug, P3",
+  "issue_url": "https://github.com/GeneGulanesJr/LaPis/issues/58",
+  "pr_number": 62,
+  "pr_url": "https://github.com/GeneGulanesJr/LaPis/pull/62",
+  "base_commit": "9b363a145c2d6b4fc8d2af7fa00a76881c747240",
+  "changed_files": [
+    "code-analysis.js",
+    "test/code-analysis.test.js"
+  ],
+  "patch": "@@ -1994,7 +1994,7 @@ function getPrRiskProfile(db, repoId, opts = {}) {\n   }\n \n   if (changedSymbolIds.size === 0) {\n-    return { signals: { changed_files: changedFiles.length }, risk_level: 'low', composite: 0.1 };\n+    return { signals: {}, risk_level: 'low', composite: 0.1, changed_files: changedFiles.length };\n   }\n \n   // Signal 1: Blast radius (30%) — batch computation for >20 symbols\n@@ -368,8 +368,8 @@ describe('code-analysis: pr-risk (v6)', () => {\n   it('should report changed files and symbols count', () => {\n     const r = run(`pr-risk --repo ${REPO}`);\n     expect(r.error).toBeUndefined();\n-    // pr-risk returns { signals: { changed_files }, risk_level, composite }\n-    // changed_files may be nested inside signals\n+    // pr-risk returns { signals: {}, risk_level, composite, changed_files }\n+    // changed_files is a top-level field\n     const changedFiles = r.changed_files ?? r.signals?.changed_files;\n     expect(changedFiles !== undefined || r.note !== undefined).toBe(true);\n   });"
+}

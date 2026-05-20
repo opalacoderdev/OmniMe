@@ -77,9 +77,12 @@ Read each category carefully — they have clear, non-overlapping definitions.
   No task is being requested.
   Examples: "hi", "thanks", "bye", "good morning".
 
-- "question": The user is asking for an explanation, concept clarification, or information
-  about code — WITHOUT requesting that anything be written, changed, or executed.
-  Examples: "what does async mean?", "how does this function work?".
+- "question": The user is asking for an explanation, concept clarification, information
+  about code, OR asking about the history/status of the project/conversation — WITHOUT
+  requesting that anything be written, changed, or executed on disk.
+  Examples: "what does async mean?", "how does this function work?",
+  "what have we done so far?", "what did we change in this project?",
+  "what is the current status?", "what changes were made?".
 
 - "plan": The user wants a COMPLETELY NEW feature, project, or bug fix to be built, changed, or deleted on disk.
   Examples: "create a calculator", "fix the login bug", "add a dark mode".

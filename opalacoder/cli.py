@@ -371,26 +371,8 @@ async def run_pipeline(
             f"[USER REQUEST]:\n{request}\n[END USER REQUEST]"
         )
 
-    from .profiles import load_profiles, resolve_profile
-    from .profile_executor import ProfileExecutorStrategy
-
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    global_profiles = load_profiles(os.path.join(repo_root, "profiles"))
-
-    local_profiles = {}
-    if hasattr(project, "project_path") and project.project_path:
-        local_profiles = load_profiles(os.path.join(project.project_path, "profiles"))
-
-    profiles = {**global_profiles, **local_profiles}
-    selected_profile = await resolve_profile(request, profiles, model)
-
-    if selected_profile and selected_profile in profiles:
-        T.section(_("execution_profile_selected"))
-        T.info(f"Profile: {selected_profile}")
-        orchestrator = ProfileExecutorStrategy(model=model, profile_data=profiles[selected_profile])
-    else:
-        strategy_name = get_agent_strategy("orchestrator")
-        orchestrator = get_orchestrator(strategy_name, model)
+    strategy_name = get_agent_strategy("orchestrator")
+    orchestrator = get_orchestrator(strategy_name, model)
 
     final_response = await orchestrator.run(
         user_request=enriched_request,

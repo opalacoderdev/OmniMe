@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 
 import litellm
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, field_validator
 from rich.live import Live
 
 from agenticblocks.blocks.llm.agent import AgentInput, LLMAgentBlock
@@ -63,6 +63,15 @@ class Task(BaseModel):
     related_files: list[str]  # files the worker must read before acting
     context: str        # operational detail: classes, IDs, APIs, contracts between files
     depends_on: list[str] = []  # ids of tasks that must complete before this one
+    status: str = "pending"    # pending | done | failed
+    failure_count: int = 0     # incremented each time planner-review marks done=False
+
+    @field_validator("context", mode="before")
+    @classmethod
+    def _coerce_context(cls, v):
+        if not isinstance(v, str):
+            return json.dumps(v)
+        return v
 
 
 def _validate_task(task: Task) -> str | None:
@@ -95,7 +104,10 @@ class PlanOutput(BaseModel):
 class VerifyOutput(BaseModel):
     done: bool
     summary: str              # past-tense if done; what's missing otherwise
-    corrections: list[Task]   # empty when done=True
+    corrections: list[Task]   # new tasks to add to the plan when done=False
+
+
+MAX_TASK_FAILURES = 3   # abort plan after this many failed review cycles per task
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +231,8 @@ async def _oracle(
             resp = await litellm.acompletion(
                 model=model, messages=messages, **kwargs
             )
-            content = (resp.choices[0].message.content or "").strip()
+            msg = resp.choices[0].message
+            content = (msg.content or "").strip()
             T.debug_oracle(schema.__name__, attempt, content)
             # Strip markdown fences if present
             if content.startswith("```"):
@@ -248,6 +261,7 @@ async def _oracle(
             messages.append({"role": "assistant", "content": content if "content" in dir() else ""})
         except Exception as e:
             last_error = str(e)
+            T.debug_oracle_error(schema.__name__, attempt, last_error, "")
 
     return None
 
@@ -272,6 +286,8 @@ describing what you would do. Do NOT produce a plan as text. CALL THE TOOLS DIRE
 PREFERRED TOOLS:
 - read_file       : token-aware read — call BEFORE editing any file
 - edit_file       : atomic find-replace + auto-lint — prefer over read+write
+                    use the `line` param when old_str appears more than once
+                    to DELETE a line: old_str=<full line>, new_str="", line=<line number>
 - find_symbol     : symbol graph lookup for function/class analysis
 - write_file      : only for new files or full rewrites
 - run_command     : lint, compile, install — NEVER start servers
@@ -370,9 +386,19 @@ Hard rules:
 - NEVER create tasks like "gather requirements", "clarify scope", or "ask the user".
 - Every task MUST be a concrete file action (create, edit, run).
 - If the request is vague, choose sensible defaults and implement them.
+- For redeclaration errors (SyntaxError: redeclaration / already declared): the fix is to
+  DELETE the duplicate declaration line using edit_file with new_str="". Never change const→let or
+  let→var — that keeps the duplicate. Command must be: "delete line N using edit_file(old_str=<line content>, new_str='', line=N)".
 """
 
-    def _verifier_system(self, project_context: str) -> str:
+    def _reviewer_system(self, project_context: str) -> str:
+        """System prompt for the planner-review oracle.
+
+        Called after each task completes. Receives the current plan (JSON),
+        the worker feedback for one task, and the actual file contents.
+        Returns VerifyOutput: done=True marks the task done; done=False adds
+        correction tasks to the plan.
+        """
         proj_path = "."
         if project_context:
             m = re.search(r"PATH:\s*(.+?)\]", project_context)
@@ -381,31 +407,39 @@ Hard rules:
         correction_example = json.dumps({
             "id": "c1",
             "goal": "Add missing .btn-equals selector to style.css",
-            "commands": ["Add .btn-equals {{ background:#e94560; color:#fff; }} to the end of style.css"],
+            "commands": ["Add .btn-equals { background:#e94560; color:#fff; } to the end of style.css"],
             "related_files": ["style.css", "index.html"],
-            "context": "index.html has a button with class btn-equals and id='equals'. style.css already has .btn-clear and .btn-number but is missing .btn-equals.",
-            "depends_on": []
+            "context": (
+                "index.html has a button with class btn-equals and id='equals'. "
+                "style.css already has .btn-clear and .btn-number but is missing .btn-equals."
+            ),
+            "depends_on": [],
+            "status": "pending",
+            "failure_count": 0,
         }, indent=2)
 
         return f"""\
-You are a code reviewer for the project at `{proj_path}`.
-You will receive the user request, the worker reports, AND the ACTUAL FILE CONTENTS
-written to disk. Base your verdict on the real file contents — not on the worker's
-self-reported summary.
+You are a task reviewer for the project at `{proj_path}`.
+You receive: the current task (from the plan), the worker's result, and the actual
+file contents written to disk.
+
+Your job: decide whether THIS SPECIFIC TASK is done.
 
 Rules:
-- Mark done=true ONLY if the real files satisfy every requirement in the user request.
-- If a file is missing, empty, or incomplete, mark done=false and describe exactly what is wrong.
-- Each correction task MUST follow the full task schema (same schema as planning tasks).
-- Do NOT mark done=true just because the worker said it finished.
+- Set done=true if the file contents satisfy the task's goal. Be decisive — if the
+  worker made a genuine attempt and the files look correct, mark done=true.
+- Set done=false only if something is concretely wrong or missing in the actual files.
+- Do NOT invent problems. Do NOT require perfection beyond the task goal.
+- If done=false, return exactly one correction task describing what remains.
+- The correction task MUST follow the full task schema.
 
 If done, output ONLY:
-{{"done": true, "summary": "Past-tense summary of what was actually found in the files.", "corrections": []}}
+{{"done": true, "summary": "Past-tense: what was verified in the files.", "corrections": []}}
 
-If corrections needed, output ONLY:
-{{"done": false, "summary": "What is still missing or wrong in the actual files.", "corrections": [<task>]}}
+If not done, output ONLY:
+{{"done": false, "summary": "Exactly what is wrong or missing.", "corrections": [<correction_task>]}}
 
-Each correction task schema:
+Correction task schema:
 {correction_example}
 """
 
@@ -467,11 +501,29 @@ Each correction task schema:
         )
 
         system = _WORKER_SYSTEM + f"\nWork EXCLUSIVELY inside `{proj_path}`.\n"
-        worker_kwargs = {**llm_kwargs, "reasoning_effort": "none"}
+        worker_kwargs = dict(llm_kwargs)  # already contains worker-specific settings
 
         async def _run_command(cmd_index: int, command: str, model: str) -> str:
             prompt = context_block + f"COMMAND: {command}"
             tools = get_workflow_tools()
+
+            # Collect tool outputs via on_iteration so the reviewer sees real errors.
+            # on_iteration receives the full message history each time, so we track
+            # the last-seen length to only process new messages.
+            tool_outputs: list[str] = []
+            _seen_up_to: list[int] = [0]  # mutable cell for closure
+
+            def _capture_iteration(iteration: int, messages: list) -> None:
+                new_msgs = messages[_seen_up_to[0]:]
+                _seen_up_to[0] = len(messages)
+                for msg in new_msgs:
+                    role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
+                    content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", "")
+                    tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else getattr(msg, "tool_calls", None)
+                    name = msg.get("name") if isinstance(msg, dict) else getattr(msg, "name", "")
+                    if role == "tool" and content:
+                        tool_outputs.append(str(content))
+
             agent = LLMAgentBlock(
                 name=f"worker_{task.id}_c{cmd_index}",
                 system_prompt=system,
@@ -481,18 +533,25 @@ Each correction task schema:
                 max_iterations=None,
                 max_tool_calls=sub_hb * 3,
                 debug=debug,
+                on_iteration=_capture_iteration,
+                termination_tools=["send_message"],
             )
-            try:
-                T.debug_worker_start(f"{task.id}[{cmd_index}]", command, model)
-                T.debug_worker_project_path(task.id, get_project_path())
-                out = await agent.run(AgentInput(prompt=prompt))
-                result_text = out.response or "(no output)"
-                T.debug_worker_tool_calls(f"{task.id}[{cmd_index}]", out.tool_calls_made)
-                T.debug_worker_result(f"{task.id}[{cmd_index}]", result_text)
-                return result_text
-            except Exception as e:
-                T.debug_worker_result(f"{task.id}[{cmd_index}]", f"[ERROR]: {e}")
-                return f"[ERROR]: {e}"
+            T.debug_worker_start(f"{task.id}[{cmd_index}]", command, model)
+            T.debug_worker_project_path(task.id, get_project_path())
+            out = await agent.run(AgentInput(prompt=prompt))
+            result_text = out.response or "(no output)"
+            # Append deduplicated tool outputs so the reviewer sees actual errors
+            if tool_outputs:
+                seen_outputs: set[str] = set()
+                unique_outputs: list[str] = []
+                for o in tool_outputs:
+                    if o not in seen_outputs:
+                        seen_outputs.add(o)
+                        unique_outputs.append(o)
+                result_text = result_text + "\n\n[Tool outputs]\n" + "\n---\n".join(unique_outputs)
+            T.debug_worker_tool_calls(f"{task.id}[{cmd_index}]", len(tool_outputs))
+            T.debug_worker_result(f"{task.id}[{cmd_index}]", result_text)
+            return result_text
 
         _failure = ("error", "failed", "unable to", "could not", "[error]")
 
@@ -546,27 +605,42 @@ Each correction task schema:
         debug = get_agent_debug("orchestrator", False)
         sub_hb = max(10, int(max_hb * scale_factor))
 
+        worker_llm_kwargs = get_agent_llm_kwargs("worker")
+        worker_debug = get_agent_debug("worker", debug)
+
+        # Set project context early so get_project_path() is correct for VCS and workers
+        from .tools import set_project_context
+        if session and store:
+            set_project_context(session, store)
+
         AGENT_PROGRESS.heartbeat = 0
         AGENT_PROGRESS.max_heartbeats = max_hb
+        AGENT_PROGRESS.tasks_done = 0
+        AGENT_PROGRESS.tasks_total = 0
         AGENT_PROGRESS.last_tool = "Initializing…"
         AGENT_PROGRESS.last_args = ""
         AGENT_PROGRESS.start_time = time.monotonic()
 
         # ── Human-in-the-loop planning phase ──────────────────────────
-        hist_text = ""
-        for msg in (session.history[-10:-1] if session and hasattr(session, "history") else []):
-            role = "Assistant" if msg["role"] == "assistant" else "User"
-            hist_text += f"{role}: {msg['content']}\n"
-
+        # hist_text is intentionally empty: relevant context is already
+        # embedded in user_request via the enricher (chat_agent Mode A) in cli.py.
+        # Passing raw history here caused the planner to act on unrelated prior tasks.
         approved_plan = ""
         if session and store:
-            approved_plan = await self._plan_and_refine(user_request, hist_text, session, store)
+            approved_plan = await self._plan_and_refine(user_request, "", session, store)
         # ──────────────────────────────────────────────────────────────
 
-        # Set project context AFTER planning so _PROJECT_PATH is correct for workers
-        from .tools import set_project_context
-        if session and store:
-            set_project_context(session, store)
+        # Auto-checkpoint before any worker modifies files — enables /undo
+        # Must run after set_project_context so get_project_path() is correct.
+        try:
+            from .vcs import get_vcs_strategy
+            from .config import get_git_strategy
+            import sys as _sys
+            _vcs = get_vcs_strategy(get_git_strategy(), get_project_path())
+            _vcs.setup()
+            _vcs.manual_commit("auto-checkpoint before plan execution")
+        except Exception as _vcs_err:
+            T.debug_oracle("vcs", 0, f"Auto-checkpoint failed: {_vcs_err}")
 
         # Build (or incrementally refresh) the code index for this project
         try:
@@ -577,130 +651,247 @@ Each correction task schema:
             T.debug_oracle("code_index", 0, f"Index build skipped: {_idx_err}")
 
         planner_sys = self._planner_system(project_context, session)
-        verifier_sys = self._verifier_system(project_context)
+        reviewer_sys = self._reviewer_system(project_context)
 
         # Project snapshot fetched once — used to prime oracle without tools
         snapshot = _project_snapshot()
 
-        heartbeats_used = 0
-        all_task_results: list[dict] = []
+        tasks_executed = 0
         final_summary = ""
 
         def _save_intermediate(tag: str, content: str) -> None:
-            """Log intermediate orchestration events — does NOT write to chat history
-            to avoid injecting invalid roles into LiteLLM message sequences."""
             T.debug_oracle(f"intermediate_{tag}", 0, f"[{tag.upper()}] {content[:300]}")
 
-        async def _orchestration_loop():
-            nonlocal heartbeats_used, final_summary
+        def _pending_tasks(plan: PlanOutput) -> list[Task]:
+            """Return tasks that are pending and whose dependencies are all done."""
+            done_ids = {t.id for t in plan.tasks if t.status == "done"}
+            return [
+                t for t in plan.tasks
+                if t.status == "pending"
+                and all(dep in done_ids for dep in t.depends_on)
+            ]
 
+        def _read_relevant_files(task: Task, max_bytes_per_file: int = 2000, max_total: int = 4000) -> str:
+            """Read only the files listed in task.related_files for the reviewer.
+
+            Hard cap on total bytes sent to the reviewer oracle to avoid context overflow.
+            """
+            root = Path(get_project_path())
+            parts: list[str] = []
+            seen: set[str] = set()
+            total = 0
+            candidates = list(task.related_files)
+            # Also include files mentioned in commands/goal (heuristic)
+            for text in [task.goal] + task.commands:
+                for word in text.split():
+                    w = word.strip("\"'(),")
+                    if "." in w and not w.startswith(".") and w not in seen:
+                        candidates.append(w)
+            for rel in candidates:
+                if rel in seen:
+                    continue
+                if total >= max_total:
+                    parts.append("...(remaining files omitted — reviewer budget reached)")
+                    break
+                seen.add(rel)
+                p = root / rel if not Path(rel).is_absolute() else Path(rel)
+                if not p.exists():
+                    matches = list(root.rglob(Path(rel).name))
+                    p = matches[0] if matches else p
+                if p.exists() and p.is_file():
+                    try:
+                        content = p.read_text(encoding="utf-8", errors="replace")
+                        allowed = min(max_bytes_per_file, max_total - total)
+                        snippet = content[:allowed]
+                        if len(content) > allowed:
+                            snippet += f"\n...(truncated, {len(content)} bytes total)"
+                        rel_display = str(p.relative_to(root)) if root in p.parents or p.parent == root else rel
+                        parts.append(f"### {rel_display}\n```\n{snippet}\n```")
+                        total += len(snippet)
+                    except Exception:
+                        pass
+            return "\n\n".join(parts) if parts else "(no relevant files found)"
+
+        async def _review_task(task: Task, worker_result: str, plan: PlanOutput) -> VerifyOutput | None:
+            """Ask the planner-reviewer whether this specific task is done."""
+            # Only include the current task in the review prompt — full plan is too large
+            task_json = json.dumps(task.model_dump(), indent=2)
+            file_contents = _read_relevant_files(task)
+            # Cap worker_result to avoid flooding the reviewer context
+            worker_result_capped = worker_result[:2000]
+            if len(worker_result) > 2000:
+                worker_result_capped += f"\n...(truncated, {len(worker_result)} chars total)"
+            review_prompt = (
+                f"Task under review:\n{task_json}\n\n"
+                f"Worker result:\n{worker_result_capped}\n\n"
+                f"Relevant file contents on disk:\n{file_contents}"
+            )
+            AGENT_PROGRESS.last_tool = f"Reviewer → {task.id}"
+            AGENT_PROGRESS.last_args = task.goal[:70]
+            # Use higher max_tokens for reviewer to ensure JSON fits in response
+            reviewer_kwargs = {**llm_kwargs, "max_tokens": 1024}
+            return await _oracle(
+                VerifyOutput, reviewer_sys, review_prompt,
+                model=self.model, llm_kwargs=reviewer_kwargs,
+            )
+
+        async def _run_worker_safe(task: Task) -> str:
+            try:
+                return await self._run_worker(
+                    task, project_context, worker_llm_kwargs, sub_hb, worker_debug
+                )
+            except Exception as e:
+                return f"[ERROR executing {task.id}]: {e}"
+
+        async def _orchestration_loop():
+            nonlocal tasks_executed, final_summary
+
+            # ── Phase 1: Initial plan ──────────────────────────────────────
+            AGENT_PROGRESS.last_tool = "Planner (reflection)"
             plan_section = f"\nApproved plan (user-reviewed):\n{approved_plan}\n" if approved_plan else ""
+
+            # Inject content of files explicitly mentioned in the request so the
+            # planner can see the actual code rather than guessing from error messages.
+            def _extract_file_snippets(request_text: str, max_bytes: int = 3000) -> str:
+                import re as _re
+                root = Path(get_project_path())
+                mentioned = _re.findall(r'\b[\w/-]+\.(?:js|ts|py|css|html|json|jsx|tsx|md)\b', request_text)
+                parts: list[str] = []
+                seen: set[str] = set()
+                for fname in mentioned:
+                    if fname in seen:
+                        continue
+                    seen.add(fname)
+                    matches = list(root.rglob(fname))
+                    if not matches:
+                        continue
+                    p = matches[0]
+                    try:
+                        content = p.read_text(encoding="utf-8", errors="replace")
+                        snippet = content[:max_bytes]
+                        if len(content) > max_bytes:
+                            snippet += f"\n...(truncated, {len(content)} bytes)"
+                        rel = str(p.relative_to(root))
+                        # Add line numbers to help planner reference specific lines
+                        numbered = "\n".join(
+                            f"{i+1:4d}  {l}" for i, l in enumerate(snippet.splitlines())
+                        )
+                        parts.append(f"### {rel}\n```\n{numbered}\n```")
+                    except Exception:
+                        pass
+                return "\n\n".join(parts)
+
+            file_snippets = _extract_file_snippets(user_request)
+            file_section = f"\nRelevant file contents (read before planning):\n{file_snippets}\n" if file_snippets else ""
+
             planning_prompt = (
-                f"Project files:\n{snapshot}\n\n"
+                f"Project files:\n{snapshot}\n"
+                f"{file_section}\n"
                 f"Conversation history:\n{history}\n"
                 f"{plan_section}\n"
                 f"User request:\n{user_request}"
             )
 
-            while heartbeats_used < max_hb:
+            plan: PlanOutput | None = await _oracle(
+                PlanOutput, planner_sys, planning_prompt,
+                model=self.model, llm_kwargs=llm_kwargs,
+            )
 
-                # ── Phase 1: Plan ──────────────────────────────────────────
-                AGENT_PROGRESS.last_tool = "Planner (reflection)"
-                AGENT_PROGRESS.last_args = ""
-
-                if all_task_results:
-                    results_block = "\n".join(
-                        f"[{r['id']}] {r['result'][:300]}" for r in all_task_results
-                    )
-                    planning_prompt = (
-                        f"Project files:\n{snapshot}\n\n"
-                        f"User request:\n{user_request}\n\n"
-                        f"Previous task results:\n{results_block}\n\n"
-                        "Plan only the remaining or correction tasks."
-                    )
-
-                plan: PlanOutput | None = await _oracle(
-                    PlanOutput, planner_sys, planning_prompt,
-                    model=self.model, llm_kwargs=llm_kwargs,
+            if plan is None or not plan.tasks:
+                final_summary = (
+                    "(Planner could not produce a valid task plan after "
+                    f"{MAX_REFLECT_RETRIES} reflection attempts.)"
                 )
+                return
 
-                if plan is None or not plan.tasks:
-                    final_summary = (
-                        "(Planner could not produce a valid task plan after "
-                        f"{MAX_REFLECT_RETRIES} reflection attempts.)"
-                    )
+            _save_intermediate("plan", f"Tasks: {[t.id for t in plan.tasks]}")
+            T.debug_oracle("plan", 0, json.dumps({"tasks": [t.model_dump() for t in plan.tasks]}, indent=2, ensure_ascii=False))
+            AGENT_PROGRESS.tasks_total = len(plan.tasks)
+            AGENT_PROGRESS.tasks_done = 0
+
+            # ── Phase 2: Execute tasks one by one, review after each ───────
+            while True:
+                pending = _pending_tasks(plan)
+                if not pending:
                     break
+                if tasks_executed >= max_hb:
+                    final_summary = "(Task budget exhausted — work may be incomplete.)"
+                    return
 
-                # ── Phase 2: Execute ───────────────────────────────────────
-                _save_intermediate("plan", f"Tasks: {[t.id for t in plan.tasks]}")
-                for task in plan.tasks:
-                    if heartbeats_used >= max_hb:
-                        break
-                    result = await _run_worker_safe(task)
-                    all_task_results.append({"id": task.id, "result": result})
-                    _save_intermediate("task", f"[{task.id}] {result[:500]}")
-                    heartbeats_used += 1
-                    AGENT_PROGRESS.heartbeat = heartbeats_used
+                task = pending[0]
+                AGENT_PROGRESS.last_tool = f"Worker → {task.id}"
+                AGENT_PROGRESS.last_args = task.goal[:70]
 
-                # ── Phase 3: Verify ────────────────────────────────────────
-                AGENT_PROGRESS.last_tool = "Verifier (reflection)"
-                AGENT_PROGRESS.last_args = ""
+                worker_result = await _run_worker_safe(task)
+                T.debug_worker_result(task.id, worker_result)
+                _save_intermediate("task", f"[{task.id}] {worker_result[:500]}")
+                tasks_executed += 1
 
-                results_block = "\n".join(
-                    f"[{r['id']}] {r['result'][:400]}" for r in all_task_results
-                )
-                file_contents = _read_project_files_for_verify()
-                verify_prompt = (
-                    f"User request:\n{user_request}\n\n"
-                    f"Worker reports (self-reported):\n{results_block}\n\n"
-                    f"Actual file contents on disk:\n{file_contents}"
-                )
-                verify: VerifyOutput | None = await _oracle(
-                    VerifyOutput, verifier_sys, verify_prompt,
-                    model=self.model, llm_kwargs=llm_kwargs,
-                )
-
-                if verify is None:
-                    final_summary = "(Verifier could not produce a valid result.)"
-                    break
-
-                if verify.done:
-                    final_summary = verify.summary
-                    _save_intermediate("verify", f"DONE: {verify.summary[:500]}")
-                    break
-
-                if not verify.corrections:
-                    final_summary = verify.summary or "(No corrections specified.)"
-                    break
-
-                # Execute correction tasks directly, then re-verify on next loop
-                # Cap at 2 corrections per cycle to preserve heartbeat budget
-                for task in verify.corrections[:2]:
-                    if heartbeats_used >= max_hb:
-                        break
-                    result = await _run_worker_safe(task)
-                    all_task_results.append({"id": task.id, "result": result})
-                    heartbeats_used += 1
-                    AGENT_PROGRESS.heartbeat = heartbeats_used
-
-            if not final_summary:
-                if heartbeats_used >= max_hb:
-                    final_summary = "(Heartbeat budget exhausted — work may be incomplete.)"
+                # ── Phase 3: Review this task ──────────────────────────────
+                review = await _review_task(task, worker_result, plan)
+                T.debug_oracle(f"reviewer_{task.id}", 0, str(review))
+                if review is None:
+                    # Oracle failed — count as failure
+                    task.failure_count += 1
+                    _save_intermediate("review", f"[{task.id}] reviewer oracle failed")
+                elif review.done:
+                    task.status = "done"
+                    AGENT_PROGRESS.tasks_done += 1
+                    _save_intermediate("review", f"[{task.id}] DONE: {review.summary[:300]}")
                 else:
-                    final_summary = "(Orchestration ended without a final summary.)"
+                    task.failure_count += 1
+                    _save_intermediate("review", f"[{task.id}] NOT DONE ({task.failure_count}/{MAX_TASK_FAILURES}): {review.summary[:300]}")
 
-        async def _run_worker_safe(task: Task) -> str:
-            try:
-                return await self._run_worker(
-                    task, project_context, llm_kwargs, sub_hb, debug
-                )
-            except Exception as e:
-                return f"[ERROR executing {task.id}]: {e}"
+                    if task.failure_count >= MAX_TASK_FAILURES:
+                        failed_goals = [
+                            f"  • [{t.id}] {t.goal}" for t in plan.tasks
+                            if t.status != "done"
+                        ]
+                        final_summary = (
+                            f"The plan could not be completed after {MAX_TASK_FAILURES} attempts "
+                            f"on task '{task.id}'.\n\n"
+                            f"Worker last reported:\n{worker_result[:400]}\n\n"
+                            f"Reviewer feedback:\n{review.summary}\n\n"
+                            f"Unfinished tasks:\n" + "\n".join(failed_goals) + "\n\n"
+                            "Please try rephrasing your request with more detail about "
+                            "what exactly needs to change and in which file."
+                        )
+                        return
+
+                    # Add correction tasks to the plan (with unique ids)
+                    existing_ids = {t.id for t in plan.tasks}
+                    for correction in review.corrections:
+                        # Ensure unique id
+                        base_id = correction.id
+                        uid = base_id
+                        counter = 1
+                        while uid in existing_ids:
+                            uid = f"{base_id}_{counter}"
+                            counter += 1
+                        correction.id = uid
+                        existing_ids.add(uid)
+                        # Correction depends on the failed task
+                        if task.id not in correction.depends_on:
+                            correction.depends_on = [task.id] + correction.depends_on
+                        plan.tasks.append(correction)
+
+                    # Mark failed task as done so corrections can proceed
+                    task.status = "done"
+                    AGENT_PROGRESS.tasks_done += 1
+                    AGENT_PROGRESS.tasks_total = len(plan.tasks)
+
+            # All tasks done
+            done_tasks = [t for t in plan.tasks if t.status == "done"]
+            final_summary = (
+                f"Completed {len(done_tasks)} task(s): "
+                + "; ".join(t.goal[:80] for t in done_tasks)
+            )
+            _save_intermediate("done", final_summary)
 
         loop_task = asyncio.create_task(_orchestration_loop())
 
         with Live(
-            _build_progress_panel(AGENT_PROGRESS, max_hb),
+            _build_progress_panel(AGENT_PROGRESS, AGENT_PROGRESS.max_heartbeats),
             console=T.console,
             refresh_per_second=4,
             transient=False,
@@ -708,12 +899,12 @@ Each correction task schema:
             AGENT_PROGRESS.live_context = live
             while not loop_task.done():
                 if live.is_started:
-                    live.update(_build_progress_panel(AGENT_PROGRESS, max_hb))
+                    live.update(_build_progress_panel(AGENT_PROGRESS, AGENT_PROGRESS.max_heartbeats))
                 await asyncio.sleep(0.25)
             AGENT_PROGRESS.live_context = None
             if not live.is_started:
                 live.start()
-            live.update(_build_progress_panel(AGENT_PROGRESS, max_hb))
+            live.update(_build_progress_panel(AGENT_PROGRESS, AGENT_PROGRESS.max_heartbeats))
 
         exc = loop_task.exception()
         if exc:

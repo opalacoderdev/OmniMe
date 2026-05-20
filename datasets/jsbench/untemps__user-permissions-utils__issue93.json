@@ -1,0 +1,17 @@
+{
+  "id": "untemps__user-permissions-utils__issue93",
+  "repo_full": "untemps/user-permissions-utils",
+  "clone_url": "https://github.com/untemps/user-permissions-utils.git",
+  "issue_number": 93,
+  "issue_title": "fix(test): wrong description in guard test files",
+  "issue_body": "## Summary\n\nBoth `isNavigatorPermissionsSupported.test.js` and `isNavigatorMediaDevicesSupported.test.js` describe the \"is supported\" test case as `'returns false as permissions is not supported'` while actually asserting `toBeTruthy()`.\n\n## Root cause\n\n`src/__tests__/isNavigatorPermissionsSupported.test.js` and `src/__tests__/isNavigatorMediaDevicesSupported.test.js` — copy-paste error in the `it()` description inside the \"implemented\" describe block.\n\n## Impact\n\nTest reporters show a passing test labelled \"returns false\" that is actually testing that the function returns true. Makes CI output and failure messages misleading.\n\n## Expected behavior\n\nThe `it()` description should read `'returns true as permissions is supported'`.",
+  "issue_url": "https://github.com/untemps/user-permissions-utils/issues/93",
+  "pr_number": 102,
+  "pr_url": "https://github.com/untemps/user-permissions-utils/pull/102",
+  "base_commit": "ee7e1eeffefd2f4e924f00ec974679d24ed97fc1",
+  "changed_files": [
+    "src/__tests__/isNavigatorMediaDevicesSupported.test.js",
+    "src/__tests__/isNavigatorPermissionsSupported.test.js"
+  ],
+  "patch": "@@ -51,7 +51,7 @@ describe('isNavigatorMediaDevicesSupported', () => {\n \t\t\tglobal.MediaDevices.mockReset()\n \t\t})\n \n-\t\tit('returns false as permissions is not supported', async () => {\n+\t\tit('returns true as mediaDevices is supported', async () => {\n \t\t\texpect(isNavigatorMediaDevicesSupported()).toBeTruthy()\n \t\t})\n \t})\n@@ -33,7 +33,7 @@ describe('isNavigatorPermissionsSupported', () => {\n \t\t\tglobal.Permissions.mockReset()\n \t\t})\n \n-\t\tit('returns false as permissions is not supported', async () => {\n+\t\tit('returns true as permissions is supported', async () => {\n \t\t\texpect(isNavigatorPermissionsSupported()).toBeTruthy()\n \t\t})\n \t})"
+}

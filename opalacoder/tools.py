@@ -15,6 +15,8 @@ class _AgentProgress:
     def __init__(self):
         self.heartbeat: int = 0
         self.max_heartbeats: int = 15
+        self.tasks_done: int = 0
+        self.tasks_total: int = 0
         self.last_tool: str = "—"
         self.last_args: str = ""
         self.start_time: float = time.monotonic()

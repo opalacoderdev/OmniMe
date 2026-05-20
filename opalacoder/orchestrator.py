@@ -1,7 +1,6 @@
 """Orchestrator registry, base class, and shared UI helpers.
 
 Each concrete strategy lives in its own module:
-  - autonomous_orchestrator.py  → AutonomousOrchestratorStrategy  ("autonomous")
   - workflow_orchestrator.py    → WorkflowOrchestratorStrategy     ("workflow")
 
 Importing this module triggers registration of all bundled strategies via the
@@ -69,10 +68,20 @@ class BaseOrchestratorStrategy(abc.ABC):
 
 def _build_progress_panel(progress: object, max_hb: int) -> Panel:
     """Build a Rich Panel showing current agent activity."""
-    hb = progress.heartbeat
-    bar_filled = min(hb, max_hb)
-    bar_empty = max(0, max_hb - bar_filled)
-    bar = f"[cyan]{'█' * bar_filled}[/cyan][dim]{'░' * bar_empty}[/dim]"
+    tasks_done = getattr(progress, "tasks_done", 0)
+    tasks_total = getattr(progress, "tasks_total", 0)
+
+    if tasks_total > 0:
+        bar_filled = min(tasks_done, tasks_total)
+        bar_empty = max(0, tasks_total - bar_filled)
+        bar = f"[cyan]{'█' * bar_filled}[/cyan][dim]{'░' * bar_empty}[/dim]"
+        progress_line = f"[bold]Tasks:[/bold]     {tasks_done}/{tasks_total}  {bar}"
+    else:
+        hb = progress.heartbeat
+        bar_filled = min(hb, max_hb)
+        bar_empty = max(0, max_hb - bar_filled)
+        bar = f"[cyan]{'█' * bar_filled}[/cyan][dim]{'░' * bar_empty}[/dim]"
+        progress_line = f"[bold]Heartbeat:[/bold] {hb}/{max_hb}  {bar}"
 
     tool_color = {
         "write_file": "green",
@@ -94,7 +103,7 @@ def _build_progress_panel(progress: object, max_hb: int) -> Panel:
         tool_line += f"\n   [dim]↳ {progress.last_args}[/dim]"
 
     content = (
-        f"[bold]Heartbeat:[/bold] {hb}/{max_hb}  {bar}\n"
+        f"{progress_line}\n"
         f"[bold]Elapsed:[/bold]   {progress.elapsed()}\n\n"
         f"{tool_line}"
     )
@@ -122,5 +131,4 @@ def _deduplicate_response(text: str) -> str:
 # Each module decorates its class with @register_orchestrator, so importing it
 # is enough to populate _REGISTRY.
 
-from .autonomous_orchestrator import AutonomousOrchestratorStrategy  # noqa: F401
 from .workflow_orchestrator import WorkflowOrchestratorStrategy      # noqa: F401
