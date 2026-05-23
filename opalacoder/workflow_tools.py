@@ -90,6 +90,7 @@ def edit_file(path: str, old_str: str, new_str: str, line: int = 0) -> str:
     lint_output = _auto_lint(resolved)
     if lint_output:
         _fail_counts[resolved] = _fail_counts.get(resolved, 0) + 1
+        AGENT_PROGRESS.record_lint_error(resolved)
         msg = f"Edit applied but lint check failed:\n{lint_output}"
         if _fail_counts[resolved] >= 2:
             msg += _DECOMPOSE_HINT

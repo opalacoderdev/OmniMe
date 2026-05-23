@@ -3,7 +3,7 @@
 from agenticblocks.blocks.llm.agent import LLMAgentBlock, AgentInput
 from agenticblocks.blocks.llm.memgpt_agent import MemGPTAgentBlock
 
-from .config import DEFAULT_MODEL, LITELLM_DEFAULTS, get_agent_llm_kwargs, get_agent_model, get_agent_max_heartbeats, get_agent_debug
+from .config import DEFAULT_MODEL, LITELLM_DEFAULTS, get_agent_llm_kwargs, get_agent_model, get_agent_max_heartbeats, get_agent_debug, get_agent_response_mode
 from . import i18n
 
 def _make_llm(name: str, system_prompt: str, model: str | None, disable_lang_rule: bool = False, **kwargs) -> LLMAgentBlock:
@@ -208,11 +208,13 @@ def make_chat_memgpt_agent(model: str | None = None) -> MemGPTAgentBlock:
     return MemGPTAgentBlock(
         name="chat_agent",
         system_prompt=enricher_system_prompt(),
-        model=get_agent_model("chat_agent", model or DEFAULT_MODEL),
+        model=get_agent_model("enricher", get_agent_model("chat_agent", model or DEFAULT_MODEL)),
         tools=[read_core_memory, append_core_memory, search_conversation_history],
-        litellm_kwargs=get_agent_llm_kwargs("chat_agent"),
-        max_heartbeats=get_agent_max_heartbeats("chat_agent", 10),
-        debug=get_agent_debug("chat_agent", False),
+        litellm_kwargs=get_agent_llm_kwargs("enricher"),
+        max_heartbeats=get_agent_max_heartbeats("enricher", 4),
+        response_mode=get_agent_response_mode("chat_agent"),
+        max_context_tokens=get_agent_llm_kwargs("enricher").get("num_ctx", LITELLM_DEFAULTS["num_ctx"]),
+        debug=get_agent_debug("enricher", False),
     )
 
 

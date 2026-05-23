@@ -214,6 +214,7 @@ async def _oracle(
 
     for attempt in range(MAX_REFLECT_RETRIES):
         if attempt > 0:
+            AGENT_PROGRESS.record_plan_retry(attempt)
             fields = {k: str(v.annotation) for k, v in schema.model_fields.items()}
             verify_caution = (
                 " IMPORTANT: if this is a VerifyOutput, only set done=true if you have "
@@ -620,6 +621,11 @@ Correction task schema:
         AGENT_PROGRESS.last_tool = "Initializing…"
         AGENT_PROGRESS.last_args = ""
         AGENT_PROGRESS.start_time = time.monotonic()
+        AGENT_PROGRESS.task_failures = 0
+        AGENT_PROGRESS.worker_errors = 0
+        AGENT_PROGRESS.lint_errors = 0
+        AGENT_PROGRESS.plan_retries = 0
+        AGENT_PROGRESS.recent_events = []
 
         # ── Human-in-the-loop planning phase ──────────────────────────
         # hist_text is intentionally empty: relevant context is already
@@ -737,10 +743,14 @@ Correction task schema:
 
         async def _run_worker_safe(task: Task) -> str:
             try:
-                return await self._run_worker(
+                result = await self._run_worker(
                     task, project_context, worker_llm_kwargs, sub_hb, worker_debug
                 )
+                if result.lower().startswith("[error"):
+                    AGENT_PROGRESS.record_worker_error(task.id, result)
+                return result
             except Exception as e:
+                AGENT_PROGRESS.record_worker_error(task.id, str(e))
                 return f"[ERROR executing {task.id}]: {e}"
 
         async def _orchestration_loop():
@@ -815,7 +825,19 @@ Correction task schema:
                 if not pending:
                     break
                 if tasks_executed >= max_hb:
-                    final_summary = "(Task budget exhausted — work may be incomplete.)"
+                    done_tasks = [t for t in plan.tasks if t.status == "done"]
+                    skipped_tasks = [t for t in plan.tasks if t.status == "pending"]
+                    done_line = (
+                        f"Completed {len(done_tasks)} task(s): "
+                        + "; ".join(t.goal[:80] for t in done_tasks)
+                        if done_tasks else "No tasks completed."
+                    )
+                    skipped_lines = "\n".join(f"  • [{t.id}] {t.goal}" for t in skipped_tasks)
+                    final_summary = (
+                        f"{done_line}\n\n"
+                        f"Skipped {len(skipped_tasks)} task(s) (task budget of {max_hb} exhausted):\n"
+                        + skipped_lines
+                    )
                     return
 
                 task = pending[0]
@@ -833,6 +855,7 @@ Correction task schema:
                 if review is None:
                     # Oracle failed — count as failure
                     task.failure_count += 1
+                    AGENT_PROGRESS.record_task_failure(task.id, "reviewer oracle failed")
                     _save_intermediate("review", f"[{task.id}] reviewer oracle failed")
                 elif review.done:
                     task.status = "done"
@@ -840,6 +863,7 @@ Correction task schema:
                     _save_intermediate("review", f"[{task.id}] DONE: {review.summary[:300]}")
                 else:
                     task.failure_count += 1
+                    AGENT_PROGRESS.record_task_failure(task.id, review.summary)
                     _save_intermediate("review", f"[{task.id}] NOT DONE ({task.failure_count}/{MAX_TASK_FAILURES}): {review.summary[:300]}")
 
                     if task.failure_count >= MAX_TASK_FAILURES:
@@ -882,10 +906,17 @@ Correction task schema:
 
             # All tasks done
             done_tasks = [t for t in plan.tasks if t.status == "done"]
+            skipped_tasks = [t for t in plan.tasks if t.status == "pending"]
             final_summary = (
                 f"Completed {len(done_tasks)} task(s): "
                 + "; ".join(t.goal[:80] for t in done_tasks)
             )
+            if skipped_tasks:
+                skipped_lines = "\n".join(f"  • [{t.id}] {t.goal}" for t in skipped_tasks)
+                final_summary += (
+                    f"\n\nSkipped {len(skipped_tasks)} task(s) (reviewer accepted earlier results as sufficient):\n"
+                    + skipped_lines
+                )
             _save_intermediate("done", final_summary)
 
         loop_task = asyncio.create_task(_orchestration_loop())

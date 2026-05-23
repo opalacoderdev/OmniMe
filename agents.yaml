@@ -1,8 +1,9 @@
-default: ollama/ministral-3:14b
-alternative: ollama/ministral-3:14b
+default: ollama/gemma4:latest
+alternative: ollama/gemma4:latest
 
 complexity_inference_mode: double
 git_strategy: auto
+response_mode: "last"
 
 heartbeats_scale_factor: 1
 
@@ -47,6 +48,17 @@ agents:
   chat_agent:
     temperature: 1.0
     max_tokens: 2048
+    num_ctx: 8192
+    max_heartbeats: 10
+    debug: false
+    reasoning_effort: "none"
+
+  # enricher = chat_agent running in Mode A (silent memory-retrieval pass).
+  # reasoning_effort must be "none": thinking leaves tool_calls empty (ollama issue #15288).
+  # chat_agent (synthesizer / Mode B) has no such restriction.
+  enricher:
+    temperature: 0.3
+    max_tokens: 1024
     num_ctx: 8192
     max_heartbeats: 10
     debug: false

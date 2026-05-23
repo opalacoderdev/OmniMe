@@ -413,9 +413,6 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    from opalacoder.config import reload_config_for_model
-    reload_config_for_model(args.model)
-
     if args.debug:
         from opalacoder.config import setup_litellm_debug
         setup_litellm_debug()

@@ -22,81 +22,20 @@ global_env = pathlib.Path.home() / ".opalacoder" / ".env"
 if global_env.exists():
     load_dotenv(dotenv_path=global_env)
 
-def _model_to_filename(model: str) -> str:
-    """Convert a model name like 'ollama/ministral-3:14b' to 'ministral3_14b'."""
-    # Strip provider prefix (e.g. "ollama/")
-    name = model.split("/")[-1]
-    # Replace separators with underscores and remove non-alphanumeric chars
-    import re
-    name = re.sub(r"[-:.]", "_", name)
-    name = re.sub(r"[^a-zA-Z0-9_]", "", name)
-    name = re.sub(r"_+", "_", name).strip("_")
-    return name.lower()
-
-
-def _load_yaml(path: pathlib.Path) -> dict:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
-    except Exception as e:
-        print(f"Warning: Failed to parse {path}: {e}")
-        return {}
-
-
-def _config_dirs() -> list[pathlib.Path]:
-    """Return candidate config/ directories in priority order."""
-    return [
-        pathlib.Path(__file__).parent / "config",
-        pathlib.Path(__file__).parent.parent / "config",
-        pathlib.Path(os.getcwd()) / "config",
-    ]
-
-
-def _load_agents_config(model: str | None = None) -> dict:
-    """Load agent configuration, preferring a model-specific yaml when available.
-
-    Resolution order for each config/ directory found:
-      1. config/<model_slug>.yaml   (e.g. ministral3_14b.yaml)
-      2. config/agents.yaml         (default fallback)
-
-    Falls back to the legacy agents.yaml at the project root when no config/ dir exists.
-    """
-    config_dirs = _config_dirs()
-
-    # Determine slug from the model hint OR from the env/default value so that
-    # the slug is available even on the very first load (before DEFAULT_MODEL is set).
-    raw_model = model or os.getenv("OPALA_MODEL", "ollama/ministral-3:14b")
-    slug = _model_to_filename(raw_model)
-
-    for config_dir in config_dirs:
-        if not config_dir.exists():
-            continue
-        # Try model-specific yaml first
-        if slug:
-            specific = config_dir / f"{slug}.yaml"
-            if specific.exists():
-                data = _load_yaml(specific)
-                if data:
-                    return data
-        # Fall back to default yaml inside config/
-        default = config_dir / "agents.yaml"
-        if default.exists():
-            data = _load_yaml(default)
-            if data:
-                return data
-
-    # Legacy fallback: agents.yaml at project root / cwd
-    legacy_candidates = [
+def _load_agents_config() -> dict:
+    # Search for agents.yaml next to this file (project root), then fall back to cwd.
+    candidates = [
         pathlib.Path(__file__).parent / "agents.yaml",
         pathlib.Path(__file__).parent.parent / "agents.yaml",
         pathlib.Path(os.getcwd()) / "agents.yaml",
     ]
-    for path in legacy_candidates:
-        if path.exists():
-            data = _load_yaml(path)
-            if data:
-                return data
-
+    for config_path in candidates:
+        if config_path.exists():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    return yaml.safe_load(f) or {}
+            except Exception as e:
+                print(f"Warning: Failed to parse {config_path}: {e}")
     return {}
 
 _AGENTS_CONFIG = _load_agents_config()
@@ -117,27 +56,8 @@ _LLM_DEFAULTS: dict = {
 _AGENT_OVERRIDES: dict[str, dict] = _AGENTS_CONFIG.get("agents", {})
 
 
-def reload_config_for_model(model: str) -> None:
-    """Reload all config globals using the model-specific yaml when available.
-
-    Call this after the CLI resolves the final --model value so that all
-    subsequent calls to get_agent_* reflect the correct per-model settings.
-    """
-    global _AGENTS_CONFIG, DEFAULT_MODEL, ALTERNATIVE_MODEL, _LLM_DEFAULTS, _AGENT_OVERRIDES
-    _AGENTS_CONFIG = _load_agents_config(model)
-    DEFAULT_MODEL = _AGENTS_CONFIG.get("default", model)
-    ALTERNATIVE_MODEL = _AGENTS_CONFIG.get("alternative", "gemini/gemini-3.1-flash-lite")
-    _LLM_DEFAULTS = {
-        "temperature": 0.7,
-        "max_tokens": 4096,
-        "num_ctx": 8192,
-        **_AGENTS_CONFIG.get("llm_defaults", {}),
-    }
-    _AGENT_OVERRIDES = _AGENTS_CONFIG.get("agents", {})
-
-
 # Fields that are consumed outside of litellm kwargs and must not be forwarded.
-_NON_LITELLM_FIELDS = {"model", "max_heartbeats", "debug", "strategy"}
+_NON_LITELLM_FIELDS = {"model", "max_heartbeats", "debug", "strategy", "response_mode"}
 
 
 from typing import Union
@@ -170,6 +90,11 @@ def get_agent_heartbeats_scale_factor(agent_name: str, default: float = 2.0) -> 
 def get_agent_debug(agent_name: str, default: bool = False) -> bool:
     """Return debug flag configured for *agent_name* in agents.yaml, or *default*."""
     return bool(_AGENT_OVERRIDES.get(agent_name, {}).get("debug", default))
+
+
+def get_agent_response_mode(agent_name: str, default: str = "last") -> str:
+    """Return response_mode configured for *agent_name* in agents.yaml, or *default*."""
+    return str(_AGENT_OVERRIDES.get(agent_name, {}).get("response_mode", _AGENTS_CONFIG.get("response_mode", default)))
 
 
 def get_agent_model(agent_name: str, default: str | None = None) -> str:

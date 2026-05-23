@@ -1,11 +1,18 @@
 """Tools for the OpalaCoder Autonomous Agent (MemGPT pattern + HITL)."""
 
-import os
-import subprocess
-import time
 import ast
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
+
 from agenticblocks.core.function_block import as_tool
+
 from . import terminal as T
 
 # ─── Shared progress state ───────────────────────────────────────────────────
@@ -21,6 +28,36 @@ class _AgentProgress:
         self.last_args: str = ""
         self.start_time: float = time.monotonic()
         self.live_context = None
+        # Error / failure tracking
+        self.task_failures: int = 0          # reviewer said task NOT DONE
+        self.worker_errors: int = 0          # worker returned [ERROR ...]
+        self.lint_errors: int = 0            # lint check failures from write/edit
+        self.plan_retries: int = 0           # oracle reflection retries
+        self.recent_events: list[str] = []   # last N notable events (errors, retries)
+
+    def _push_event(self, msg: str) -> None:
+        self.recent_events.append(msg)
+        if len(self.recent_events) > 6:
+            self.recent_events.pop(0)
+
+    def record_lint_error(self, path: str) -> None:
+        self.lint_errors += 1
+        short = os.path.basename(path)
+        self._push_event(f"[red]✗ lint[/red] {short}")
+
+    def record_worker_error(self, task_id: str, snippet: str = "") -> None:
+        self.worker_errors += 1
+        snip = snippet[:60].replace("\n", " ") if snippet else ""
+        self._push_event(f"[red]✗ worker[/red] {task_id}" + (f": {snip}" if snip else ""))
+
+    def record_task_failure(self, task_id: str, reason: str = "") -> None:
+        self.task_failures += 1
+        snip = reason[:60].replace("\n", " ") if reason else ""
+        self._push_event(f"[yellow]⚠ review[/yellow] {task_id}" + (f": {snip}" if snip else ""))
+
+    def record_plan_retry(self, attempt: int) -> None:
+        self.plan_retries += 1
+        self._push_event(f"[yellow]⚠ plan retry[/yellow] #{attempt}")
 
     def update(self, tool_name: str, args_preview: str = "") -> None:
         self.heartbeat += 1
@@ -116,6 +153,7 @@ def write_file(path: str, content: str) -> str:
             pass
         lint_output = _auto_lint(resolved)
         if lint_output:
+            AGENT_PROGRESS.record_lint_error(resolved)
             return (
                 f"Successfully wrote to {resolved}, but lint check found errors:\n"
                 f"{lint_output}\n\nPlease fix the syntax errors."
@@ -418,6 +456,345 @@ def read_content_pos(path: str, start_pos: int, end_pos: int) -> str:
     except Exception as e:
         return f"Error reading {resolved}: {e}"
 
+# ─── Bug Detection ────────────────────────────────────────────────────────────
+
+@dataclass
+class BugReport:
+    file: str
+    line: Optional[int]
+    column: Optional[int]
+    severity: str        # "error" | "warning" | "info"
+    message: str
+    rule: str            # e.g. "pyflakes:F811", "ast:bare-except", "type:mypy"
+    source: str          # "linter" | "ast" | "llm"
+
+    def to_dict(self) -> dict:
+        return {
+            "file": self.file,
+            "line": self.line,
+            "column": self.column,
+            "severity": self.severity,
+            "message": self.message,
+            "rule": self.rule,
+            "source": self.source,
+        }
+
+
+def _collect_python_files(root: str, target: str) -> list[str]:
+    resolved = _resolve_path(target)
+    if os.path.isfile(resolved):
+        return [resolved] if resolved.endswith(".py") else []
+    py_files = []
+    skip = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", "dist", "build", ".env"}
+    for dirpath, dirnames, filenames in os.walk(resolved):
+        dirnames[:] = [d for d in dirnames if d not in skip and not d.startswith(".")]
+        for fname in filenames:
+            if fname.endswith(".py"):
+                py_files.append(os.path.join(dirpath, fname))
+    return py_files
+
+
+def _rel(path: str, root: str) -> str:
+    try:
+        return os.path.relpath(path, root)
+    except ValueError:
+        return path
+
+
+def _layer_linters(py_files: list[str], root: str) -> list[BugReport]:
+    """Layer 1: run pyflakes (and mypy/pylint if available) on each file."""
+    bugs: list[BugReport] = []
+    python_exe = sys.executable
+
+    # ── pyflakes ──
+    try:
+        res = subprocess.run(
+            [python_exe, "-m", "pyflakes"] + py_files,
+            capture_output=True, text=True, timeout=60,
+        )
+        output = res.stdout + res.stderr
+        # pyflakes format: path:line: message
+        pattern = re.compile(r"^(.+?):(\d+):\d*:?\s*(.+)$", re.MULTILINE)
+        for m in pattern.finditer(output):
+            fpath, lineno, msg = m.group(1), int(m.group(2)), m.group(3).strip()
+            severity = "error" if any(w in msg.lower() for w in ("undefined", "import *", "redefinition")) else "warning"
+            bugs.append(BugReport(
+                file=_rel(fpath, root), line=lineno, column=None,
+                severity=severity, message=msg, rule="pyflakes", source="linter",
+            ))
+    except Exception:
+        pass
+
+    # ── mypy (optional) ──
+    try:
+        res = subprocess.run(
+            [python_exe, "-m", "mypy", "--no-error-summary", "--show-column-numbers",
+             "--ignore-missing-imports"] + py_files,
+            capture_output=True, text=True, timeout=90,
+        )
+        pattern = re.compile(r"^(.+?):(\d+):(\d+): (\w+): (.+)$", re.MULTILINE)
+        for m in pattern.finditer(res.stdout + res.stderr):
+            fpath, lineno, col, sev, msg = m.group(1), int(m.group(2)), int(m.group(3)), m.group(4), m.group(5)
+            if sev in ("error", "warning"):
+                bugs.append(BugReport(
+                    file=_rel(fpath, root), line=lineno, column=col,
+                    severity=sev, message=msg, rule="mypy", source="linter",
+                ))
+    except Exception:
+        pass
+
+    # ── pylint (optional) ──
+    try:
+        res = subprocess.run(
+            [python_exe, "-m", "pylint", "--output-format=json",
+             "--disable=C,R", "--score=no"] + py_files,
+            capture_output=True, text=True, timeout=90,
+        )
+        for item in json.loads(res.stdout or "[]"):
+            sev_map = {"error": "error", "warning": "warning", "fatal": "error"}
+            sev = sev_map.get(item.get("type", ""), "info")
+            bugs.append(BugReport(
+                file=_rel(item.get("path", ""), root),
+                line=item.get("line"), column=item.get("column"),
+                severity=sev, message=item.get("message", ""),
+                rule=f"pylint:{item.get('message-id', '')}",
+                source="linter",
+            ))
+    except Exception:
+        pass
+
+    return bugs
+
+
+# AST patterns: (rule_id, severity, detector_fn) → detector returns message | None
+_AST_CHECKS: list[tuple[str, str, object]] = []
+
+
+def _ast_check(rule: str, severity: str):
+    def decorator(fn):
+        _AST_CHECKS.append((rule, severity, fn))
+        return fn
+    return decorator
+
+
+@_ast_check("ast:bare-except", "warning")
+def _check_bare_except(node: ast.AST) -> Optional[str]:
+    if isinstance(node, ast.ExceptHandler) and node.type is None:
+        return "Bare 'except:' silences all exceptions including KeyboardInterrupt/SystemExit."
+    return None
+
+
+@_ast_check("ast:mutable-default-arg", "error")
+def _check_mutable_default(node: ast.AST) -> Optional[str]:
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return None
+    for default in node.args.defaults + node.args.kw_defaults:
+        if default is None:
+            continue
+        if isinstance(default, (ast.List, ast.Dict, ast.Set)):
+            return f"Mutable default argument in '{node.name}' — use None and assign inside the function."
+    return None
+
+
+@_ast_check("ast:assert-in-prod", "warning")
+def _check_assert(node: ast.AST) -> Optional[str]:
+    if isinstance(node, ast.Assert):
+        return "Assert statement is removed when Python runs with -O; use explicit checks for runtime validation."
+    return None
+
+
+@_ast_check("ast:except-pass", "warning")
+def _check_except_pass(node: ast.AST) -> Optional[str]:
+    if isinstance(node, ast.ExceptHandler):
+        if len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
+            etype = ast.unparse(node.type) if node.type else "*"
+            return f"'except {etype}: pass' silently swallows exceptions."
+    return None
+
+
+@_ast_check("ast:shadowed-builtin", "warning")
+def _check_shadow_builtin(node: ast.AST) -> Optional[str]:
+    _BUILTINS = frozenset({
+        "list", "dict", "set", "tuple", "type", "input", "id", "hash",
+        "min", "max", "sum", "len", "open", "print", "range", "zip", "map",
+        "filter", "object", "str", "int", "float", "bool", "bytes",
+    })
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        if node.name in _BUILTINS:
+            return f"'{node.name}' shadows the built-in with the same name."
+    elif isinstance(node, ast.Assign):
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id in _BUILTINS:
+                return f"Variable '{target.id}' shadows the built-in with the same name."
+    return None
+
+
+@_ast_check("ast:return-in-finally", "error")
+def _check_return_in_finally(node: ast.AST) -> Optional[str]:
+    if isinstance(node, ast.Try):
+        for stmt in (node.finalbody if hasattr(node, "finalbody") else []):
+            if isinstance(stmt, ast.Return):
+                return "Return inside 'finally' block suppresses exceptions from try/except."
+    return None
+
+
+@_ast_check("ast:comparison-with-none", "warning")
+def _check_none_equality(node: ast.AST) -> Optional[str]:
+    if isinstance(node, ast.Compare):
+        for op in node.ops:
+            if isinstance(op, (ast.Eq, ast.NotEq)):
+                for comparator in node.comparators:
+                    if isinstance(comparator, ast.Constant) and comparator.value is None:
+                        op_str = "==" if isinstance(op, ast.Eq) else "!="
+                        return f"Use 'is None' / 'is not None' instead of '{op_str} None'."
+    return None
+
+
+def _layer_ast(py_files: list[str], root: str) -> list[BugReport]:
+    """Layer 2: walk each file's AST and run custom checks."""
+    bugs: list[BugReport] = []
+    for fpath in py_files:
+        try:
+            source = Path(fpath).read_text(encoding="utf-8", errors="replace")
+            tree = ast.parse(source, filename=fpath)
+        except SyntaxError as e:
+            bugs.append(BugReport(
+                file=_rel(fpath, root), line=e.lineno, column=e.offset,
+                severity="error", message=f"SyntaxError: {e.msg}",
+                rule="ast:syntax-error", source="ast",
+            ))
+            continue
+        except Exception:
+            continue
+
+        for node in ast.walk(tree):
+            lineno = getattr(node, "lineno", None)
+            for rule, severity, checker in _AST_CHECKS:
+                msg = checker(node)
+                if msg:
+                    bugs.append(BugReport(
+                        file=_rel(fpath, root), line=lineno, column=None,
+                        severity=severity, message=msg, rule=rule, source="ast",
+                    ))
+
+    return bugs
+
+
+def _layer_llm(py_files: list[str], root: str, max_files: int = 3) -> list[BugReport]:
+    """Layer 3: LLM spot-check on the most recently modified Python files."""
+    bugs: list[BugReport] = []
+    try:
+        import litellm
+        from .config import get_agent_config
+        cfg = get_agent_config("orchestrator")
+        model = cfg.get("model", "")
+        if not model:
+            return bugs
+    except Exception:
+        return bugs
+
+    # Pick the most recently modified files (likely to contain the latest changes)
+    candidates = sorted(py_files, key=lambda p: os.path.getmtime(p), reverse=True)[:max_files]
+
+    for fpath in candidates:
+        try:
+            source = Path(fpath).read_text(encoding="utf-8", errors="replace")
+            if len(source) > 6000:
+                source = source[:6000] + "\n# ... [TRUNCATED]"
+
+            prompt = (
+                "You are a static analysis tool. Analyze the following Python code and return "
+                "a JSON array of bugs. Each bug must be an object with keys: "
+                "\"line\" (int or null), \"severity\" (\"error\"|\"warning\"), \"message\" (string), "
+                "\"rule\" (string starting with 'llm:'). "
+                "Focus on: logic errors, incorrect control flow, resource leaks, off-by-one errors, "
+                "wrong variable usage, and type mismatches. "
+                "Ignore style issues. If no bugs found, return []. "
+                "Return ONLY the JSON array, no other text.\n\n"
+                f"```python\n{source}\n```"
+            )
+            response = litellm.completion(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1024,
+                temperature=0,
+            )
+            raw = response.choices[0].message.content or "[]"
+            # Extract JSON array even if the model wraps it
+            m = re.search(r"\[.*\]", raw, re.DOTALL)
+            if not m:
+                continue
+            items = json.loads(m.group(0))
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                bugs.append(BugReport(
+                    file=_rel(fpath, root),
+                    line=item.get("line"),
+                    column=None,
+                    severity=item.get("severity", "warning"),
+                    message=item.get("message", ""),
+                    rule=item.get("rule", "llm:unknown"),
+                    source="llm",
+                ))
+        except Exception:
+            continue
+
+    return bugs
+
+
+@as_tool(
+    name="search_bugs",
+    description=(
+        "Detect bugs in the project (or a specific file/directory) using three layers: "
+        "(1) linters: pyflakes, mypy, pylint — when available; "
+        "(2) AST analysis: custom checks for bare-except, mutable defaults, except-pass, "
+        "shadowed builtins, return-in-finally, None comparisons; "
+        "(3) LLM spot-check: the active orchestrator model reviews the most recently "
+        "modified files for logic errors and type mismatches. "
+        "Returns a structured list of bugs sorted by severity. "
+        "Optionally restrict to a specific path (file or directory relative to project root). "
+        "Set llm_check=False to skip the LLM layer (faster)."
+    ),
+)
+def search_bugs(path: str = ".", llm_check: bool = True) -> str:
+    AGENT_PROGRESS.update("search_bugs", f"path={_preview(path)}")
+    root = get_project_path()
+    py_files = _collect_python_files(root, path)
+
+    if not py_files:
+        return f"No Python files found in '{path}'."
+
+    all_bugs: list[BugReport] = []
+    all_bugs.extend(_layer_linters(py_files, root))
+    all_bugs.extend(_layer_ast(py_files, root))
+    if llm_check:
+        all_bugs.extend(_layer_llm(py_files, root))
+
+    if not all_bugs:
+        return f"No bugs detected in {len(py_files)} Python file(s)."
+
+    # Deduplicate by (file, line, rule, message)
+    seen: set[tuple] = set()
+    unique: list[BugReport] = []
+    for b in all_bugs:
+        key = (b.file, b.line, b.rule, b.message[:80])
+        if key not in seen:
+            seen.add(key)
+            unique.append(b)
+
+    # Sort: errors first, then by file and line
+    sev_order = {"error": 0, "warning": 1, "info": 2}
+    unique.sort(key=lambda b: (sev_order.get(b.severity, 9), b.file, b.line or 0))
+
+    lines = [f"Found {len(unique)} bug(s) in {len(py_files)} file(s):\n"]
+    for b in unique:
+        loc = f"{b.file}:{b.line}" if b.line else b.file
+        lines.append(f"[{b.severity.upper()}] {loc}  ({b.rule})  [{b.source}]")
+        lines.append(f"  {b.message}")
+    return "\n".join(lines)
+
+
 def get_available_tools():
     return [
         get_project_overview,
@@ -433,6 +810,7 @@ def get_available_tools():
         read_core_memory,
         append_core_memory,
         search_conversation_history,
+        search_bugs,
     ]
 
 # ─── Long-Term Memory (MemGPT-style) ──────────────────────────────────────────
