@@ -63,8 +63,9 @@ class Task(BaseModel):
     related_files: list[str]  # files the worker must read before acting
     context: str        # operational detail: classes, IDs, APIs, contracts between files
     depends_on: list[str] = []  # ids of tasks that must complete before this one
-    status: str = "pending"    # pending | done | failed
-    failure_count: int = 0     # incremented each time planner-review marks done=False
+    status: str = "pending"      # pending | done | failed
+    failure_count: int = 0       # incremented each time reviewer says done=False
+    oracle_failure_count: int = 0  # incremented when reviewer oracle itself fails (format error)
 
     @field_validator("context", mode="before")
     @classmethod
@@ -107,7 +108,8 @@ class VerifyOutput(BaseModel):
     corrections: list[Task]   # new tasks to add to the plan when done=False
 
 
-MAX_TASK_FAILURES = 3   # abort plan after this many failed review cycles per task
+MAX_TASK_FAILURES = 3        # abort plan after this many failed review cycles per task
+MAX_REVIEWER_ORACLE_FAILS = 2  # skip reviewer and treat task as done after this many oracle failures
 
 
 # ---------------------------------------------------------------------------
@@ -204,28 +206,31 @@ async def _oracle(
 
     Uses response_format={"type":"json_object"} — supported by Ollama.
     On parse or schema error, injects the specific error back (reflection guardrail).
+
+    Two independent retry budgets:
+    - MAX_REFLECT_RETRIES: for JSON parse / Pydantic schema failures (LLM format errors)
+    - MAX_SEMANTIC_RETRIES: for PlanOutput semantic validation (empty context, missing files, etc.)
+    Keeping them separate prevents semantic feedback from eating JSON-format retry budget.
     """
+    MAX_SEMANTIC_RETRIES = 3
     kwargs = {**llm_kwargs, "response_format": {"type": "json_object"}}
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": prompt},
     ]
     last_error = ""
+    semantic_attempts = 0
 
     for attempt in range(MAX_REFLECT_RETRIES):
         if attempt > 0:
+            # Only count as plan retry when it's a real format failure, not a semantic one
             AGENT_PROGRESS.record_plan_retry(attempt)
             fields = {k: str(v.annotation) for k, v in schema.model_fields.items()}
-            verify_caution = (
-                " IMPORTANT: if this is a VerifyOutput, only set done=true if you have "
-                "concrete evidence from the file contents that ALL requirements are met. "
-                "When in doubt, set done=false with a specific correction."
-            ) if schema.__name__ == "VerifyOutput" else ""
             messages.append({"role": "user", "content": (
                 f"[GUARDRAIL — attempt {attempt + 1}/{MAX_REFLECT_RETRIES}]: "
                 f"{last_error}. "
                 f"Required JSON schema: {json.dumps(fields)}. "
-                f"Output ONLY a valid JSON object — no prose, no markdown.{verify_caution}"
+                f"Output ONLY a valid JSON object — no prose, no markdown."
             )})
 
         try:
@@ -241,15 +246,40 @@ async def _oracle(
                 content = re.sub(r"\n?```$", "", content)
             data = json.loads(content)
             result = schema.model_validate(data)
-            # Semantic validation for PlanOutput: tasks must be self-contained
+            # Semantic validation for PlanOutput: tasks must be self-contained.
+            # Uses a separate retry budget so these don't consume JSON-format retries.
             if isinstance(result, PlanOutput):
                 feedback = [f for t in result.tasks if (f := _validate_task(t))]
-                if feedback:
-                    last_error = (
+                if feedback and semantic_attempts < MAX_SEMANTIC_RETRIES:
+                    semantic_attempts += 1
+                    semantic_error = (
                         "Plan tasks are incomplete:\n" + "\n".join(feedback) +
                         "\nFix ALL flagged tasks before returning the plan."
                     )
                     messages.append({"role": "assistant", "content": content})
+                    messages.append({"role": "user", "content": (
+                        f"[SEMANTIC CHECK — attempt {semantic_attempts}/{MAX_SEMANTIC_RETRIES}]: "
+                        f"{semantic_error}"
+                    )})
+                    # Retry the LLM call without consuming the format-retry budget
+                    try:
+                        resp2 = await litellm.acompletion(
+                            model=model, messages=messages, **kwargs
+                        )
+                        content2 = (resp2.choices[0].message.content or "").strip()
+                        if content2.startswith("```"):
+                            content2 = re.sub(r"^```[a-z]*\n?", "", content2)
+                            content2 = re.sub(r"\n?```$", "", content2)
+                        data2 = json.loads(content2)
+                        result2 = schema.model_validate(data2)
+                        feedback2 = [f for t in result2.tasks if (f := _validate_task(t))]
+                        if not feedback2:
+                            return result2
+                        # Still invalid — append and fall through to next format attempt
+                        messages.append({"role": "assistant", "content": content2})
+                        last_error = "Plan tasks are still incomplete after semantic fix: " + "; ".join(feedback2)
+                    except Exception:
+                        pass  # fall through to next format attempt
                     continue
             return result
         except json.JSONDecodeError as e:
@@ -734,8 +764,9 @@ Correction task schema:
             )
             AGENT_PROGRESS.last_tool = f"Reviewer → {task.id}"
             AGENT_PROGRESS.last_args = task.goal[:70]
-            # Use higher max_tokens for reviewer to ensure JSON fits in response
-            reviewer_kwargs = {**llm_kwargs, "max_tokens": 1024}
+            # Reviewer must fit a full VerifyOutput with corrections (list[Task]) when done=False.
+            # 1024 is too small — each Task has 6 fields including context and commands lists.
+            reviewer_kwargs = {**llm_kwargs, "max_tokens": 2048}
             return await _oracle(
                 VerifyOutput, reviewer_sys, review_prompt,
                 model=self.model, llm_kwargs=reviewer_kwargs,
@@ -853,10 +884,18 @@ Correction task schema:
                 review = await _review_task(task, worker_result, plan)
                 T.debug_oracle(f"reviewer_{task.id}", 0, str(review))
                 if review is None:
-                    # Oracle failed — count as failure
-                    task.failure_count += 1
-                    AGENT_PROGRESS.record_task_failure(task.id, "reviewer oracle failed")
-                    _save_intermediate("review", f"[{task.id}] reviewer oracle failed")
+                    # Reviewer oracle could not produce valid JSON — this is a format
+                    # failure, NOT a task failure. Count separately so it doesn't
+                    # wrongly abort the plan after MAX_TASK_FAILURES.
+                    task.oracle_failure_count += 1
+                    AGENT_PROGRESS.record_task_failure(task.id, "reviewer oracle failed (format error)")
+                    _save_intermediate("review", f"[{task.id}] reviewer oracle failed ({task.oracle_failure_count}/{MAX_REVIEWER_ORACLE_FAILS})")
+                    if task.oracle_failure_count >= MAX_REVIEWER_ORACLE_FAILS:
+                        # Give up trying to review this task; treat it as done so the
+                        # plan can continue. Worker output is preserved on disk.
+                        task.status = "done"
+                        AGENT_PROGRESS.tasks_done += 1
+                        _save_intermediate("review", f"[{task.id}] skipped review after {MAX_REVIEWER_ORACLE_FAILS} oracle failures — treated as done")
                 elif review.done:
                     task.status = "done"
                     AGENT_PROGRESS.tasks_done += 1

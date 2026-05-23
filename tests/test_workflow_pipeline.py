@@ -627,3 +627,143 @@ async def test_planner_reflection_triggered_on_incomplete_task(tmp_path):
         "Oracle returned the incomplete task instead of the corrected one."
     assert result.tasks[0].context.strip() != "", \
         "Final task still has empty context after reflection."
+
+
+# ---------------------------------------------------------------------------
+# Regression: reviewer oracle failure must NOT increment task.failure_count
+# ---------------------------------------------------------------------------
+
+@pytest.mark.anyio
+async def test_reviewer_oracle_failure_does_not_abort_plan(tmp_path):
+    """When the reviewer oracle returns None (can't format JSON), the plan must NOT
+    abort as if the task genuinely failed. oracle_failure_count tracks this separately.
+    After MAX_REVIEWER_ORACLE_FAILS the task is treated as done and the plan continues.
+    """
+    from opalacoder.workflow_orchestrator import MAX_REVIEWER_ORACLE_FAILS
+
+    project_path = str(tmp_path)
+    Path(tmp_path / "app.py").write_text("x = 1")
+
+    call_count = [0]
+    oracle_fail_count = [0]
+
+    async def fake_acompletion(**kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            # Planner: one task
+            return _plan_response([_make_task(
+                "t1", f"Edit {project_path}/app.py.",
+                commands=[f"Add y = 2 to {project_path}/app.py"],
+                context="app.py has x = 1. Add y = 2 on the next line."
+            )])
+        # All reviewer calls return garbage JSON so oracle returns None
+        oracle_fail_count[0] += 1
+        msg = MagicMock()
+        msg.content = "not valid json {"
+        choice = MagicMock()
+        choice.message = msg
+        resp = MagicMock()
+        resp.choices = [choice]
+        return resp
+
+    async def fake_agent_run(self_agent, agent_input):
+        Path(project_path, "app.py").write_text("x = 1\ny = 2")
+        out = MagicMock()
+        out.response = "Added y = 2 to app.py."
+        return out
+
+    strategy = WorkflowOrchestratorStrategy(model="ollama/test-model")
+
+    with (
+        patch("opalacoder.workflow_orchestrator.litellm.acompletion", side_effect=fake_acompletion),
+        patch("agenticblocks.blocks.llm.agent.LLMAgentBlock.run", new=fake_agent_run),
+        patch("opalacoder.workflow_orchestrator.WorkflowOrchestratorStrategy._plan_and_refine",
+              new=AsyncMock(return_value="")),
+        patch("opalacoder.tools.set_project_context"),
+        patch("opalacoder.tools._PROJECT_PATH", project_path),
+    ):
+        result = await strategy.run(
+            user_request="Add y = 2 to app.py.",
+            history="",
+            session=FakeSession(project_path),
+            store=FakeStore(),
+        )
+
+    # Plan must complete (not abort) despite reviewer oracle failures
+    assert result is not None
+    assert "could not be completed" not in result.lower(), \
+        f"Plan aborted due to reviewer oracle failures (should have continued): {result!r}"
+    # Oracle failure count must not exceed MAX_REVIEWER_ORACLE_FAILS retries per task
+    # (each failed oracle call tries MAX_REFLECT_RETRIES times = 3 LLM calls each)
+    assert oracle_fail_count[0] <= MAX_REVIEWER_ORACLE_FAILS * 3 + 2, \
+        f"Too many reviewer oracle calls: {oracle_fail_count[0]}"
+
+
+# ---------------------------------------------------------------------------
+# Regression: semantic retries must not consume JSON-format retry budget
+# ---------------------------------------------------------------------------
+
+@pytest.mark.anyio
+async def test_semantic_retry_does_not_consume_format_retry_budget(tmp_path):
+    """When the oracle produces valid JSON but fails semantic validation, the fix
+    attempt uses a separate budget. A single format failure should still get
+    MAX_REFLECT_RETRIES attempts regardless of how many semantic retries happened.
+    """
+    from opalacoder.workflow_orchestrator import _oracle, PlanOutput, MAX_REFLECT_RETRIES
+
+    project_path = str(tmp_path)
+    call_count = [0]
+    format_fail_injected = [False]
+
+    async def fake_acompletion(**kwargs):
+        call_count[0] += 1
+        messages = kwargs["messages"]
+
+        # First call: valid JSON but semantically incomplete (empty context)
+        if call_count[0] == 1:
+            return _oracle_response({"tasks": [{
+                "id": "t1",
+                "goal": "Create style.css",
+                "commands": ["Create style.css with button styles"],
+                "related_files": [],
+                "context": "",   # fails semantic validation
+                "depends_on": [],
+            }]})
+
+        # Second call (semantic retry): return garbage to trigger format error
+        if call_count[0] == 2 and not format_fail_injected[0]:
+            format_fail_injected[0] = True
+            msg = MagicMock()
+            msg.content = "oops not json {"
+            choice = MagicMock()
+            choice.message = msg
+            resp = MagicMock()
+            resp.choices = [choice]
+            return resp
+
+        # Subsequent format-retry attempts: return valid complete task
+        return _oracle_response({"tasks": [_make_task(
+            "t1",
+            goal="Create style.css to style index.html",
+            commands=["Create style.css with .calculator and .btn classes"],
+            related_files=["index.html"],
+            context=".calculator flex wrapper, .btn base button.",
+        )]})
+
+    with patch("opalacoder.workflow_orchestrator.litellm.acompletion", side_effect=fake_acompletion):
+        result = await _oracle(
+            PlanOutput,
+            system="You are a planner.",
+            prompt="Create a calculator CSS.",
+            model="ollama/test-model",
+            llm_kwargs={},
+        )
+
+    # Oracle must eventually succeed despite the mixed semantic + format failures
+    assert result is not None, \
+        "Oracle returned None — semantic retries consumed the entire format retry budget"
+    assert result.tasks[0].context.strip() != "", \
+        "Final task still has empty context."
+    # Total LLM calls must be within reason
+    assert call_count[0] <= MAX_REFLECT_RETRIES + 4, \
+        f"Too many LLM calls ({call_count[0]}), retry logic may be looping"
