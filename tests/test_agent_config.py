@@ -15,7 +15,6 @@ from opalacoder.config import get_agent_llm_kwargs
 CLASSIFIER_AGENTS = [
     "intent_classifier",
     "complexity_evaluator",
-    "confirmation_agent",
     "skill_selector",
 ]
 
@@ -71,7 +70,7 @@ def test_orchestrator_has_large_num_ctx():
 # Determinism for classifiers
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("agent", ["intent_classifier", "confirmation_agent"])
+@pytest.mark.parametrize("agent", ["intent_classifier", "skill_selector"])
 def test_deterministic_classifiers_have_zero_temperature(agent):
     """Classification must be deterministic — temperature must be 0."""
     kwargs = get_agent_llm_kwargs(agent)

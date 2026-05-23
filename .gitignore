@@ -10,7 +10,9 @@ plan.md
 # --- Typical Python Project settings ---
 # Byte-compiled / optimized / DLL files
 __pycache__/
+**/__pycache__/
 *.py[cod]
+**/*.pyc
 *$py.class
 
 # C extensions
@@ -138,8 +140,29 @@ cython_debug/
 .idea/
 *.swp
 *.swo
-opalacoder/__pycache__/cli_commands.cpython-314.pyc
+*.pyc*
+opalacoder/__pycache__/agents.cpython-314.pyc
+opalacoder/__pycache__/cli.cpython-314.pyc
 opalacoder/__pycache__/config.cpython-314.pyc
-opalacoder/__pycache__/i18n.cpython-314.pyc
 opalacoder/__pycache__/orchestrator.cpython-314.pyc
-opalacoder/__pycache__/skills.cpython-314.pyc
+opalacoder/__pycache__/planner.cpython-314.pyc
+opalacoder/__pycache__/terminal.cpython-314.pyc
+opalacoder/__pycache__/tools.cpython-314.pyc
+.gitignore
+opalacoder/__pycache__/agents.cpython-314.pyc
+opalacoder/__pycache__/cli.cpython-314.pyc
+opalacoder/__pycache__/config.cpython-314.pyc
+opalacoder/__pycache__/orchestrator.cpython-314.pyc
+opalacoder/__pycache__/planner.cpython-314.pyc
+opalacoder/__pycache__/tools.cpython-314.pyc
+opalacoder/__pycache__/terminal.cpython-314.pyc
+tests/__pycache__/test_agent_config.cpython-314-pytest-9.0.3.pyc
+.gitignore
+opalacoder/__pycache__/agents.cpython-314.pyc
+opalacoder/__pycache__/cli.cpython-314.pyc
+opalacoder/__pycache__/config.cpython-314.pyc
+opalacoder/__pycache__/orchestrator.cpython-314.pyc
+opalacoder/__pycache__/planner.cpython-314.pyc
+opalacoder/__pycache__/tools.cpython-314.pyc
+opalacoder/__pycache__/terminal.cpython-314.pyc
+tests/__pycache__/test_agent_config.cpython-314-pytest-9.0.3.pyc
