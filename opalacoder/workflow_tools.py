@@ -250,7 +250,19 @@ def send_message(message: str) -> str:
     return f"[DONE] {message}"
 
 
-def get_workflow_tools() -> list:
-    """Return all base tools plus workflow-specific composite/smart tools."""
+def get_workflow_tools(skill_tools: list = None) -> list:
+    """Return all base tools plus workflow-specific composite/smart tools.
+
+    skill_tools: additional callables loaded from skill plugin declarations.
+    """
     from .tools import get_available_tools
-    return get_available_tools() + [edit_file, find_symbol, find_callers, read_file, send_message]
+    base = get_available_tools() + [edit_file, find_symbol, find_callers, read_file, send_message]
+    if skill_tools:
+        # Deduplicate by tool name (FunctionBlock.name) or __name__ for plain callables
+        base_names = {getattr(t, "name", None) or getattr(t, "__name__", None) for t in base}
+        for st in skill_tools:
+            st_name = getattr(st, "name", None) or getattr(st, "__name__", None)
+            if st_name not in base_names:
+                base.append(st)
+                base_names.add(st_name)
+    return base

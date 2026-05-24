@@ -87,13 +87,20 @@ def _validate_task(task: Task) -> str | None:
             f"task '{task.id}': 'context' is empty — provide operational details "
             "(class names, function signatures, IDs, contracts with other files)."
         )
-    # CSS/JS tasks that reference HTML should list the HTML in related_files
+    # CSS/JS tasks that *edit/add to* existing files must list those files in related_files
+    # so the worker can read the current state before modifying.
+    # Tasks that *create* a new file from scratch are exempt — nothing to read yet.
     goal_lower = task.goal.lower()
     cmd_text = " ".join(task.commands).lower()
-    if any(ext in goal_lower + cmd_text for ext in (".css", ".js", ".ts")) and not task.related_files:
+    combined = goal_lower + cmd_text
+    is_css_js_task = any(ext in combined for ext in (".css", ".js", ".ts"))
+    is_create_task = any(w in goal_lower for w in ("create", "add", "new", "write", "generate", "build"))
+    is_edit_task = any(w in goal_lower for w in ("edit", "update", "modify", "fix", "refactor", "change", "implement", "add to", "connect", "wire", "integrate"))
+    if is_css_js_task and is_edit_task and not is_create_task and not task.related_files:
         errors.append(
-            f"task '{task.id}': 'related_files' is empty for a CSS/JS task — "
-            "list the HTML or source files that define the classes/IDs being targeted."
+            f"task '{task.id}': 'related_files' is empty for a CSS/JS edit task — "
+            "list the files that must be read before modifying (the JS/CSS file being edited, "
+            "and the HTML file that defines the IDs/classes being targeted)."
         )
     return "\n".join(errors) if errors else None
 
@@ -105,7 +112,7 @@ class PlanOutput(BaseModel):
 class VerifyOutput(BaseModel):
     done: bool
     summary: str              # past-tense if done; what's missing otherwise
-    corrections: list[Task]   # new tasks to add to the plan when done=False
+    corrections: list[Task] = []  # new tasks to add to the plan when done=False; optional when done=True
 
 
 MAX_TASK_FAILURES = 3        # abort plan after this many failed review cycles per task
@@ -323,6 +330,9 @@ PREFERRED TOOLS:
 - write_file      : only for new files or full rewrites
 - run_command     : lint, compile, install — NEVER start servers
 
+SKILL TOOLS (if available): language-specific bug detectors injected from the active skill.
+Call them at the start of any fix/refactor command to know what is already broken.
+
 IMPROVEMENT LOOP:
 edit_file returns lint errors automatically. On error: fix ONLY the specific
 line shown, then call edit_file again. Do NOT rewrite the whole file.
@@ -355,7 +365,7 @@ class WorkflowOrchestratorStrategy(BaseOrchestratorStrategy):
     # Oracle system prompts
     # ------------------------------------------------------------------
 
-    def _planner_system(self, project_context: str, session) -> str:
+    def _planner_system(self, project_context: str, session, skill_tool_names: list[str] = None) -> str:
         proj_path = "."
         if project_context:
             m = re.search(r"PATH:\s*(.+?)\]", project_context)
@@ -400,6 +410,7 @@ Field rules:
 - commands: ordered list of atomic steps; each step is a separate worker action
   * Be concrete: "Add class .btn-login with display:flex, background:#e94560 to style.css"
   * NOT vague: "style the button"
+  * For fix/refactor tasks: if a skill bug-detection tool is available (listed below), the FIRST command MUST call it on the relevant file to identify existing issues before editing
 - related_files: files the worker MUST read before acting (source of truth for class names, IDs, APIs)
   * CSS/JS tasks MUST list the HTML or source file that defines the selectors/IDs being used
 - context: operational detail the worker needs WITHOUT reading files:
@@ -420,7 +431,12 @@ Hard rules:
 - For redeclaration errors (SyntaxError: redeclaration / already declared): the fix is to
   DELETE the duplicate declaration line using edit_file with new_str="". Never change const→let or
   let→var — that keeps the duplicate. Command must be: "delete line N using edit_file(old_str=<line content>, new_str='', line=N)".
-"""
+""" + (
+            f"\nAvailable skill tools (workers have these as callable functions):\n"
+            + "\n".join(f"- {name}" for name in skill_tool_names)
+            + "\nFor fix/refactor tasks, the first command MUST call the relevant skill tool on the target file.\n"
+            if skill_tool_names else ""
+        )
 
     def _reviewer_system(self, project_context: str) -> str:
         """System prompt for the planner-review oracle.
@@ -451,14 +467,15 @@ Hard rules:
 
         return f"""\
 You are a task reviewer for the project at `{proj_path}`.
-You receive: the current task (from the plan), the worker's result, and the actual
-file contents written to disk.
+You receive: the current task (from the plan), the worker's result, the actual
+file contents written to disk, and lint results for all modified files.
 
 Your job: decide whether THIS SPECIFIC TASK is done.
 
 Rules:
-- Set done=true if the file contents satisfy the task's goal. Be decisive — if the
-  worker made a genuine attempt and the files look correct, mark done=true.
+- If the lint results show ANY syntax error, you MUST set done=false — a file with
+  syntax errors is broken regardless of what the worker reported.
+- Set done=true only if lint is clean AND the file contents satisfy the task's goal.
 - Set done=false only if something is concretely wrong or missing in the actual files.
 - Do NOT invent problems. Do NOT require perfection beyond the task goal.
 - If done=false, return exactly one correction task describing what remains.
@@ -513,6 +530,7 @@ Correction task schema:
         llm_kwargs: dict,
         sub_hb: int,
         debug: bool,
+        skill_tools: list = None,
     ) -> str:
         AGENT_PROGRESS.last_tool = f"Worker → {task.id}"
         AGENT_PROGRESS.last_args = task.goal[:70]
@@ -522,21 +540,56 @@ Correction task schema:
             m = re.search(r"PATH:\s*(.+?)\]", project_context)
             proj_path = m.group(1).strip() if m else "."
 
-        # Build the context preamble injected into every command prompt
         related = ", ".join(task.related_files) if task.related_files else "none"
-        context_block = (
-            f"TASK GOAL: {task.goal}\n"
-            f"RELATED FILES (read these first): {related}\n"
-            f"CONTEXT:\n{task.context}\n"
-            f"---\n"
-        )
+        _root = Path(proj_path)
+        _MAX_SNAPSHOT_BYTES = 4000
+
+        def _build_file_snapshot() -> str:
+            """Read related_files from disk right now — called before each command
+            so every command sees the file state left by the previous command."""
+            snapshots: list[str] = []
+            total = 0
+            for _rel in task.related_files:
+                if total >= _MAX_SNAPSHOT_BYTES:
+                    snapshots.append("...(remaining related files omitted — snapshot budget reached)")
+                    break
+                _p = _root / _rel if not Path(_rel).is_absolute() else Path(_rel)
+                if not _p.exists():
+                    _matches = list(_root.rglob(Path(_rel).name))
+                    _p = _matches[0] if _matches else _p
+                if _p.exists() and _p.is_file():
+                    try:
+                        _content = _p.read_text(encoding="utf-8", errors="replace")
+                        _allowed = min(2000, _MAX_SNAPSHOT_BYTES - total)
+                        _snippet = _content[:_allowed]
+                        if len(_content) > _allowed:
+                            _snippet += f"\n...(truncated, {len(_content)} bytes total — use read_file for full content)"
+                        snapshots.append(f"### {_rel} (current state on disk)\n```\n{_snippet}\n```")
+                        total += len(_snippet)
+                    except Exception:
+                        pass
+            if not snapshots:
+                return ""
+            return (
+                "\nCURRENT FILE STATE (read from disk right now — use this, not your training data):\n"
+                + "\n".join(snapshots) + "\n"
+            )
 
         system = _WORKER_SYSTEM + f"\nWork EXCLUSIVELY inside `{proj_path}`.\n"
         worker_kwargs = dict(llm_kwargs)  # already contains worker-specific settings
 
         async def _run_command(cmd_index: int, command: str, model: str) -> str:
-            prompt = context_block + f"COMMAND: {command}"
-            tools = get_workflow_tools()
+            # Rebuild snapshot on every command — reflects edits made by previous commands.
+            _snapshot_section = _build_file_snapshot()
+            prompt = (
+                f"TASK GOAL: {task.goal}\n"
+                f"RELATED FILES (read these first): {related}\n"
+                f"CONTEXT:\n{task.context}\n"
+                f"{_snapshot_section}"
+                f"---\n"
+                f"COMMAND: {command}"
+            )
+            tools = get_workflow_tools(skill_tools=skill_tools)
 
             # Collect tool outputs via on_iteration so the reviewer sees real errors.
             # on_iteration receives the full message history each time, so we track
@@ -668,10 +721,11 @@ Correction task schema:
 
         # Auto-checkpoint before any worker modifies files — enables /undo
         # Must run after set_project_context so get_project_path() is correct.
+        # _vcs is kept alive so per-task checkpoints can be created inside the loop.
+        _vcs = None
         try:
             from .vcs import get_vcs_strategy
             from .config import get_git_strategy
-            import sys as _sys
             _vcs = get_vcs_strategy(get_git_strategy(), get_project_path())
             _vcs.setup()
             _vcs.manual_commit("auto-checkpoint before plan execution")
@@ -686,7 +740,21 @@ Correction task schema:
         except Exception as _idx_err:
             T.debug_oracle("code_index", 0, f"Index build skipped: {_idx_err}")
 
-        planner_sys = self._planner_system(project_context, session)
+        # Load tools declared in active skills (plugin system)
+        _project_skills = kwargs.get("project_skills") or []
+        _project_path = get_project_path()
+        try:
+            from .skills import load_skill_tools
+            _skill_tools = load_skill_tools(_project_skills, _project_path)
+        except Exception as _st_err:
+            T.debug_oracle("skill_tools", 0, f"Skill tools load failed: {_st_err}")
+            _skill_tools = []
+        _skill_tool_names = [
+            getattr(st, "name", None) or getattr(st, "__name__", str(st))
+            for st in _skill_tools
+        ]
+
+        planner_sys = self._planner_system(project_context, session, _skill_tool_names or None)
         reviewer_sys = self._reviewer_system(project_context)
 
         # Project snapshot fetched once — used to prime oracle without tools
@@ -707,7 +775,7 @@ Correction task schema:
                 and all(dep in done_ids for dep in t.depends_on)
             ]
 
-        def _read_relevant_files(task: Task, max_bytes_per_file: int = 2000, max_total: int = 4000) -> str:
+        def _read_relevant_files(task: Task, max_bytes_per_file: int = 6000, max_total: int = 12000) -> str:
             """Read only the files listed in task.related_files for the reviewer.
 
             Hard cap on total bytes sent to the reviewer oracle to avoid context overflow.
@@ -748,17 +816,61 @@ Correction task schema:
                         pass
             return "\n\n".join(parts) if parts else "(no relevant files found)"
 
+        def _run_lint(task: Task) -> str:
+            """Run syntax checkers on all related files and return a lint summary.
+
+            Results are injected into the reviewer prompt as authoritative ground truth.
+            A syntax error here means done=false regardless of what the worker reported.
+            """
+            import subprocess as _sp
+            root = Path(get_project_path())
+            results: list[str] = []
+            seen: set[str] = set()
+            candidates = list(task.related_files)
+            for text in [task.goal] + task.commands:
+                for word in text.split():
+                    w = word.strip("\"'(),")
+                    if "." in w and not w.startswith("."):
+                        candidates.append(w)
+            for rel in candidates:
+                if rel in seen:
+                    continue
+                seen.add(rel)
+                p = root / rel if not Path(rel).is_absolute() else Path(rel)
+                if not p.exists():
+                    matches = list(root.rglob(Path(rel).name))
+                    p = matches[0] if matches else p
+                if not p.exists() or not p.is_file():
+                    continue
+                suffix = p.suffix.lower()
+                try:
+                    if suffix in (".js", ".mjs", ".cjs"):
+                        r = _sp.run(["node", "--check", str(p)], capture_output=True, text=True, timeout=10)
+                        results.append(f"{rel}: {'OK' if r.returncode == 0 else 'SYNTAX ERROR — ' + r.stderr.strip()}")
+                    elif suffix in (".py",):
+                        r = _sp.run(["python", "-m", "py_compile", str(p)], capture_output=True, text=True, timeout=10)
+                        results.append(f"{rel}: {'OK' if r.returncode == 0 else 'SYNTAX ERROR — ' + r.stderr.strip()}")
+                    elif suffix in (".ts", ".tsx"):
+                        r = _sp.run(["npx", "--no-install", "tsc", "--noEmit", "--allowJs", str(p)], capture_output=True, text=True, timeout=15)
+                        results.append(f"{rel}: {'OK' if r.returncode == 0 else 'ERROR — ' + r.stdout.strip()[:300]}")
+                except Exception as _le:
+                    results.append(f"{rel}: lint skipped ({_le})")
+            if not results:
+                return "(no lintable files found)"
+            return "\n".join(results)
+
         async def _review_task(task: Task, worker_result: str, plan: PlanOutput) -> VerifyOutput | None:
             """Ask the planner-reviewer whether this specific task is done."""
-            # Only include the current task in the review prompt — full plan is too large
             task_json = json.dumps(task.model_dump(), indent=2)
             file_contents = _read_relevant_files(task)
+            lint_summary = _run_lint(task)
             # Cap worker_result to avoid flooding the reviewer context
             worker_result_capped = worker_result[:2000]
             if len(worker_result) > 2000:
                 worker_result_capped += f"\n...(truncated, {len(worker_result)} chars total)"
             review_prompt = (
                 f"Task under review:\n{task_json}\n\n"
+                f"Lint results (authoritative — syntax errors mean done=false):\n{lint_summary}\n\n"
                 f"Worker result:\n{worker_result_capped}\n\n"
                 f"Relevant file contents on disk:\n{file_contents}"
             )
@@ -775,7 +887,8 @@ Correction task schema:
         async def _run_worker_safe(task: Task) -> str:
             try:
                 result = await self._run_worker(
-                    task, project_context, worker_llm_kwargs, sub_hb, worker_debug
+                    task, project_context, worker_llm_kwargs, sub_hb, worker_debug,
+                    skill_tools=_skill_tools,
                 )
                 if result.lower().startswith("[error"):
                     AGENT_PROGRESS.record_worker_error(task.id, result)
@@ -875,6 +988,18 @@ Correction task schema:
                 AGENT_PROGRESS.last_tool = f"Worker → {task.id}"
                 AGENT_PROGRESS.last_args = task.goal[:70]
 
+                # Checkpoint before the task runs so we can roll back if it needs
+                # to be re-executed. Without this, a retry would attempt the same
+                # edit_file old_str on a file already modified by the first run.
+                _task_checkpoint_ok = False
+                if _vcs is not None:
+                    try:
+                        ok, _ = _vcs.manual_commit(f"pre-task {task.id}: {task.goal[:60]}")
+                        _task_checkpoint_ok = ok
+                        T.debug_oracle("vcs", 0, f"Checkpoint created before {task.id}")
+                    except Exception as _ck_err:
+                        T.debug_oracle("vcs", 0, f"Per-task checkpoint failed: {_ck_err}")
+
                 worker_result = await _run_worker_safe(task)
                 T.debug_worker_result(task.id, worker_result)
                 _save_intermediate("task", f"[{task.id}] {worker_result[:500]}")
@@ -896,6 +1021,14 @@ Correction task schema:
                         task.status = "done"
                         AGENT_PROGRESS.tasks_done += 1
                         _save_intermediate("review", f"[{task.id}] skipped review after {MAX_REVIEWER_ORACLE_FAILS} oracle failures — treated as done")
+                    elif _task_checkpoint_ok and _vcs is not None:
+                        # Roll back files to the pre-task state so the next retry
+                        # starts from a clean slate (avoids old_str-not-found errors).
+                        try:
+                            _vcs.undo_last()
+                            T.debug_oracle("vcs", 0, f"Rolled back {task.id} after oracle failure")
+                        except Exception as _rb_err:
+                            T.debug_oracle("vcs", 0, f"Rollback failed: {_rb_err}")
                 elif review.done:
                     task.status = "done"
                     AGENT_PROGRESS.tasks_done += 1

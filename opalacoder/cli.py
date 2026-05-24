@@ -380,6 +380,7 @@ async def run_pipeline(
         session=project,
         store=store,
         max_retries=max_retries,
+        project_skills=project_skills,
     )
 
     # Save raw orchestrator output to archival (subconscious record)

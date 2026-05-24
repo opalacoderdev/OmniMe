@@ -1,3 +1,7 @@
+# General Rules
+
+1. Don't make baseless assumptions; before drawing any conclusions, conduct tests and analysis to gather as much information as possible.
+
 # Project Guide
 
 ## Language

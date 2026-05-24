@@ -51,7 +51,6 @@ agents:
     num_ctx: 8192
     max_heartbeats: 10
     debug: false
-    reasoning_effort: "none"
 
   # enricher = chat_agent running in Mode A (silent memory-retrieval pass).
   # reasoning_effort must be "none": thinking leaves tool_calls empty (ollama issue #15288).

@@ -810,7 +810,6 @@ def get_available_tools():
         read_core_memory,
         append_core_memory,
         search_conversation_history,
-        search_bugs,
     ]
 
 # ─── Long-Term Memory (MemGPT-style) ──────────────────────────────────────────

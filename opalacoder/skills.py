@@ -1,5 +1,9 @@
+import importlib
+import importlib.util
 import os
 import re
+import sys
+from typing import Callable
 
 # Skill scopes:
 #   "all"          — injected everywhere: intent classifier AND orchestrator (default)
@@ -38,15 +42,89 @@ def _parse_skill_file(filepath: str) -> dict | None:
     desc_match = re.search(r"^description:\s*(.+)$", content, re.IGNORECASE | re.MULTILINE)
     scope_match = re.search(r"^scope:\s*(.+)$", content, re.IGNORECASE | re.MULTILINE)
 
+    # Parse multi-line YAML list under "tools:" until next non-indented key or end
+    tools: list[str] = []
+    tools_block = re.search(r"^tools:\s*\n((?:[ \t]+-[ \t]+\S+\n?)+)", content, re.IGNORECASE | re.MULTILINE)
+    if tools_block:
+        for line in tools_block.group(1).splitlines():
+            entry = re.sub(r"^[ \t]+-[ \t]+", "", line).strip()
+            if entry:
+                tools.append(entry)
+
     tags = [t.strip().lower() for t in tags_match.group(1).split(",") if t.strip()] if tags_match else []
     description = desc_match.group(1).strip() if desc_match else "No description"
     scope = scope_match.group(1).strip().lower() if scope_match else SCOPE_ALL
 
     clean_content = re.sub(r"^(tags|description|scope):\s*.+\n?", "", content, flags=re.IGNORECASE | re.MULTILINE).strip()
+    clean_content = re.sub(r"^tools:\s*\n((?:[ \t]+-[ \t]+\S+\n?)+)", "", clean_content, flags=re.IGNORECASE | re.MULTILINE).strip()
     clean_content = re.sub(r"^---\n?", "", clean_content, flags=re.MULTILINE).strip()
 
     name = os.path.basename(filepath).replace(".md", "")
-    return {"name": name, "description": description, "tags": tags, "scope": scope, "content": clean_content}
+    return {"name": name, "description": description, "tags": tags, "scope": scope, "tools": tools, "content": clean_content}
+
+
+def _plugin_search_dirs(project_path: str = "") -> list[str]:
+    """Return plugin search directories in priority order."""
+    dirs = []
+    if project_path:
+        dirs.append(os.path.join(project_path, "plugins"))
+    cwd = os.getcwd()
+    if cwd != project_path:
+        dirs.append(os.path.join(cwd, ".opalacoder", "plugins"))
+    dirs.append(os.path.expanduser("~/.opalacoder/plugins"))
+    package_dir = os.path.dirname(os.path.abspath(__file__))
+    dirs.append(os.path.join(package_dir, "plugins"))
+    return dirs
+
+
+def find_plugin_module(module_name: str, project_path: str = "") -> str | None:
+    """Return the path to <module_name>.py in plugin search dirs, or None."""
+    filename = module_name if module_name.endswith(".py") else f"{module_name}.py"
+    for d in _plugin_search_dirs(project_path):
+        candidate = os.path.join(d, filename)
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def load_skill_tools(project_skills: list[dict], project_path: str = "") -> list[Callable]:
+    """Load all tool functions declared in skill frontmatter.
+
+    Each tool entry is "module_name.function_name". The module is located via
+    find_plugin_module() and loaded dynamically. Returns a flat list of callables.
+    """
+    loaded: list[Callable] = []
+    seen_modules: dict[str, object] = {}
+
+    for skill in project_skills:
+        for tool_ref in skill.get("tools", []):
+            parts = tool_ref.rsplit(".", 1)
+            if len(parts) != 2:
+                continue
+            module_name, func_name = parts
+
+            if module_name not in seen_modules:
+                mod_path = find_plugin_module(module_name, project_path)
+                if mod_path is None:
+                    continue
+                try:
+                    spec = importlib.util.spec_from_file_location(module_name, mod_path)
+                    mod = importlib.util.module_from_spec(spec)
+                    # Make the module available under its name so relative imports work
+                    sys.modules.setdefault(module_name, mod)
+                    spec.loader.exec_module(mod)
+                    seen_modules[module_name] = mod
+                except Exception:
+                    continue
+            else:
+                mod = seen_modules[module_name]
+
+            fn = getattr(mod, func_name, None)
+            # Accept both plain callables and FunctionBlock objects (returned by @as_tool)
+            if fn is not None and (callable(fn) or hasattr(fn, "run")):
+                loaded.append(fn)
+
+    return loaded
 
 
 def load_skills(project_path: str = "") -> list[dict]:

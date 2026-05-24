@@ -1,6 +1,8 @@
 tags: html, css, javascript, js, web, webpage, page, frontend, calculator, form, dom, vanilla
 description: Use when the user requests a plain HTML/CSS/JavaScript project (no framework, no bundler).
 scope: orchestrator
+tools:
+  - html_css_js_tools.search_html_css_js_bugs
 ---
 ## HTML / CSS / JavaScript Developer Rules
 

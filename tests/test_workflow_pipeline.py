@@ -545,19 +545,35 @@ def test_validate_task_fails_empty_context():
     assert "context" in feedback
 
 
-def test_validate_task_fails_css_task_without_related_files():
-    """A CSS task with no related_files should be rejected — it can't know which classes to style."""
+def test_validate_task_fails_css_edit_task_without_related_files():
+    """A CSS *edit* task with no related_files should be rejected — the worker can't
+    know the current state of the file it's modifying.
+    Create tasks are exempt: there's nothing to read yet.
+    """
     from opalacoder.workflow_orchestrator import Task, _validate_task
-    task = Task(
+
+    # Edit task without related_files: must fail
+    edit_task = Task(
         id="t2",
-        goal="Create style.css for the calculator",
-        commands=["Create style.css with button styles"],
-        related_files=[],  # missing!
+        goal="Update style.css to fix the button layout",
+        commands=["Edit style.css to add .btn-equals selector"],
+        related_files=[],  # missing — worker can't see current file state
         context=".calculator and .btn classes need styling.",
     )
-    feedback = _validate_task(task)
-    assert feedback is not None
+    feedback = _validate_task(edit_task)
+    assert feedback is not None, "Edit CSS task without related_files should fail validation"
     assert "related_files" in feedback
+
+    # Create task without related_files: must pass (nothing to read yet)
+    create_task = Task(
+        id="t3",
+        goal="Create style.css for the calculator",
+        commands=["Create style.css with button styles"],
+        related_files=[],  # OK for a new file
+        context=".calculator and .btn classes need styling.",
+    )
+    assert _validate_task(create_task) is None, \
+        "Create CSS task without related_files should pass validation"
 
 
 @pytest.mark.anyio
@@ -767,3 +783,204 @@ async def test_semantic_retry_does_not_consume_format_retry_budget(tmp_path):
     # Total LLM calls must be within reason
     assert call_count[0] <= MAX_REFLECT_RETRIES + 4, \
         f"Too many LLM calls ({call_count[0]}), retry logic may be looping"
+
+
+# ---------------------------------------------------------------------------
+# Plugin system: skills.py — parse_skill_file with tools, load_skill_tools
+# ---------------------------------------------------------------------------
+
+def test_parse_skill_file_reads_tools_field(tmp_path):
+    """_parse_skill_file must extract the tools list from YAML frontmatter."""
+    from opalacoder.skills import _parse_skill_file
+
+    skill_md = tmp_path / "myskill.md"
+    skill_md.write_text(
+        "tags: foo, bar\n"
+        "description: A test skill.\n"
+        "scope: orchestrator\n"
+        "tools:\n"
+        "  - mymodule.my_tool_fn\n"
+        "  - mymodule.another_fn\n"
+        "---\n"
+        "## Rules\nDo stuff.\n",
+        encoding="utf-8",
+    )
+
+    parsed = _parse_skill_file(str(skill_md))
+
+    assert parsed is not None
+    assert parsed["tools"] == ["mymodule.my_tool_fn", "mymodule.another_fn"]
+
+
+def test_parse_skill_file_no_tools_field_returns_empty_list(tmp_path):
+    """Skills without a tools: section must return an empty list (not None)."""
+    from opalacoder.skills import _parse_skill_file
+
+    skill_md = tmp_path / "notool.md"
+    skill_md.write_text(
+        "tags: python\n"
+        "description: No tools.\n"
+        "scope: all\n"
+        "---\n"
+        "## Content\n",
+        encoding="utf-8",
+    )
+
+    parsed = _parse_skill_file(str(skill_md))
+
+    assert parsed is not None
+    assert parsed["tools"] == []
+
+
+def test_load_skill_tools_finds_builtin_plugin(tmp_path):
+    """load_skill_tools must find the built-in html_css_js_tools module and
+    return the search_html_css_js_bugs callable."""
+    from opalacoder.skills import load_skill_tools
+
+    project_skills = [
+        {
+            "name": "html_css_js",
+            "tools": ["html_css_js_tools.search_html_css_js_bugs"],
+            "scope": "orchestrator",
+        }
+    ]
+
+    tools = load_skill_tools(project_skills, project_path=str(tmp_path))
+
+    assert len(tools) == 1, f"Expected 1 tool, got {len(tools)}: {tools}"
+    fn = tools[0]
+    # FunctionBlock objects are not callable() but have a name and run() method
+    tool_name = getattr(fn, "name", None) or getattr(fn, "__name__", "")
+    assert "html_css_js" in tool_name or "bugs" in tool_name, \
+        f"Unexpected tool name: {tool_name}"
+    assert hasattr(fn, "run") or callable(fn), \
+        f"Tool must be invocable via .run() or direct call: {fn}"
+
+
+def test_load_skill_tools_project_plugin_takes_precedence(tmp_path):
+    """A plugin in {project_path}/plugins/ must shadow the built-in of the same module name."""
+    from opalacoder.skills import load_skill_tools
+
+    # Create a project-level plugin that overrides html_css_js_tools.
+    # Must use a unique module name to avoid cache collision with the built-in.
+    plugins_dir = tmp_path / "plugins"
+    plugins_dir.mkdir()
+    (plugins_dir / "html_css_js_tools.py").write_text(
+        "from agenticblocks.core.function_block import as_tool\n\n"
+        "@as_tool(name='search_html_css_js_bugs', description='project override')\n"
+        "def search_html_css_js_bugs(path: str = '.') -> str:\n"
+        "    return 'project-level override'\n",
+        encoding="utf-8",
+    )
+
+    project_skills = [
+        {"name": "html_css_js", "tools": ["html_css_js_tools.search_html_css_js_bugs"]}
+    ]
+
+    # Use a unique module key by temporarily clearing the sys.modules cache entry
+    import sys
+    sys.modules.pop("html_css_js_tools", None)
+
+    tools = load_skill_tools(project_skills, project_path=str(tmp_path))
+
+    assert len(tools) == 1, f"Expected 1 tool, got: {tools}"
+    fn = tools[0]
+    tool_name = getattr(fn, "name", None)
+    assert tool_name == "search_html_css_js_bugs"
+    # The underlying _func must return "project-level override"
+    result = fn._func(".")
+    assert result == "project-level override", f"Got: {result}"
+
+
+def test_load_skill_tools_missing_module_does_not_crash(tmp_path):
+    """load_skill_tools must silently skip modules that cannot be found."""
+    from opalacoder.skills import load_skill_tools
+
+    project_skills = [
+        {"name": "ghost", "tools": ["nonexistent_module.some_fn"]}
+    ]
+
+    tools = load_skill_tools(project_skills, project_path=str(tmp_path))
+    assert tools == []
+
+
+def test_find_plugin_module_search_order(tmp_path):
+    """find_plugin_module must return project-level path first."""
+    from opalacoder.skills import find_plugin_module
+
+    # Create a module in the project plugins dir
+    project_plugins = tmp_path / "plugins"
+    project_plugins.mkdir()
+    module_file = project_plugins / "my_tool.py"
+    module_file.write_text("# placeholder\n", encoding="utf-8")
+
+    found = find_plugin_module("my_tool", project_path=str(tmp_path))
+
+    assert found == str(module_file)
+
+
+def test_search_html_css_js_bugs_detects_missing_doctype(tmp_path):
+    """search_html_css_js_bugs must flag HTML files missing <!DOCTYPE html>."""
+    from opalacoder.plugins.html_css_js_tools import _check_html_patterns
+
+    html = tmp_path / "index.html"
+    html.write_text("<html><body><p>Hi</p></body></html>", encoding="utf-8")
+
+    issues = _check_html_patterns([str(html)], str(tmp_path))
+    combined = "\n".join(issues)
+
+    assert "DOCTYPE" in combined or "doctype" in combined.lower(), \
+        f"Expected DOCTYPE warning, got: {combined}"
+
+
+def test_search_html_css_js_bugs_clean_js(tmp_path):
+    """search_html_css_js_bugs underlying function must report no syntax errors for clean JS."""
+    from opalacoder.plugins.html_css_js_tools import _check_js_syntax
+
+    js = tmp_path / "clean.js"
+    js.write_text(
+        "document.addEventListener('DOMContentLoaded', () => {\n"
+        "  const btn = document.getElementById('btn');\n"
+        "  if (btn) btn.addEventListener('click', () => { alert('clicked'); });\n"
+        "});\n",
+        encoding="utf-8",
+    )
+
+    issues = _check_js_syntax([str(js)], str(tmp_path))
+    assert not any("SYNTAX ERROR" in i for i in issues), \
+        f"Unexpected syntax errors: {issues}"
+
+
+def test_get_workflow_tools_includes_skill_tools():
+    """get_workflow_tools must include skill tools when passed."""
+    from opalacoder.workflow_tools import get_workflow_tools
+    from agenticblocks.core.function_block import as_tool
+
+    @as_tool(name="my_skill_tool", description="test")
+    def my_skill_tool_fn() -> str:
+        return "ok"
+
+    tools = get_workflow_tools(skill_tools=[my_skill_tool_fn])
+    names = [getattr(t, "name", None) or getattr(t, "__name__", "") for t in tools]
+    assert "my_skill_tool" in names, f"Tool not found. Names: {names}"
+
+
+def test_get_workflow_tools_deduplicates_skill_tools():
+    """get_workflow_tools must not add a skill tool whose name already exists in base tools."""
+    from opalacoder.workflow_tools import get_workflow_tools
+    from agenticblocks.core.function_block import as_tool
+
+    # Use a name that already exists in the base tool set
+    @as_tool(name="search_code", description="dup test")
+    def search_code_override(path: str = ".") -> str:
+        return ""
+
+    base_tools = get_workflow_tools(skill_tools=None)
+    augmented = get_workflow_tools(skill_tools=[search_code_override])
+
+    # Count of "search_code" named tools must not increase
+    base_count = sum(1 for t in base_tools if getattr(t, "name", None) == "search_code")
+    aug_count = sum(1 for t in augmented if getattr(t, "name", None) == "search_code")
+
+    assert aug_count <= base_count, \
+        f"Duplicate skill tool added: base={base_count}, augmented={aug_count}"
