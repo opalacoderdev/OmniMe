@@ -6,7 +6,12 @@
       "Bash(python -c ' *)",
       "Read(//home/gilzamir/**)",
       "Bash(sed -n '/DEBUG PLAN JSON/,/\\\\/DEBUG PLAN JSON/p' /home/gilzamir/log.log)",
-      "Read(//home/gilzamir/micalc/**)"
+      "Read(//home/gilzamir/micalc/**)",
+      "Bash(git stash *)",
+      "Bash(python -m pytest tests/ -q --ignore=tests/test_planner_output.py --ignore=tests/test_agent_config.py -k \"not llm and asyncio\")",
+      "Bash(python -m pytest tests/ -q --ignore=tests/test_planner_output.py --ignore=tests/test_agent_config.py -k \"not llm\")",
+      "Bash(python -m pytest tests/test_workflow_pipeline.py tests/test_verification_strategies.py -q -k \"asyncio or \\(not llm\\)\")",
+      "Bash(python -m pytest tests/ -x -q)"
     ],
     "additionalDirectories": [
       "/home/gilzamir"

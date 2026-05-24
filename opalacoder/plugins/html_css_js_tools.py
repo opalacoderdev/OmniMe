@@ -75,10 +75,46 @@ def _check_js_patterns(files: list[str], root: str) -> list[str]:
                         issues.append(
                             f"[{severity.upper()}] {_rel(fpath, root)}:{lineno}: {message}"
                         )
+            # Detect duplicate case labels within switch blocks
+            _check_duplicate_cases(fpath, lines, root, issues)
         except Exception as e:
             issues.append(f"[ERROR] {_rel(fpath, root)}: {e}")
 
     return issues
+
+
+def _check_duplicate_cases(fpath: str, lines: list[str], root: str, issues: list[str]) -> None:
+    """Detect duplicate case labels inside switch blocks."""
+    case_pat = re.compile(r"""^\s*case\s+(['"`])([^'"`]+)\1\s*:""")
+    seen: dict[str, int] = {}  # label -> first lineno
+    depth = 0  # brace depth inside switch
+    in_switch = False
+    switch_pat = re.compile(r"\bswitch\s*\(")
+
+    for lineno, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if switch_pat.search(line):
+            in_switch = True
+            seen = {}
+            depth = 0
+        if in_switch:
+            depth += line.count("{") - line.count("}")
+            if depth <= 0 and lineno > 1:
+                in_switch = False
+                seen = {}
+                continue
+            m = case_pat.match(line)
+            if m:
+                label = m.group(2)
+                if label in seen:
+                    rel = _rel(fpath, root)
+                    issues.append(
+                        f"[ERROR] {rel}:{lineno}: duplicate case '{label}' in switch "
+                        f"(first seen at line {seen[label]}) — "
+                        f"FIX REQUIRED: delete the duplicate case block at line {lineno} using edit_file"
+                    )
+                else:
+                    seen[label] = lineno
 
 
 def _check_html_patterns(files: list[str], root: str) -> list[str]:
@@ -109,6 +145,39 @@ def _check_html_patterns(files: list[str], root: str) -> list[str]:
                         continue
                     if re.search(pattern, line):
                         issues.append(f"[{severity.upper()}] {_rel(fpath, root)}:{lineno}: {message}")
+
+            # Detect buttons whose visible label is a digit (0-9) or '.'
+            # but are missing data-value — they will never reach handleNumberInput.
+            btn_full = re.compile(
+                r"<button\b([^>]*)>([\s\S]*?)</button>",
+                re.IGNORECASE,
+            )
+            for m in btn_full.finditer(source):
+                attrs_str = m.group(1)
+                label = m.group(2).strip()
+                if not re.match(r'^[0-9.]$', label):
+                    continue
+                has_value = bool(re.search(r'data-value\s*=', attrs_str, re.IGNORECASE))
+                if not has_value:
+                    id_m = re.search(r"""\bid\s*=\s*["']([^"']*)["']""", attrs_str, re.IGNORECASE)
+                    elem_id = id_m.group(1) if id_m else "unknown"
+                    action_m = re.search(r"""data-action\s*=\s*["']([^"']*)["']""", attrs_str, re.IGNORECASE)
+                    action = action_m.group(1) if action_m else None
+                    lineno = source[:m.start()].count("\n") + 1
+                    rel = _rel(fpath, root)
+                    if action:
+                        issues.append(
+                            f"[CONTRACT ERROR] {rel}:{lineno}: button#{elem_id} has label '{label}' "
+                            f"but data-action='{action}' instead of data-value='{label}'. "
+                            f"FIX REQUIRED IN HTML: replace data-action='{action}' with data-value='{label}' "
+                            f"so the JS routes it as a number input, not as an operator."
+                        )
+                    else:
+                        issues.append(
+                            f"[CONTRACT ERROR] {rel}:{lineno}: button#{elem_id} has label '{label}' "
+                            f"but no data-value attribute — it will never be routed as a number input. "
+                            f"FIX REQUIRED IN HTML: add data-value='{label}' to this button."
+                        )
         except Exception as e:
             issues.append(f"[ERROR] {_rel(fpath, root)}: {e}")
 
@@ -247,7 +316,33 @@ def _check_html_js_contract(html_files: list[str], js_files: list[str], root: st
                     f"[CONTRACT ERROR] {rel}:{c['lineno']}: "
                     f"{label} has data-value='{val}' (operator symbol) — "
                     f"JS routes this as a number/decimal, not as an operator. "
-                    f"Use data-action='{expected_action}' instead."
+                    f"FIX REQUIRED IN HTML: in {rel} line {c['lineno']}, "
+                    f"replace data-value='{val}' with data-action='{expected_action}'. "
+                    f"Do NOT modify script.js — the JS already handles action === '{expected_action}'."
+                )
+            elif val in handled_actions and val not in handled_values:
+                # An action name (e.g. "multiply", "clear") used as data-value is always wrong.
+                # Determine the right fix: if the button id/label is a digit, the fix is data-value=<digit>.
+                btn_label = c.get("id", "")
+                # Try to infer the correct digit from the element id (e.g. btn-nine → 9)
+                _word_to_digit = {
+                    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+                    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+                }
+                digit_hint = None
+                for word, digit in _word_to_digit.items():
+                    if word in (btn_label or "").lower():
+                        digit_hint = digit
+                        break
+                if digit_hint:
+                    fix_hint = f"replace data-value='{val}' with data-value='{digit_hint}'"
+                else:
+                    fix_hint = f"replace data-value='{val}' with data-action='{val}'"
+                issues.append(
+                    f"[CONTRACT ERROR] {rel}:{c['lineno']}: "
+                    f"{label} has data-value='{val}' but '{val}' is a JS action name, not a numeric value — "
+                    f"the button will never work as a number input. "
+                    f"FIX REQUIRED IN HTML: {fix_hint}."
                 )
             elif val not in _IMPLICIT and val not in handled_values:
                 issues.append(
@@ -282,6 +377,68 @@ def _check_css_patterns(files: list[str], root: str) -> list[str]:
             issues.append(f"[ERROR] {_rel(fpath, root)}: {e}")
 
     return issues
+
+
+def html_css_js_reviewer(
+    project_path: str,
+    task_goal: str,
+    related_files: list[str],
+    errors_before: set[str] | None = None,
+) -> dict:
+    """H2 skill reviewer: re-run the bug scanner and compare with the before-snapshot.
+
+    When errors_before is provided (the set of blocking errors captured before the
+    worker ran), only errors that existed before AND still exist after count as
+    unresolved — pre-existing errors unrelated to the task are ignored.
+
+    When errors_before is None the reviewer falls back to checking whether any
+    blocking errors exist at all (conservative but safe).
+    """
+    import os as _os
+
+    root = project_path or _os.getcwd()
+
+    js_files   = _collect_files(root, root, {".js", ".mjs", ".cjs"})
+    html_files = _collect_files(root, root, {".html", ".htm"})
+
+    raw_issues: list[str] = []
+    raw_issues.extend(_check_js_syntax(js_files, root))
+    raw_issues.extend(_check_html_patterns(html_files, root))
+    raw_issues.extend(_check_html_js_contract(html_files, js_files, root))
+
+    blocking_tags = ("[CONTRACT ERROR]", "[SYNTAX ERROR]", "[ERROR]")
+    errors_after = {i.strip() for i in raw_issues if any(i.startswith(t) for t in blocking_tags)}
+
+    if errors_before is not None:
+        unresolved = errors_before & errors_after
+        new_errors = errors_after - errors_before
+        bad = sorted(unresolved) + sorted(new_errors)
+        if bad:
+            label = (
+                f"{len(unresolved)} unresolved + {len(new_errors)} new error(s)"
+                if unresolved and new_errors
+                else (f"{len(unresolved)} error(s) still unresolved" if unresolved else f"{len(new_errors)} new error(s) introduced")
+            )
+            return {
+                "done": False,
+                "summary": f"H2 reviewer: {label} after worker ran.",
+                "corrections": bad[:10],
+            }
+        return {"done": True, "summary": "H2 reviewer: all blocking errors resolved.", "corrections": []}
+
+    # No before-snapshot: reject if any blocking errors remain
+    blocking = sorted(errors_after)
+    if blocking:
+        return {
+            "done": False,
+            "summary": f"H2 reviewer: {len(blocking)} blocking error(s) detected after worker ran.",
+            "corrections": blocking[:10],
+        }
+    return {
+        "done": True,
+        "summary": "H2 reviewer: no blocking errors detected — task accepted.",
+        "corrections": [],
+    }
 
 
 @as_tool(

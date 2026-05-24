@@ -332,6 +332,8 @@ PREFERRED TOOLS:
 
 SKILL TOOLS (if available): language-specific bug detectors injected from the active skill.
 Call them at the start of any fix/refactor command to know what is already broken.
+When a skill tool returns [CONTRACT ERROR] with "FIX REQUIRED IN HTML:", you MUST
+edit the HTML file at the specified line — do NOT modify the JS file.
 
 IMPROVEMENT LOOP:
 edit_file returns lint errors automatically. On error: fix ONLY the specific
@@ -371,8 +373,11 @@ class WorkflowOrchestratorStrategy(BaseOrchestratorStrategy):
             m = re.search(r"PATH:\s*(.+?)\]", project_context)
             proj_path = m.group(1).strip() if m else "."
 
-        core_memory = getattr(session, "core_memory", "") if session else ""
-        memory_section = f"\nCore memory:\n{core_memory}\n" if core_memory else ""
+        # core_memory is NOT injected here — the enricher (chat agent) already
+        # selected the relevant facts and passed them via user_request as
+        # "Memory Context (from chat agent)". Dumping the raw core_memory into
+        # the system prompt would flood small-context models with stale noise.
+        memory_section = ""
 
         task_schema_example = json.dumps({
             "id": "t1",
@@ -435,6 +440,10 @@ Hard rules:
             f"\nAvailable skill tools (workers have these as callable functions):\n"
             + "\n".join(f"- {name}" for name in skill_tool_names)
             + "\nFor fix/refactor tasks, the first command MUST call the relevant skill tool on the target file.\n"
+            "\nCRITICAL — when the planning prompt contains a skill tool pre-scan with [CONTRACT ERROR] or [FIX REQUIRED IN ...]:\n"
+            "- Create tasks ONLY for the files explicitly named in 'FIX REQUIRED IN <file>'.\n"
+            "- Do NOT create tasks for files the scan does not flag. If the scan says JS is correct, do NOT add a JS task.\n"
+            "- One bug = one fix task in the exact file named. Do not invent follow-up refactoring tasks.\n"
             if skill_tool_names else ""
         )
 
@@ -475,6 +484,11 @@ Your job: decide whether THIS SPECIFIC TASK is done.
 Rules:
 - If the lint results show ANY syntax error, you MUST set done=false — a file with
   syntax errors is broken regardless of what the worker reported.
+- If the worker result contains [CONTRACT ERROR] lines, read them carefully.
+  A [CONTRACT ERROR] with "FIX REQUIRED IN HTML:" means the HTML attribute was NOT
+  changed. Check the actual HTML file content below — if the attribute is still wrong
+  (e.g. data-value='-' instead of data-action='subtract'), set done=false and generate
+  a correction task that edits the HTML file at the exact line number specified.
 - Set done=true only if lint is clean AND the file contents satisfy the task's goal.
 - Set done=false only if something is concretely wrong or missing in the actual files.
 - Do NOT invent problems. Do NOT require perfection beyond the task goal.
@@ -755,15 +769,20 @@ Correction task schema:
         _project_skills = kwargs.get("project_skills") or []
         _project_path = get_project_path()
         try:
-            from .skills import load_skill_tools
+            from .skills import load_skill_tools, load_skill_reviewers
             _skill_tools = load_skill_tools(_project_skills, _project_path)
+            _skill_reviewers = load_skill_reviewers(_project_skills, _project_path)
         except Exception as _st_err:
             T.debug_oracle("skill_tools", 0, f"Skill tools load failed: {_st_err}")
             _skill_tools = []
+            _skill_reviewers = []
         _skill_tool_names = [
             getattr(st, "name", None) or getattr(st, "__name__", str(st))
             for st in _skill_tools
         ]
+
+        # No fallback default reviewer: the existing git-changed-files pre-checks
+        # already handle "no files changed" cases, and the LLM reviewer handles the rest.
 
         planner_sys = self._planner_system(project_context, session, _skill_tool_names or None)
         reviewer_sys = self._reviewer_system(project_context)
@@ -871,50 +890,251 @@ Correction task schema:
             return "\n".join(results)
 
         _WRITE_TOOLS = {"edit_file", "write_file", "write_content_pos"}
-        _READ_ONLY_GOAL_WORDS = {"debug", "search", "analyse", "analyze", "identify", "check", "inspect", "detect", "find"}
 
-        async def _review_task(task: Task, worker_result: str, plan: PlanOutput) -> VerifyOutput | None:
-            """Ask the planner-reviewer whether this specific task is done."""
-            task_json = json.dumps(task.model_dump(), indent=2)
-            file_contents = _read_relevant_files(task)
+        def _git_changed_files() -> list[str]:
+            """Return files changed or added since the last shadow-git checkpoint.
+
+            Uses 'git status --porcelain' so both modified (M) and new untracked (??)
+            files are detected — 'git diff HEAD' misses newly created files.
+            """
+            if _vcs is None:
+                return []
+            from .vcs import _run_shadow_git
+            res = _run_shadow_git("status --porcelain")
+            if res.returncode != 0:
+                return []
+            changed: list[str] = []
+            for line in res.stdout.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                # Porcelain format: XY filename (or XY -> filename for renames)
+                parts = line.split(None, 1)
+                if len(parts) == 2:
+                    fname = parts[1].strip()
+                    if " -> " in fname:
+                        fname = fname.split(" -> ", 1)[1]
+                    changed.append(fname.strip())
+            return changed
+
+        def _run_skill_scan() -> set[str]:
+            """Run all skill tools and return the set of blocking error lines.
+
+            Used to snapshot errors before and after a worker runs so the reviewer
+            can compare: same errors still present → task failed, regardless of type.
+            """
+            errors: set[str] = set()
+            for st in _skill_tools:
+                try:
+                    raw_fn = getattr(st, "_func", None)
+                    if raw_fn is None and callable(st):
+                        raw_fn = st
+                    if raw_fn is None:
+                        continue
+                    output = raw_fn(".")
+                    if not isinstance(output, str):
+                        continue
+                    for line in output.splitlines():
+                        # Collect every error/contract line — not just specific patterns
+                        if line.startswith("[CONTRACT") or line.startswith("[SYNTAX ERROR]") or line.startswith("[ERROR]"):
+                            errors.add(line.strip())
+                except Exception:
+                    pass
+            return errors
+
+        async def _review_task(task: Task, worker_result: str, plan: PlanOutput, skill_reviewers: list = None, errors_before: set[str] = None) -> VerifyOutput | None:
+            """Deterministic pre-checks first; only call the LLM reviewer when needed."""
+
+            # ── 1. Lint (authoritative) ────────────────────────────────────
             lint_summary = _run_lint(task)
+            has_lint_error = "SYNTAX ERROR" in lint_summary or "ERROR —" in lint_summary
 
-            # Detect whether the worker made any file edits.
-            # "[Tools invoked: ...]" is appended by _run_command to every command result.
+            if has_lint_error:
+                T.debug_oracle("reviewer", 0, f"[AUTO-REJECT] {task.id}: lint failed")
+                AGENT_PROGRESS.record_task_failure(task.id, f"lint error: {lint_summary[:120]}")
+                return VerifyOutput(
+                    done=False,
+                    summary=f"Lint failed — syntax errors must be fixed before marking done.\n{lint_summary}",
+                    corrections=[Task(
+                        id=f"{task.id}_lint",
+                        goal=f"Fix syntax errors reported by lint in {', '.join(task.related_files) or 'related files'}",
+                        commands=[f"Run node --check / py_compile on the file and fix every syntax error reported: {lint_summary[:300]}"],
+                        related_files=task.related_files,
+                        context=task.context,
+                        depends_on=[],
+                    )],
+                )
+
+            # ── 2. Did the worker actually change any files? ───────────────
+            changed_files = _git_changed_files()
+            edit_errors = worker_result.lower().count("old_str not found")
+
+            # Count tool invocations from the annotated footer
             invoked: set[str] = set()
             for line in worker_result.splitlines():
                 if line.startswith("[Tools invoked:"):
                     names = line.removeprefix("[Tools invoked:").rstrip("]").split(",")
                     invoked.update(n.strip() for n in names)
 
-            goal_lower = task.goal.lower()
-            task_is_read_only = any(w in goal_lower for w in _READ_ONLY_GOAL_WORDS)
-            wrote_files = bool(invoked & _WRITE_TOOLS)
+            worker_called_write = bool(invoked & _WRITE_TOOLS)
 
-            no_write_warning = ""
-            if not task_is_read_only and not wrote_files and invoked:
-                no_write_warning = (
-                    "\n[REVIEWER WARNING] The worker called no file-writing tools "
-                    f"(edit_file / write_file). Tools invoked: {', '.join(sorted(invoked))}. "
-                    "If this task required code changes, set done=false and return a correction "
-                    "that explicitly instructs the worker to call edit_file.\n"
+            # Worker claimed to write but nothing changed on disk → hard reject
+            if worker_called_write and not changed_files and edit_errors == 0:
+                T.debug_oracle("reviewer", 0,
+                    f"[AUTO-REJECT] {task.id}: edit_file called but no files changed on disk")
+                AGENT_PROGRESS.record_task_failure(
+                    task.id, "worker called write tool but no files changed on disk"
+                )
+                return VerifyOutput(
+                    done=False,
+                    summary=(
+                        "Worker reported calling edit_file but no files changed on disk. "
+                        "The old_str probably did not match exactly. "
+                        "Read the file first, copy the exact text to replace, then call edit_file."
+                    ),
+                    corrections=[Task(
+                        id=f"{task.id}_nochange",
+                        goal=task.goal,
+                        commands=[
+                            f"Read {', '.join(task.related_files) or 'the relevant file'} first to get the exact current text, "
+                            "then call edit_file with old_str copied verbatim from the file."
+                        ],
+                        related_files=task.related_files,
+                        context=task.context,
+                        depends_on=[],
+                    )],
                 )
 
-            # Cap worker_result to avoid flooding the reviewer context
+            # Worker did not call any write tool and did not change any files → hard reject
+            if not worker_called_write and not changed_files and invoked:
+                T.debug_oracle("reviewer", 0,
+                    f"[AUTO-REJECT] {task.id}: no write tool, no files changed (invoked={sorted(invoked)})")
+                AGENT_PROGRESS.record_task_failure(
+                    task.id, "no file-writing tools called and no files changed"
+                )
+                return VerifyOutput(
+                    done=False,
+                    summary=(
+                        f"Worker called no file-writing tools (invoked: {', '.join(sorted(invoked))}) "
+                        "and no files changed on disk. Required code changes were never applied."
+                    ),
+                    corrections=[Task(
+                        id=f"{task.id}_nowrite",
+                        goal=task.goal,
+                        commands=[
+                            f"Read {', '.join(task.related_files) or 'the relevant file'} first, "
+                            "then call edit_file to apply the required change. Do not just read — you must write."
+                        ],
+                        related_files=task.related_files,
+                        context=task.context,
+                        depends_on=[],
+                    )],
+                )
+
+            # ── 3. Partial edit: some edit_file calls failed ───────────────
+            edit_error_note = ""
+            if edit_errors > 0:
+                edit_error_note = (
+                    f"\n[NOTE] {edit_errors} edit_file call(s) failed with 'old_str not found' — "
+                    "those specific changes were NOT applied. Check whether the required change "
+                    "is present in the file contents below.\n"
+                )
+
+            # ── 4. Changed-files summary for reviewer context ──────────────
+            changed_note = ""
+            if changed_files:
+                changed_note = f"\n[Files changed on disk]: {', '.join(changed_files)}\n"
+
+            # ── 4b. H2: compare error sets before/after (deterministic, zero-LLM cost) ──
+            # errors_before was captured before the worker ran.
+            # Re-run the scan now and check if the same errors still exist.
+            if errors_before is not None and _skill_tools:
+                errors_after = _run_skill_scan()
+                unresolved = errors_before & errors_after
+                new_errors = errors_after - errors_before
+                if unresolved or new_errors:
+                    lines = sorted(unresolved) + sorted(new_errors)
+                    summary = (
+                        f"H2: {len(unresolved)} error(s) still unresolved after worker ran."
+                        if unresolved else
+                        f"H2: {len(new_errors)} new error(s) introduced by worker."
+                    )
+                    T.debug_oracle("skill_reviewer", 0, f"[H2-REJECT] {task.id}: {summary}")
+                    AGENT_PROGRESS.record_task_failure(task.id, f"[H2] {summary[:120]}")
+                    return VerifyOutput(
+                        done=False,
+                        summary=summary + "\n" + "\n".join(lines[:5]),
+                        corrections=[Task(
+                            id=f"{task.id}_h2fix",
+                            goal=task.goal,
+                            commands=[
+                                f"The following errors still exist — fix them in the correct file:\n"
+                                + "\n".join(lines[:5])
+                            ],
+                            related_files=task.related_files,
+                            context=task.context,
+                            depends_on=[],
+                        )],
+                    )
+
+            # ── 4c. Call skill reviewers (plugin-defined, get errors_before for comparison) ──
+            if skill_reviewers:
+                for rev_fn in skill_reviewers:
+                    import inspect as _inspect
+                    sig = _inspect.signature(rev_fn)
+                    try:
+                        if "errors_before" in sig.parameters:
+                            rev_result = rev_fn(
+                                _project_path,
+                                task.goal,
+                                task.related_files,
+                                errors_before=errors_before,
+                            )
+                        else:
+                            rev_result = rev_fn(_project_path, task.goal, task.related_files)
+                    except Exception as _rev_err:
+                        T.debug_oracle("skill_reviewer", 0, f"reviewer error: {_rev_err}")
+                        continue
+                    if not isinstance(rev_result, dict):
+                        continue
+                    if not rev_result.get("done", True):
+                        corrections_raw = rev_result.get("corrections", [])
+                        corrections = [
+                            Task(
+                                id=f"{task.id}_skrev",
+                                goal=task.goal,
+                                commands=corrections_raw if isinstance(corrections_raw, list) else [str(corrections_raw)],
+                                related_files=task.related_files,
+                                context=task.context,
+                                depends_on=[],
+                            )
+                        ] if corrections_raw else []
+                        AGENT_PROGRESS.record_task_failure(task.id, f"skill reviewer rejected: {rev_result.get('summary', '')[:120]}")
+                        return VerifyOutput(
+                            done=False,
+                            summary=rev_result.get("summary", "Skill reviewer rejected the task."),
+                            corrections=corrections,
+                        )
+
+            # All checks passed — proceed to LLM reviewer
+            # ── 5. Call LLM reviewer with factual context ──────────────────
+            task_json = json.dumps(task.model_dump(), indent=2)
+            file_contents = _read_relevant_files(task)
+
             worker_result_capped = worker_result[:2000]
             if len(worker_result) > 2000:
                 worker_result_capped += f"\n...(truncated, {len(worker_result)} chars total)"
+
             review_prompt = (
                 f"Task under review:\n{task_json}\n\n"
-                f"Lint results (authoritative — syntax errors mean done=false):\n{lint_summary}\n\n"
-                f"Worker result:\n{worker_result_capped}"
-                f"{no_write_warning}\n\n"
+                f"Lint results (all clean — no syntax errors):\n{lint_summary}\n"
+                f"{changed_note}"
+                f"{edit_error_note}\n"
+                f"Worker result:\n{worker_result_capped}\n\n"
                 f"Relevant file contents on disk:\n{file_contents}"
             )
             AGENT_PROGRESS.last_tool = f"Reviewer → {task.id}"
             AGENT_PROGRESS.last_args = task.goal[:70]
-            # Reviewer must fit a full VerifyOutput with corrections (list[Task]) when done=False.
-            # 1024 is too small — each Task has 6 fields including context and commands lists.
             reviewer_kwargs = {**llm_kwargs, "max_tokens": 2048}
             return await _oracle(
                 VerifyOutput, reviewer_sys, review_prompt,
@@ -973,7 +1193,46 @@ Correction task schema:
                 return "\n\n".join(parts)
 
             file_snippets = _extract_file_snippets(user_request)
-            file_section = f"\nRelevant file contents (read before planning):\n{file_snippets}\n" if file_snippets else ""
+
+            # Run skill tools eagerly before planning so the planner sees actual errors.
+            # This prevents the planner from guessing the wrong file based on symptoms.
+            skill_tool_output = ""
+            if _skill_tools:
+                skill_tool_parts: list[str] = []
+                for st in _skill_tools:
+                    try:
+                        # FunctionBlock wraps the original sync function in _func;
+                        # call it directly to avoid async overhead.
+                        raw_fn = getattr(st, "_func", None)
+                        if raw_fn is None and callable(st):
+                            raw_fn = st
+                        if raw_fn is None:
+                            continue
+                        result_raw = raw_fn(".")
+                        if result_raw and isinstance(result_raw, str):
+                            # Only include blocking errors in the planning prompt.
+                            # INFO/WARNING lines would cause the planner to fix unrelated things.
+                            blocking_lines = [
+                                line for line in result_raw.splitlines()
+                                if any(tag in line for tag in ("[CONTRACT ERROR]", "[SYNTAX ERROR]", "[ERROR]"))
+                            ]
+                            if blocking_lines:
+                                tool_name = getattr(st, "name", getattr(raw_fn, "__name__", "tool"))
+                                skill_tool_parts.append(
+                                    f"[{tool_name}]\n" + "\n".join(blocking_lines)
+                                )
+                    except Exception:
+                        pass
+                if skill_tool_parts:
+                    skill_tool_output = "\nSkill tool pre-scan (run before planning — tells you WHICH FILE has the bug):\n" + "\n\n".join(skill_tool_parts) + "\n"
+
+            file_section = ""
+            if file_snippets or skill_tool_output:
+                file_section = "\nRelevant file contents and diagnostics (read before planning):\n"
+                if file_snippets:
+                    file_section += file_snippets + "\n"
+                if skill_tool_output:
+                    file_section += skill_tool_output
 
             planning_prompt = (
                 f"Project files:\n{snapshot}\n"
@@ -1037,13 +1296,15 @@ Correction task schema:
                     except Exception as _ck_err:
                         T.debug_oracle("vcs", 0, f"Per-task checkpoint failed: {_ck_err}")
 
+                errors_before = _run_skill_scan() if _skill_tools else None
+
                 worker_result = await _run_worker_safe(task)
                 T.debug_worker_result(task.id, worker_result)
                 _save_intermediate("task", f"[{task.id}] {worker_result[:500]}")
                 tasks_executed += 1
 
                 # ── Phase 3: Review this task ──────────────────────────────
-                review = await _review_task(task, worker_result, plan)
+                review = await _review_task(task, worker_result, plan, skill_reviewers=_skill_reviewers, errors_before=errors_before)
                 T.debug_oracle(f"reviewer_{task.id}", 0, str(review))
                 if review is None:
                     # Reviewer oracle could not produce valid JSON — this is a format

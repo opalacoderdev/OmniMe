@@ -41,6 +41,7 @@ def _parse_skill_file(filepath: str) -> dict | None:
     tags_match = re.search(r"^tags:\s*(.+)$", content, re.IGNORECASE | re.MULTILINE)
     desc_match = re.search(r"^description:\s*(.+)$", content, re.IGNORECASE | re.MULTILINE)
     scope_match = re.search(r"^scope:\s*(.+)$", content, re.IGNORECASE | re.MULTILINE)
+    reviewer_match = re.search(r"^reviewer:\s*(\S+)", content, re.IGNORECASE | re.MULTILINE)
 
     # Parse multi-line YAML list under "tools:" until next non-indented key or end
     tools: list[str] = []
@@ -54,13 +55,14 @@ def _parse_skill_file(filepath: str) -> dict | None:
     tags = [t.strip().lower() for t in tags_match.group(1).split(",") if t.strip()] if tags_match else []
     description = desc_match.group(1).strip() if desc_match else "No description"
     scope = scope_match.group(1).strip().lower() if scope_match else SCOPE_ALL
+    reviewer = reviewer_match.group(1).strip() if reviewer_match else None
 
-    clean_content = re.sub(r"^(tags|description|scope):\s*.+\n?", "", content, flags=re.IGNORECASE | re.MULTILINE).strip()
+    clean_content = re.sub(r"^(tags|description|scope|reviewer):\s*.+\n?", "", content, flags=re.IGNORECASE | re.MULTILINE).strip()
     clean_content = re.sub(r"^tools:\s*\n((?:[ \t]+-[ \t]+\S+\n?)+)", "", clean_content, flags=re.IGNORECASE | re.MULTILINE).strip()
     clean_content = re.sub(r"^---\n?", "", clean_content, flags=re.MULTILINE).strip()
 
     name = os.path.basename(filepath).replace(".md", "")
-    return {"name": name, "description": description, "tags": tags, "scope": scope, "tools": tools, "content": clean_content}
+    return {"name": name, "description": description, "tags": tags, "scope": scope, "tools": tools, "reviewer": reviewer, "content": clean_content}
 
 
 def _plugin_search_dirs(project_path: str = "") -> list[str]:
@@ -123,6 +125,53 @@ def load_skill_tools(project_skills: list[dict], project_path: str = "") -> list
             # Accept both plain callables and FunctionBlock objects (returned by @as_tool)
             if fn is not None and (callable(fn) or hasattr(fn, "run")):
                 loaded.append(fn)
+
+    return loaded
+
+
+def load_skill_reviewers(project_skills: list[dict], project_path: str = "") -> list[Callable]:
+    """Load reviewer functions declared in skill frontmatter under `reviewer:`.
+
+    Each reviewer entry is "module_name.function_name". The function must have
+    the signature:
+
+        def my_reviewer(project_path: str, task_goal: str,
+                        related_files: list[str]) -> dict:
+            ...
+            return {"done": bool, "summary": str, "corrections": list[str]}
+
+    Returns a flat list of reviewer callables (one per skill that declares one).
+    """
+    loaded: list[Callable] = []
+    seen_modules: dict[str, object] = {}
+
+    for skill in project_skills:
+        reviewer_ref = skill.get("reviewer")
+        if not reviewer_ref:
+            continue
+        parts = reviewer_ref.rsplit(".", 1)
+        if len(parts) != 2:
+            continue
+        module_name, func_name = parts
+
+        if module_name not in seen_modules:
+            mod_path = find_plugin_module(module_name, project_path)
+            if mod_path is None:
+                continue
+            try:
+                spec = importlib.util.spec_from_file_location(module_name, mod_path)
+                mod = importlib.util.module_from_spec(spec)
+                sys.modules.setdefault(module_name, mod)
+                spec.loader.exec_module(mod)
+                seen_modules[module_name] = mod
+            except Exception:
+                continue
+        else:
+            mod = seen_modules[module_name]
+
+        fn = getattr(mod, func_name, None)
+        if fn is not None and callable(fn):
+            loaded.append(fn)
 
     return loaded
 

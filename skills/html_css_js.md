@@ -3,6 +3,7 @@ description: Use when the user requests a plain HTML/CSS/JavaScript project (no 
 scope: orchestrator
 tools:
   - html_css_js_tools.search_html_css_js_bugs
+reviewer: html_css_js_tools.html_css_js_reviewer
 ---
 ## HTML / CSS / JavaScript Developer Rules
 

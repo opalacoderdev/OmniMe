@@ -125,3 +125,4 @@ local_settings.py
 *.swp
 *.swo
 *~
+*.db
