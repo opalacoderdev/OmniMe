@@ -306,9 +306,19 @@ def search_html_css_js_bugs(path: str = ".") -> str:
 
     resolved = os.path.join(root, path) if not os.path.isabs(path) else path
 
-    js_files = _collect_files(root, resolved, {".js", ".mjs", ".cjs"})
+    js_files   = _collect_files(root, resolved, {".js", ".mjs", ".cjs"})
     html_files = _collect_files(root, resolved, {".html", ".htm"})
-    css_files = _collect_files(root, resolved, {".css"})
+    css_files  = _collect_files(root, resolved, {".css"})
+
+    # Cross-file contract analysis needs both JS and HTML.
+    # When path points to a single file (or a directory with no HTML), expand
+    # the HTML and JS search to the entire project so the contract check can
+    # cross-reference all files — without sending any full file to the LLM.
+    contract_js_files   = js_files
+    contract_html_files = html_files
+    if os.path.isfile(resolved) or not html_files or not js_files:
+        contract_js_files   = _collect_files(root, root, {".js", ".mjs", ".cjs"})
+        contract_html_files = _collect_files(root, root, {".html", ".htm"})
 
     total = len(js_files) + len(html_files) + len(css_files)
     if total == 0:
@@ -319,7 +329,7 @@ def search_html_css_js_bugs(path: str = ".") -> str:
     all_issues.extend(_check_js_patterns(js_files, root))
     all_issues.extend(_check_html_patterns(html_files, root))
     all_issues.extend(_check_css_patterns(css_files, root))
-    all_issues.extend(_check_html_js_contract(html_files, js_files, root))
+    all_issues.extend(_check_html_js_contract(contract_html_files, contract_js_files, root))
 
     if not all_issues:
         return (

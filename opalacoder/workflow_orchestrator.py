@@ -591,11 +591,12 @@ Correction task schema:
             )
             tools = get_workflow_tools(skill_tools=skill_tools)
 
-            # Collect tool outputs via on_iteration so the reviewer sees real errors.
-            # on_iteration receives the full message history each time, so we track
-            # the last-seen length to only process new messages.
+            # Collect tool outputs via on_iteration so the reviewer sees actual errors.
+            # on_iteration receives the full message history each time; track the
+            # last-seen index to process only new messages each call.
             tool_outputs: list[str] = []
-            _seen_up_to: list[int] = [0]  # mutable cell for closure
+            tools_called: list[str] = []   # names of every tool invoked this command
+            _seen_up_to: list[int] = [0]   # mutable cell for closure
 
             def _capture_iteration(iteration: int, messages: list) -> None:
                 new_msgs = messages[_seen_up_to[0]:]
@@ -603,8 +604,13 @@ Correction task schema:
                 for msg in new_msgs:
                     role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
                     content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", "")
-                    tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else getattr(msg, "tool_calls", None)
-                    name = msg.get("name") if isinstance(msg, dict) else getattr(msg, "name", "")
+                    tcs = msg.get("tool_calls") if isinstance(msg, dict) else getattr(msg, "tool_calls", None)
+                    if role == "assistant" and tcs:
+                        for tc in tcs:
+                            fn = tc.get("function") if isinstance(tc, dict) else getattr(tc, "function", None)
+                            tname = (fn.get("name") if isinstance(fn, dict) else getattr(fn, "name", None)) if fn else None
+                            if tname:
+                                tools_called.append(tname)
                     if role == "tool" and content:
                         tool_outputs.append(str(content))
 
@@ -633,6 +639,11 @@ Correction task schema:
                         seen_outputs.add(o)
                         unique_outputs.append(o)
                 result_text = result_text + "\n\n[Tool outputs]\n" + "\n---\n".join(unique_outputs)
+
+            # Annotate result with tools called so the reviewer has factual evidence.
+            if tools_called:
+                result_text += f"\n\n[Tools invoked: {', '.join(tools_called)}]"
+
             T.debug_worker_tool_calls(f"{task.id}[{cmd_index}]", len(tool_outputs))
             T.debug_worker_result(f"{task.id}[{cmd_index}]", result_text)
             return result_text
@@ -859,11 +870,36 @@ Correction task schema:
                 return "(no lintable files found)"
             return "\n".join(results)
 
+        _WRITE_TOOLS = {"edit_file", "write_file", "write_content_pos"}
+        _READ_ONLY_GOAL_WORDS = {"debug", "search", "analyse", "analyze", "identify", "check", "inspect", "detect", "find"}
+
         async def _review_task(task: Task, worker_result: str, plan: PlanOutput) -> VerifyOutput | None:
             """Ask the planner-reviewer whether this specific task is done."""
             task_json = json.dumps(task.model_dump(), indent=2)
             file_contents = _read_relevant_files(task)
             lint_summary = _run_lint(task)
+
+            # Detect whether the worker made any file edits.
+            # "[Tools invoked: ...]" is appended by _run_command to every command result.
+            invoked: set[str] = set()
+            for line in worker_result.splitlines():
+                if line.startswith("[Tools invoked:"):
+                    names = line.removeprefix("[Tools invoked:").rstrip("]").split(",")
+                    invoked.update(n.strip() for n in names)
+
+            goal_lower = task.goal.lower()
+            task_is_read_only = any(w in goal_lower for w in _READ_ONLY_GOAL_WORDS)
+            wrote_files = bool(invoked & _WRITE_TOOLS)
+
+            no_write_warning = ""
+            if not task_is_read_only and not wrote_files and invoked:
+                no_write_warning = (
+                    "\n[REVIEWER WARNING] The worker called no file-writing tools "
+                    f"(edit_file / write_file). Tools invoked: {', '.join(sorted(invoked))}. "
+                    "If this task required code changes, set done=false and return a correction "
+                    "that explicitly instructs the worker to call edit_file.\n"
+                )
+
             # Cap worker_result to avoid flooding the reviewer context
             worker_result_capped = worker_result[:2000]
             if len(worker_result) > 2000:
@@ -871,7 +907,8 @@ Correction task schema:
             review_prompt = (
                 f"Task under review:\n{task_json}\n\n"
                 f"Lint results (authoritative — syntax errors mean done=false):\n{lint_summary}\n\n"
-                f"Worker result:\n{worker_result_capped}\n\n"
+                f"Worker result:\n{worker_result_capped}"
+                f"{no_write_warning}\n\n"
                 f"Relevant file contents on disk:\n{file_contents}"
             )
             AGENT_PROGRESS.last_tool = f"Reviewer → {task.id}"
