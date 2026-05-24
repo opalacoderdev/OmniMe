@@ -951,6 +951,65 @@ def test_search_html_css_js_bugs_clean_js(tmp_path):
         f"Unexpected syntax errors: {issues}"
 
 
+def test_contract_check_detects_operator_as_data_value(tmp_path):
+    """_check_html_js_contract must flag operator symbols used as data-value instead of data-action."""
+    from opalacoder.plugins.html_css_js_tools import _check_html_js_contract
+
+    html = tmp_path / "index.html"
+    html.write_text(
+        '<!DOCTYPE html><html><body>'
+        '<button id="btn-add" data-value="+">+</button>'
+        '<button id="btn-multiply" data-value="*">×</button>'
+        '<button id="btn-equals" data-action="equals">=</button>'
+        '</body></html>',
+        encoding="utf-8",
+    )
+    js = tmp_path / "script.js"
+    js.write_text(
+        "const action = btn.dataset.action;\n"
+        "if (['add','subtract','multiply','divide'].includes(action)) handleOperator(action);\n"
+        "else if (action === 'equals') handleEquals();\n",
+        encoding="utf-8",
+    )
+
+    issues = _check_html_js_contract([str(html)], [str(js)], str(tmp_path))
+    combined = "\n".join(issues)
+
+    assert "btn-add" in combined or "data-value='+'" in combined, \
+        f"Expected btn-add mismatch, got:\n{combined}"
+    assert "btn-multiply" in combined or "data-value='*'" in combined, \
+        f"Expected btn-multiply mismatch, got:\n{combined}"
+    # equals is correct — must not be flagged
+    assert "btn-equals" not in combined, \
+        f"btn-equals was incorrectly flagged:\n{combined}"
+
+
+def test_contract_check_passes_correct_html(tmp_path):
+    """_check_html_js_contract must report no errors for correctly wired HTML+JS."""
+    from opalacoder.plugins.html_css_js_tools import _check_html_js_contract
+
+    html = tmp_path / "index.html"
+    html.write_text(
+        '<!DOCTYPE html><html><body>'
+        '<button id="btn-add" data-action="add">+</button>'
+        '<button id="btn-seven" data-value="7">7</button>'
+        '<button id="btn-equals" data-action="equals">=</button>'
+        '</body></html>',
+        encoding="utf-8",
+    )
+    js = tmp_path / "script.js"
+    js.write_text(
+        "const action = btn.dataset.action;\n"
+        "if (['add','subtract','multiply','divide'].includes(action)) handleOperator(action);\n"
+        "else if (action === 'equals') handleEquals();\n",
+        encoding="utf-8",
+    )
+
+    issues = _check_html_js_contract([str(html)], [str(js)], str(tmp_path))
+
+    assert issues == [], f"Unexpected contract errors:\n{issues}"
+
+
 def test_get_workflow_tools_includes_skill_tools():
     """get_workflow_tools must include skill tools when passed."""
     from opalacoder.workflow_tools import get_workflow_tools

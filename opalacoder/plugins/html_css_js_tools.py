@@ -115,6 +115,149 @@ def _check_html_patterns(files: list[str], root: str) -> list[str]:
     return issues
 
 
+def _extract_html_button_contracts(html_files: list[str]) -> list[dict]:
+    """Extract data-action and data-value from every <button> in the HTML files.
+
+    Returns a list of dicts: {file, lineno, element, action, value}
+    where action/value are the raw attribute strings (or None if absent).
+    """
+    contracts: list[dict] = []
+    # Match any interactive element that could carry data-* attributes
+    tag_pattern = re.compile(
+        r"<(button|input|a|select)\b([^>]*)>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    data_action = re.compile(r"""data-action\s*=\s*["']([^"']*)["']""", re.IGNORECASE)
+    data_value  = re.compile(r"""data-value\s*=\s*["']([^"']*)["']""",  re.IGNORECASE)
+    elem_id     = re.compile(r"""\bid\s*=\s*["']([^"']*)["']""",         re.IGNORECASE)
+
+    for fpath in html_files:
+        try:
+            source = Path(fpath).read_text(encoding="utf-8", errors="replace")
+            for m in tag_pattern.finditer(source):
+                attrs = m.group(2)
+                action_m = data_action.search(attrs)
+                value_m  = data_value.search(attrs)
+                id_m     = elem_id.search(attrs)
+                if action_m or value_m:
+                    lineno = source[: m.start()].count("\n") + 1
+                    contracts.append({
+                        "file":    fpath,
+                        "lineno":  lineno,
+                        "element": m.group(1).lower(),
+                        "id":      id_m.group(1) if id_m else None,
+                        "action":  action_m.group(1) if action_m else None,
+                        "value":   value_m.group(1)  if value_m  else None,
+                    })
+        except Exception:
+            pass
+    return contracts
+
+
+def _extract_js_handled_actions(js_files: list[str]) -> tuple[set[str], set[str]]:
+    """Extract the set of action strings and value strings that the JS handles.
+
+    Scans for patterns like:
+      action === 'X'  /  action == 'X'
+      ['a','b'].includes(action)
+      case 'X':
+      value === 'X'  /  value == 'X'
+
+    Returns (handled_actions, handled_values).
+    """
+    handled_actions: set[str] = set()
+    handled_values:  set[str] = set()
+
+    # action === 'X' or action == 'X'
+    action_eq   = re.compile(r"""action\s*={2,3}\s*["']([^"']+)["']""")
+    # ['a','b','c'].includes(action)
+    action_incl = re.compile(r"""\[([^\]]+)\]\s*\.\s*includes\s*\(\s*action\s*\)""")
+    # case 'X': inside a switch — heuristic, may catch non-action cases too
+    case_str    = re.compile(r"""case\s+["']([^"']+)["']\s*:""")
+    # value === 'X'
+    value_eq    = re.compile(r"""value\s*={2,3}\s*["']([^"']+)["']""")
+
+    for fpath in js_files:
+        try:
+            source = Path(fpath).read_text(encoding="utf-8", errors="replace")
+            for m in action_eq.finditer(source):
+                handled_actions.add(m.group(1))
+            for m in action_incl.finditer(source):
+                # parse the array literal: ['add','subtract',...]
+                items = re.findall(r"""["']([^"']+)["']""", m.group(1))
+                handled_actions.update(items)
+            for m in case_str.finditer(source):
+                # add to both sets — the switch might be on action OR op
+                handled_actions.add(m.group(1))
+            for m in value_eq.finditer(source):
+                handled_values.add(m.group(1))
+        except Exception:
+            pass
+
+    return handled_actions, handled_values
+
+
+def _check_html_js_contract(html_files: list[str], js_files: list[str], root: str) -> list[str]:
+    """Cross-file contract check: every data-action/data-value in HTML must be handled in JS.
+
+    Extracts only the minimal "contract chunks" from each file — no full file content
+    is needed. Reports mismatches as actionable bugs.
+    """
+    if not html_files or not js_files:
+        return []
+
+    contracts = _extract_html_button_contracts(html_files)
+    if not contracts:
+        return []
+
+    handled_actions, handled_values = _extract_js_handled_actions(js_files)
+    issues: list[str] = []
+
+    # Numeric values and "." are always handled by the number/decimal paths —
+    # only non-numeric, non-"." values need an explicit JS handler.
+    _IMPLICIT = {str(i) for i in range(10)} | {"."}
+    # Operator symbols that are NOT handled as actions — if used as data-value
+    # for operator buttons they are a mismatch (should be data-action instead).
+    _OPERATOR_SYMBOLS = {"+", "-", "*", "/", "×", "÷", "x"}
+
+    for c in contracts:
+        rel = _rel(c["file"], root)
+        label = f"{c['element']}" + (f"#{c['id']}" if c["id"] else "")
+
+        if c["action"] is not None:
+            act = c["action"]
+            if act and act not in handled_actions:
+                issues.append(
+                    f"[CONTRACT ERROR] {rel}:{c['lineno']}: "
+                    f"{label} has data-action='{act}' but JS never handles action === '{act}'"
+                )
+
+        if c["value"] is not None:
+            val = c["value"]
+            # Flag operator symbols used as data-value — they should be data-action
+            if val in _OPERATOR_SYMBOLS:
+                # Determine which action name the symbol maps to
+                sym_to_action = {
+                    "+": "add", "-": "subtract",
+                    "*": "multiply", "×": "multiply", "x": "multiply",
+                    "/": "divide", "÷": "divide",
+                }
+                expected_action = sym_to_action.get(val, f"<handler for '{val}'>")
+                issues.append(
+                    f"[CONTRACT ERROR] {rel}:{c['lineno']}: "
+                    f"{label} has data-value='{val}' (operator symbol) — "
+                    f"JS routes this as a number/decimal, not as an operator. "
+                    f"Use data-action='{expected_action}' instead."
+                )
+            elif val not in _IMPLICIT and val not in handled_values:
+                issues.append(
+                    f"[CONTRACT WARNING] {rel}:{c['lineno']}: "
+                    f"{label} has data-value='{val}' but no explicit JS handler found for this value"
+                )
+
+    return issues
+
+
 def _check_css_patterns(files: list[str], root: str) -> list[str]:
     issues: list[str] = []
 
@@ -176,6 +319,7 @@ def search_html_css_js_bugs(path: str = ".") -> str:
     all_issues.extend(_check_js_patterns(js_files, root))
     all_issues.extend(_check_html_patterns(html_files, root))
     all_issues.extend(_check_css_patterns(css_files, root))
+    all_issues.extend(_check_html_js_contract(html_files, js_files, root))
 
     if not all_issues:
         return (
