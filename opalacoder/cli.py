@@ -205,12 +205,24 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
 
                 # 2. Classifier receives original message + enriched context
                 classifier_prompt = f"USER REQUEST: {user_input}\nENRICHED CONTEXT: {enriched_output}"
+                print("DEBUG ", "#"*50)
+                print(classifier_prompt)
+                print("#"*50)
                 with T.spinner(_("classifying_intent")):
                     intent_res = await state.intent_classifier.run(AgentInput(prompt=classifier_prompt))
+                    print("DEBUG ", "#"*50)
+                    print(intent_res)
+                    print("#"*50)
                     _raw = intent_res.response.strip().lower()
-                    intent = _raw.split()[0].strip(".,!?*\"'") if _raw else ""
+                    
+                    intent = ""
+                    for token in _raw.replace("\n", " ").split():
+                        clean_token = token.strip(".,:;!?*\"'()[]{}<>")
+                        if clean_token in _VALID_INTENTS:
+                            intent = clean_token
+                            break
 
-                if not intent or intent not in _VALID_INTENTS:
+                if not intent:
                     T.console.print(f"[yellow]{_('intent_unclear')}[/yellow]")
                     continue
 
@@ -327,6 +339,9 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
             T.info(_("exiting"))
             break
         except Exception as e:
+            T.section(_("phase_5"))
+            import traceback
+            traceback.print_exc()
             T.error(_("unexpected_error", err=e))
 
 

@@ -11,7 +11,8 @@
       "Bash(python -m pytest tests/ -q --ignore=tests/test_planner_output.py --ignore=tests/test_agent_config.py -k \"not llm and asyncio\")",
       "Bash(python -m pytest tests/ -q --ignore=tests/test_planner_output.py --ignore=tests/test_agent_config.py -k \"not llm\")",
       "Bash(python -m pytest tests/test_workflow_pipeline.py tests/test_verification_strategies.py -q -k \"asyncio or \\(not llm\\)\")",
-      "Bash(python -m pytest tests/ -x -q)"
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python -c \"from opalacoder.cli_commands import _registry, REPLState; print\\('OK'\\); print\\([k for k in _registry._cmds]\\)\")"
     ],
     "additionalDirectories": [
       "/home/gilzamir"

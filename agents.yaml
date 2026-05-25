@@ -1,5 +1,5 @@
-default: ollama/gemma4:latest
-alternative: ollama/gemma4:latest
+default: gemini/gemini-3.5-flash
+alternative: gemini/gemini-3.5-flash
 
 complexity_inference_mode: double
 git_strategy: auto
@@ -35,15 +35,15 @@ agents:
 
   intent_classifier:
     temperature: 0
-    max_tokens: 20
+    # max_tokens: 20
     num_ctx: 2048
-    reasoning_effort: "none"
+    # reasoning_effort: "none"
 
   complexity_evaluator:
     temperature: 0
-    max_tokens: 64
+    # max_tokens: 64
     num_ctx: 2048
-    reasoning_effort: "none"
+    # reasoning_effort: "none"
 
   chat_agent:
     temperature: 1.0
@@ -75,9 +75,9 @@ agents:
 
   skill_selector:
     temperature: 0
-    max_tokens: 64
+    # max_tokens: 64
     num_ctx: 4096
-    reasoning_effort: "none"
+    # reasoning_effort: "none"
 
   orchestrator:
     temperature: 1.0
