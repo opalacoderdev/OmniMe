@@ -562,6 +562,61 @@ class AsyncHTTPServer:
                 self.send_response(writer, 200, b'{"success":true}', "application/json")
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+        # 7g. Install Optional Dependencies (Streaming)
+        elif path == '/api/settings/install-dependencies' and method == 'POST':
+            headers = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain\r\n"
+                "Transfer-Encoding: chunked\r\n"
+                "Access-Control-Allow-Origin: *\r\n"
+                "Cache-Control: no-cache\r\n"
+                "Connection: keep-alive\r\n\r\n"
+            )
+            writer.write(headers.encode('utf-8'))
+            await writer.drain()
+
+            def send_chunk(text: str):
+                chunk = text.encode('utf-8')
+                if not chunk:
+                    return
+                writer.write(f"{len(chunk):X}\r\n".encode('utf-8'))
+                writer.write(chunk)
+                writer.write(b"\r\n")
+
+            import sys
+            import subprocess
+
+            cmd = [sys.executable, "-m", "pip", "install", "sentence-transformers"]
+            
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT
+                )
+                
+                send_chunk(json.dumps({"status": "running", "output": f"Starting: {' '.join(cmd)}\n"}) + "\n")
+                await writer.drain()
+                
+                while True:
+                    line_bytes = await proc.stdout.readline()
+                    if not line_bytes:
+                        break
+                    line = line_bytes.decode('utf-8', errors='replace')
+                    send_chunk(json.dumps({"status": "running", "output": line}) + "\n")
+                    await writer.drain()
+                
+                await proc.wait()
+                if proc.returncode == 0:
+                    send_chunk(json.dumps({"status": "success", "output": "\nInstallation completed successfully!\n"}) + "\n")
+                else:
+                    send_chunk(json.dumps({"status": "error", "output": f"\nInstallation failed with code {proc.returncode}\n"}) + "\n")
+            except Exception as e:
+                send_chunk(json.dumps({"status": "error", "output": f"\nError starting installation: {e}\n"}) + "\n")
+            finally:
+                writer.write(b"0\r\n\r\n")
+                await writer.drain()
+                writer.close()
         else:
             self.send_response(writer, 404, b'{"error":"Not Found"}', "application/json")
 

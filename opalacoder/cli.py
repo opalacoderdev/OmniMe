@@ -213,7 +213,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--list-projects", action="store_true", help="List all projects and exit")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--stdin", action="store_true", help="Start agent server in stdin/stdout mode")
-    parser.add_argument("--gui", action="store_true", help="Start agent server with React Web GUI")
+    parser.add_argument("--gui", action="store_true", help="Start agent server with React Web GUI (Default)")
+    parser.add_argument("--cli", action="store_true", help="Start in interactive CLI REPL mode")
     return parser
 
 
@@ -232,16 +233,9 @@ def main() -> None:
         start_stdin_server()
         sys.exit(0)
 
-    if getattr(args, "gui", False):
-        from .ide_server import start_gui_server
-        start_gui_server(host="127.0.0.1", port=3000)
-        sys.exit(0)
-
-    T.print_banner(version=__version__, mode=args.mode)
-
     store = ProjectStore(db_path=args.db)
 
-    if args.list_projects:
+    if getattr(args, "list_projects", False):
         projects = store.list_projects()
         if not projects:
             T.info("No projects found.")
@@ -255,13 +249,21 @@ def main() -> None:
                 )
         sys.exit(0)
 
-    if args.delete:
+    if getattr(args, "delete", False):
         if store.exists(args.delete):
             store.delete(args.delete)
             T.success(f"Project '{args.delete}' deleted.")
         else:
             T.error(f"Project '{args.delete}' not found.")
         sys.exit(0)
+
+    # Default to launching the GUI server unless --cli is explicitly passed
+    if not getattr(args, "cli", False):
+        from .ide_server import start_gui_server
+        start_gui_server(host="127.0.0.1", port=3000)
+        sys.exit(0)
+
+    T.print_banner(version=__version__, mode=args.mode)
 
     try:
         project = asyncio.run(startup_menu(store, args))

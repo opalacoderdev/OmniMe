@@ -77,6 +77,11 @@ export default function App() {
   const [commitMessage, setCommitMessage] = useState('');
   const [isCommitting, setIsCommitting] = useState(false);
 
+  // Optional Dependencies States
+  const [isInstallingDeps, setIsInstallingDeps] = useState(false);
+  const [installDepsStatus, setInstallDepsStatus] = useState('');
+  const [installDepsLog, setInstallDepsLog] = useState('');
+
 
   const terminalRef = useRef(null);
   const terminalInstanceRef = useRef(null);
@@ -397,6 +402,56 @@ export default function App() {
       addLog('error', `Erro ao fazer commit: ${err.message}`);
     } finally {
       setIsCommitting(false);
+    }
+  };
+
+  const handleInstallOptionalDeps = async () => {
+    if (isInstallingDeps) return;
+    setIsInstallingDeps(true);
+    setInstallDepsStatus('Instalando...');
+    setInstallDepsLog('Iniciando pip install...\n');
+    try {
+      const response = await fetch('/api/settings/install-dependencies', {
+        method: 'POST'
+      });
+      if (!response.ok) {
+        throw new Error('Falha ao iniciar instalação');
+      }
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const data = JSON.parse(line.trim());
+            if (data.output) {
+              setInstallDepsLog(prev => prev + data.output);
+            }
+            if (data.status === 'success') {
+              setInstallDepsStatus('Instalado com Sucesso!');
+            } else if (data.status === 'error') {
+              setInstallDepsStatus('Erro na Instalação');
+            }
+          } catch (e) {
+            // Ignore formatting/chunk parsing errors
+          }
+        }
+      }
+    } catch (err) {
+      setInstallDepsStatus('Falha ao conectar');
+      setInstallDepsLog(prev => prev + `\nErro: ${err.message}\n`);
+    } finally {
+      setIsInstallingDeps(false);
     }
   };
 
@@ -1814,12 +1869,52 @@ export default function App() {
                       <option value="off">Desativado (Off)</option>
                     </select>
                   </div>
+
+                  {/* Optional Dependencies */}
+                  <div className="flex flex-col" style={{ gap: '6px', borderTop: '1px solid var(--vscode-border)', paddingTop: '12px', marginTop: '6px' }}>
+                    <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Dependências Opcionais</label>
+                    <span style={{ fontSize: '11px', color: '#888888', lineHeight: '1.4' }}>
+                      Instale recursos extras (Local Embeddings, PyTorch, CUDA, etc.) que otimizam o processamento off-line.
+                    </span>
+                    <button
+                      type="button"
+                      className="vscode-button"
+                      disabled={isInstallingDeps}
+                      onClick={handleInstallOptionalDeps}
+                      style={{ width: '100%', marginTop: '6px' }}
+                    >
+                      {isInstallingDeps ? 'Instalando...' : 'Instalar Recursos Opcionais'}
+                    </button>
+                    {installDepsStatus && (
+                      <span style={{ fontSize: '11px', fontWeight: 'bold', color: installDepsStatus.includes('Erro') || installDepsStatus.includes('Falha') ? '#f48771' : '#73c991', marginTop: '4px' }}>
+                        Status: {installDepsStatus}
+                      </span>
+                    )}
+                    {installDepsLog && (
+                      <textarea
+                        readOnly
+                        value={installDepsLog}
+                        style={{
+                          width: '100%',
+                          height: '80px',
+                          marginTop: '8px',
+                          fontSize: '10px',
+                          fontFamily: 'monospace',
+                          background: '#151515',
+                          color: '#89d4a5',
+                          border: '1px solid var(--vscode-border)',
+                          padding: '6px',
+                          resize: 'none'
+                        }}
+                      />
+                    )}
+                  </div>
                 </>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#cccccc' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Versão</span>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.6 alfa</span>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.17 alfa</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Autor</span>

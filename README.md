@@ -30,7 +30,7 @@ OpalaCoder features an integrated desktop GUI built using React, Vite, and `pywe
 - **Integrated Terminal**: Includes a real-time xterm.js terminal with shell/PTY integration for running and inspecting commands natively.
 - **Git Source Control Sidebar**: A dedicated panel that tracks file modifications (color-coded as Modified/Untracked/Deleted) and provides a commit interface.
 - **Global Settings Panel**: Customize the editor font size, tab size, and word wrapping, with dynamic toggle support for Light and Dark themes.
-- **About Tab**: Version tracking (currently `0.1.6 alfa`), licensing, and developer details in the settings panel.
+- **About Tab**: Version tracking (currently `0.1.17 alfa`), licensing, and developer details in the settings panel.
 
 ### 6. Persistent Projects and CLI Commands
 
@@ -129,24 +129,26 @@ OPALA_MODEL=ollama/ministral-3:14b
 
 OpalaCoder supports three main execution modes:
 
-### 1. Interactive CLI REPL (Default)
-Starts the standard CLI terminal planner/execution loop:
-```bash
-source .env/bin/activate
-python main.py                        # default (plan mode)
-python main.py --mode auto            # run without interruptions
-python main.py --mode edit            # confirm sensitive operations
-python main.py --model ollama/gemma4  # override model
-python main.py --db /path/to/db       # custom database path
-python main.py --version
-python main.py --help
-```
-
-### 2. Web-Based IDE GUI
+### 1. Web-Based IDE GUI (Default)
 Launches the integrated React desktop application. It opens as a local app window (via `pywebview`) or falls back to your web browser:
 ```bash
 source .env/bin/activate
+python main.py                        # Launches GUI by default
+# or explicitly:
 python main.py --gui
+```
+
+### 2. Interactive CLI REPL
+Starts the standard CLI terminal planner/execution loop:
+```bash
+source .env/bin/activate
+python main.py --cli                  # Activates CLI REPL mode
+python main.py --cli --mode auto      # run without interruptions
+python main.py --cli --mode edit      # confirm sensitive operations
+python main.py --cli --model ollama/gemma4  # override model
+python main.py --db /path/to/db       # custom database path
+python main.py --version
+python main.py --help
 ```
 
 ### 3. Stdin/Stdout JSON Protocol Server
