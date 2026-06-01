@@ -21,6 +21,29 @@
   --vscode-terminal-bg: #1e1e1e;
 }
 
+.light-theme {
+  --vscode-bg: #f3f3f3;
+  --vscode-sidebar-bg: #e1e1e1;
+  --vscode-activitybar-bg: #2c2c2c;
+  --vscode-editor-bg: #ffffff;
+  --vscode-panel-bg: #f3f3f3;
+  --vscode-statusbar-bg: #007acc;
+  --vscode-statusbar-fg: #ffffff;
+  --vscode-text-fg: #333333;
+  --vscode-text-light: #000000;
+  --vscode-border: #cccccc;
+  --vscode-active-item: #d0d0d0;
+  --vscode-hover-item: #e4e4e4;
+  --vscode-active-border: #007acc;
+  --vscode-input-bg: #ffffff;
+  --vscode-button-bg: #007acc;
+  --vscode-button-hover: #005a9e;
+  --vscode-tab-active-bg: #f3f3f3;
+  --vscode-tab-inactive-bg: #e1e1e1;
+  --vscode-terminal-bg: #ffffff;
+}
+
+
 * {
   box-sizing: border-box;
   margin: 0;

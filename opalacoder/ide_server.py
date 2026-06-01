@@ -47,6 +47,7 @@ class AsyncHTTPServer:
         self.port = port
         self.static_dir = static_dir
         self.active_queues = []
+        self.active_terminal = None
 
     async def start(self):
         self.server = await asyncio.start_server(self.handle_request, self.host, self.port)
@@ -320,7 +321,46 @@ class AsyncHTTPServer:
             else:
                 self.send_response(writer, 404, json.dumps({"error": f"Project '{project_name}' not found"}).encode('utf-8'), "application/json")
 
+        # 6b. Update Project (patch fields without resetting history)
+        elif path == '/api/opalacoder/update-project' and method == 'POST':
+            from opalacoder.config import DEFAULT_DB_PATH
+            from opalacoder.project import ProjectStore
+            store = ProjectStore(db_path=DEFAULT_DB_PATH)
+            project_name = data.get("project_name")  # internal key (db name)
+            if not project_name:
+                self.send_response(writer, 400, b'{"error":"project_name is required"}', "application/json")
+                return
+            if not store.exists(project_name):
+                self.send_response(writer, 404, json.dumps({"error": f"Project '{project_name}' not found"}).encode(), "application/json")
+                return
+            project = store.load(project_name)
+            # Patch only supplied fields
+            if "display_name" in data:
+                project.project_name = data["display_name"]
+            if "model" in data and data["model"]:
+                project.model = data["model"]
+            if "alternative_model" in data:
+                project.alternative_model = data["alternative_model"]
+            if "description" in data:
+                project.description = data["description"]
+            if "mode" in data and data["mode"]:
+                project.mode = data["mode"]
+            if "project_path" in data and data["project_path"]:
+                project.project_path = os.path.abspath(data["project_path"])
+            store.save(project)
+            res_data = {
+                "name": project.name,
+                "project_name": project.project_name,
+                "project_path": project.project_path,
+                "model": project.model,
+                "alternative_model": project.alternative_model,
+                "mode": project.mode,
+                "description": project.description,
+            }
+            self.send_response(writer, 200, json.dumps(res_data).encode(), "application/json")
+
         # 7a. Input Response (resolves a pending GUI confirm/ask request)
+
         elif path == '/api/opalacoder/input_response' and method == 'POST':
             req_id = data.get("id", "")
             value = data.get("value", "")
@@ -388,6 +428,140 @@ class AsyncHTTPServer:
                 await writer.drain()
                 writer.close()
                 await agent_task
+
+        # 7c. Terminal stream
+        elif path == '/api/terminal/stream':
+            project_path = query.get('projectPath', [None])[0]
+            if not project_path:
+                self.send_response(writer, 400, b'{"error":"projectPath query parameter is required"}', "application/json")
+                return
+
+            if not self.active_terminal or self.active_terminal.project_path != project_path or not self.active_terminal.is_running:
+                if self.active_terminal:
+                    try:
+                        self.active_terminal.close()
+                    except:
+                        pass
+                from opalacoder.terminal_manager import TerminalSession
+                try:
+                    self.active_terminal = TerminalSession(project_path)
+                    self.active_terminal.start_reading(asyncio.get_running_loop())
+                except Exception as e:
+                    self.send_response(writer, 500, f'{{"error": "{str(e)}"}}'.encode('utf-8'), "application/json")
+                    return
+
+            headers = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/event-stream\r\n"
+                "Transfer-Encoding: chunked\r\n"
+                "Access-Control-Allow-Origin: *\r\n"
+                "Cache-Control: no-cache\r\n"
+                "Connection: keep-alive\r\n\r\n"
+            )
+            writer.write(headers.encode('utf-8'))
+            await writer.drain()
+
+            term_queue = asyncio.Queue()
+            self.active_terminal.queues.append(term_queue)
+
+            def send_chunk(data_bytes: bytes):
+                import base64
+                payload = f"data: {base64.b64encode(data_bytes).decode('utf-8')}\n\n"
+                chunk = payload.encode('utf-8')
+                writer.write(f"{len(chunk):X}\r\n".encode('utf-8'))
+                writer.write(chunk)
+                writer.write(b"\r\n")
+
+            try:
+                while True:
+                    data = await term_queue.get()
+                    if data is None:
+                        break
+                    send_chunk(data)
+                    await writer.drain()
+            except Exception as e:
+                print(f"Terminal stream exception: {e}")
+            finally:
+                if self.active_terminal and term_queue in self.active_terminal.queues:
+                    self.active_terminal.queues.remove(term_queue)
+                try:
+                    writer.write(b"0\r\n\r\n")
+                    await writer.drain()
+                    writer.close()
+                except:
+                    pass
+
+        # 7d. Terminal input (keys, resize)
+        elif path == '/api/terminal/input' and method == 'POST':
+            project_path = data.get("projectPath")
+            if not self.active_terminal or not self.active_terminal.is_running:
+                if project_path:
+                    from opalacoder.terminal_manager import TerminalSession
+                    try:
+                        self.active_terminal = TerminalSession(project_path)
+                        self.active_terminal.start_reading(asyncio.get_running_loop())
+                    except Exception as e:
+                        self.send_response(writer, 500, f'{{"error": "{str(e)}"}}'.encode('utf-8'), "application/json")
+                        return
+                else:
+                    self.send_response(writer, 400, b'{"error":"No active terminal session"}', "application/json")
+                    return
+
+            action = data.get("action", "input")
+            if action == "input":
+                text = data.get("text", "")
+                self.active_terminal.write(text)
+                self.send_response(writer, 200, b'{"ok":true}', "application/json")
+            elif action == "resize":
+                cols = data.get("cols", 80)
+                rows = data.get("rows", 24)
+                self.active_terminal.resize(cols, rows)
+                self.send_response(writer, 200, b'{"ok":true}', "application/json")
+            else:
+                self.send_response(writer, 400, b'{"error":"Invalid action"}', "application/json")
+
+        # 7e. Git status
+        elif path == '/api/git/status':
+            project_path = query.get('projectPath', [None])[0]
+            if not project_path or not os.path.exists(project_path):
+                self.send_response(writer, 400, b'{"error":"Invalid project path"}', "application/json")
+                return
+            import subprocess
+            try:
+                res = subprocess.run(
+                    ["git", "status", "--porcelain"],
+                    cwd=project_path,
+                    capture_output=True,
+                    text=True
+                )
+                files = []
+                for line in res.stdout.splitlines():
+                    if len(line) > 3:
+                        status = line[:2].strip()
+                        filepath = line[3:].strip()
+                        if " -> " in filepath:
+                            filepath = filepath.split(" -> ")[1].strip()
+                        files.append({"path": filepath, "status": status})
+                self.send_response(writer, 200, json.dumps({"files": files}).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
+        # 7f. Git commit
+        elif path == '/api/git/commit' and method == 'POST':
+            project_path = data.get("projectPath")
+            message = data.get("message", "update")
+            if not project_path:
+                self.send_response(writer, 400, b'{"error":"projectPath is required"}', "application/json")
+                return
+            import subprocess
+            try:
+                # Add all changes
+                subprocess.run(["git", "add", "."], cwd=project_path, check=True)
+                # Commit with message
+                subprocess.run(["git", "commit", "-m", message], cwd=project_path, check=True)
+                self.send_response(writer, 200, b'{"success":true}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
         else:
             self.send_response(writer, 404, b'{"error":"Not Found"}', "application/json")
 
@@ -395,31 +569,77 @@ def start_gui_server(host="127.0.0.1", port=3000):
     # Path to gui directory inside opalacoder package
     package_dir = os.path.dirname(os.path.abspath(__file__))
     static_dir = os.path.join(package_dir, "gui")
-    
+
     if not os.path.exists(static_dir):
         print(f"Warning: GUI static assets directory not found at {static_dir}. Server will run API-only.")
         static_dir = None
-        
+
     server = AsyncHTTPServer(host=host, port=port, static_dir=static_dir)
-    
+
     import opalacoder.agent_stdin as agent_stdin
-    
+
     def web_event_hook(payload):
         for q in server.active_queues:
             q.put_nowait(payload)
-            
+
     agent_stdin.event_hook = web_event_hook
-    
-    async def run_server():
-        await server.start()
-        # Open browser automatically
-        import webbrowser
-        webbrowser.open(f"http://{host}:{port}")
-        # Keep running
-        while True:
-            await asyncio.sleep(3600)
-            
+
+    # --- Run asyncio server in a background daemon thread so the main thread
+    # is free for the desktop window toolkit (GTK/pywebview requires main thread).
+    import threading
+
+    server_ready = threading.Event()
+
+    def _run_asyncio_server():
+        async def _inner():
+            await server.start()
+            server_ready.set()        # signal: server is accepting connections
+            while True:
+                await asyncio.sleep(3600)
+
+        asyncio.run(_inner())
+
+    t = threading.Thread(target=_run_asyncio_server, daemon=True)
+    t.start()
+
+    # Wait until the server is ready before opening the window
+    server_ready.wait(timeout=10)
+
+    url = f"http://{host}:{port}"
+
     try:
-        asyncio.run(run_server())
-    except KeyboardInterrupt:
-        print("\nStopping OpalaCoder IDE Server...")
+        import webview  # pywebview
+
+        # Ensure WebKit2GTK GObject introspection is available on Linux
+        try:
+            import gi
+            gi.require_version("WebKit2", "4.1")
+        except Exception:
+            pass
+
+        window = webview.create_window(
+            title="OpalaCoder IDE",
+            url=url,
+            width=1440,
+            height=900,
+            resizable=True,
+            min_size=(800, 600),
+        )
+
+        print(f"[OpalaCoder] Launching desktop window → {url}")
+
+        # webview.start() blocks the main thread until the window is closed.
+        webview.start(debug=False)
+
+    except ImportError:
+        # Graceful fallback: open in the default web browser
+        import webbrowser
+        print(f"[OpalaCoder] pywebview not available — opening browser at {url}")
+        webbrowser.open(url)
+        # Keep the server alive
+        try:
+            t.join()
+        except KeyboardInterrupt:
+            pass
+
+    print("\nStopping OpalaCoder IDE Server...")

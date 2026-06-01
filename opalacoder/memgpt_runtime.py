@@ -135,10 +135,8 @@ def build_run_skill_tool(
         name="run_skill",
         description=(
             "Delegate the current task to a skill. Pass the skill name (one of the "
-            "available skills shown to you), a context string with the user's request "
-            "plus relevant facts, and intent: 'newfeat' to create/add something new, "
-            "or 'bugfix' to repair something that exists and is broken. The skill runs "
-            "and reports back to the user directly."
+            "available skills shown to you) and a context string with the user's request "
+            "plus any relevant facts. The skill runs and reports the result back to the user."
         ),
     )
     async def run_skill(skill_name: str, context: str, intent: str = "newfeat") -> str:
@@ -292,8 +290,27 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
     metadata = level1_metadata(skills)
     body = _chat_orchestrator_body(project_path)
 
+    project_name = getattr(project, "project_name", "") or getattr(project, "name", "(unknown)")
+    project_desc = getattr(project, "description", "") or ""
+    project_mode = getattr(project, "mode", "auto") or "auto"
+    core_memory = getattr(project, "core_memory", "") or ""
+
+    project_block = (
+        f"## Current Project\n"
+        f"- **Name**: {project_name}\n"
+        f"- **Path**: {project_path}\n"
+        f"- **Model**: {project_model}\n"
+        f"- **Alt. Model**: {project_alt}\n"
+        f"- **Mode**: {project_mode}\n"
+    )
+    if project_desc:
+        project_block += f"- **Description**: {project_desc}\n"
+    if core_memory:
+        project_block += f"\n### Core Memory (persisted facts)\n{core_memory}\n"
+
     system_prompt = (
         f"{body}\n\n"
+        f"{project_block}\n"
         f"## Available skills (call run_skill with the skill name)\n{metadata}\n"
     )
 

@@ -112,7 +112,7 @@ class ProjectStore:
     def list_projects(self) -> list[dict]:
         with _conn(self.db_path) as conn:
             rows = conn.execute(
-                "SELECT name, project_name, project_path, created_at, updated_at, mode FROM projects ORDER BY updated_at DESC"
+                "SELECT name, project_name, project_path, created_at, updated_at, mode, model, alternative_model, description FROM projects ORDER BY updated_at DESC"
             ).fetchall()
             return [dict(r) for r in rows]
 

@@ -119,8 +119,13 @@ def wrap_tool(original_tool):
                 res_val = result.result
             else:
                 res_val = result.model_dump()
+            
+            res_str = str(res_val)
+            if "STDERR:" in res_str or "Error" in res_str:
+                print_event("problem", {"tool": name, "message": res_str, "severity": "error"})
         except Exception as e:
             res_val = f"Error: {e}"
+            print_event("problem", {"tool": name, "message": str(e), "severity": "error"})
             raise
         finally:
             print_event("tool_result", {"tool": name, "result": str(res_val)})

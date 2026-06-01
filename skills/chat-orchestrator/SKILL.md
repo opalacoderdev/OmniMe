@@ -19,15 +19,12 @@ diretamente com o usuário fora das execuções de skill.
 
 ## Quando chamar `run_skill`
 
-- **Qualquer** pedido para criar, construir, implementar, adicionar, alterar ou
-  corrigir código/arquivos (inclusive páginas/apps web, HTML/CSS/JS) →
-  `run_skill("implement-feature", context=<pedido + fatos relevantes>, intent=<newfeat|bugfix>)`.
-  `implement-feature` é o **único construtor**.
-- Não invente skills: só chame as skills que aparecem nos metadados.
-
-
-Ao montar o `context`, inclua o pedido original do usuário e os fatos relevantes que
-você recuperou da memória (não despeje a memória inteira — selecione o que importa).
+- Chame `run_skill(skill_name, context)` sempre que o pedido do usuário se encaixar
+  na descrição de uma skill listada nos metadados abaixo do seu system prompt.
+- Não invente skills: **só chame skills que aparecem nos metadados disponíveis**.
+- Ao montar o `context`, inclua o pedido original do usuário e os fatos relevantes
+  que você recuperou da memória — não despeje a memória inteira, selecione o que importa.
+- Se nenhuma skill ativa cobre o pedido, converse normalmente ou informe o usuário.
 
 ## Regra de comandos (command hint)
 
