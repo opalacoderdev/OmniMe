@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from opalacoder.project import ProjectStore
 from opalacoder.tools import set_project_context, get_project_path
 from opalacoder.code_index import CODE_INDEX
-from opalacoder.skills import load_project_skills
+from opalacoder.skills import active_skills
 from opalacoder.orchestrator import get_orchestrator
 from opalacoder.workflow_orchestrator import PlanOutput, _project_snapshot, _oracle
 from opalacoder.config import get_agent_llm_kwargs, get_agent_model, DEFAULT_MODEL
@@ -72,7 +72,7 @@ async def run_planner_test(project_name: str, user_request: str):
 
     # ── 2. Set project context (same as repl_loop) ────────────────────────
     set_project_context(project, store)
-    project_skills = load_project_skills(project.project_path, project.skills)
+    project_skills = active_skills(project.project_path)
 
     print(f"\n{DIVIDER}")
     print(f"Project:  {project.name}  →  {project.project_path}")
@@ -84,14 +84,8 @@ async def run_planner_test(project_name: str, user_request: str):
     stats = CODE_INDEX.build()
     print(f"Code index: {stats}")
 
-    # ── 4. Load skill tools ───────────────────────────────────────────────
-    from opalacoder.skills import load_skill_tools
-    skill_tools = load_skill_tools(project_skills, get_project_path())
-    skill_tool_names = [
-        getattr(st, "name", None) or getattr(st, "__name__", str(st))
-        for st in skill_tools
-    ]
-    print(f"Skill tools: {skill_tool_names}")
+    # Plugin-tools were retired: skills run detectors via explicit Level-3 scripts.
+    skill_tool_names: list[str] = []
 
     # ── 5. Build planning prompt (same as _orchestration_loop) ────────────
     model = get_agent_model("orchestrator", DEFAULT_MODEL)

@@ -175,59 +175,83 @@ def choose(prompt: str, options: list[str]) -> str:
 
 # ─── Workflow debug output (enabled via OPALACODER_WORKFLOW_DEBUG=1) ──────────
 
-_WORKFLOW_DEBUG = os.environ.get("OPALACODER_WORKFLOW_DEBUG", "0") == "1"
+# Re-read at call time so setup_debug_logging() setting os.environ after import works.
+def _workflow_debug() -> bool:
+    return os.environ.get("OPALACODER_WORKFLOW_DEBUG", "0") == "1"
+
+
+def _log(text: str) -> None:
+    """Write plain text to the run log file if one is active."""
+    try:
+        from .config import get_run_logger
+        rl = get_run_logger()
+        if rl:
+            rl.debug(text)
+    except Exception:
+        pass
 
 
 def debug_oracle(schema_name: str, attempt: int, raw_content: str) -> None:
-    if not _WORKFLOW_DEBUG:
+    msg = (
+        f"\n┌─ ORACLE [{schema_name}] attempt {attempt + 1} — RAW OUTPUT ─┐\n"
+        f"{raw_content}\n"
+        f"└──────────────────────────────────────────────────────────┘"
+    )
+    _log(msg)
+    if not _workflow_debug():
         return
     from rich.markup import escape
-    console.print(
-        f"\n[bold cyan]┌─ ORACLE [{schema_name}] attempt {attempt + 1} — RAW OUTPUT ─┐[/bold cyan]"
-    )
+    console.print(f"\n[bold cyan]┌─ ORACLE [{schema_name}] attempt {attempt + 1} — RAW OUTPUT ─┐[/bold cyan]")
     console.print(escape(raw_content[:2000]))
     console.print("[bold cyan]└──────────────────────────────────────────────────────────┘[/bold cyan]")
 
 
 def debug_oracle_error(schema_name: str, attempt: int, error: str, raw_content: str) -> None:
-    if not _WORKFLOW_DEBUG:
+    msg = (
+        f"\n┌─ ORACLE [{schema_name}] attempt {attempt + 1} — PARSE ERROR ─┐\n"
+        f"Error: {error}\n"
+        f"Raw content: {raw_content}\n"
+        f"└──────────────────────────────────────────────────────────┘"
+    )
+    _log(msg)
+    if not _workflow_debug():
         return
     from rich.markup import escape
-    console.print(
-        f"\n[bold red]┌─ ORACLE [{schema_name}] attempt {attempt + 1} — PARSE ERROR ─┐[/bold red]"
-    )
+    console.print(f"\n[bold red]┌─ ORACLE [{schema_name}] attempt {attempt + 1} — PARSE ERROR ─┐[/bold red]")
     console.print(f"[red]Error:[/red] {escape(error)}")
     console.print(f"[dim]Raw content:[/dim] {escape(raw_content[:1000])}")
     console.print("[bold red]└──────────────────────────────────────────────────────────┘[/bold red]")
 
 
 def debug_worker_start(task_id: str, description: str, model: str) -> None:
-    if not _WORKFLOW_DEBUG:
+    _log(f"\n┌─ WORKER [{task_id}] model={model} ─┐\nTask: {description}")
+    if not _workflow_debug():
         return
     from rich.markup import escape
-    console.print(
-        f"\n[bold green]┌─ WORKER [{task_id}] model={model} ─┐[/bold green]"
-    )
+    console.print(f"\n[bold green]┌─ WORKER [{task_id}] model={model} ─┐[/bold green]")
     console.print(f"[dim]Task:[/dim] {escape(description[:500])}")
     console.print("[bold green]│ executing…[/bold green]")
 
 
 def debug_worker_project_path(task_id: str, project_path: str) -> None:
-    if not _WORKFLOW_DEBUG:
+    _log(f"│ [{task_id}] project_path: {project_path}")
+    if not _workflow_debug():
         return
     from rich.markup import escape
     console.print(f"[bold green]│ project_path:[/bold green] {escape(project_path)}")
 
 
 def debug_worker_tool_calls(task_id: str, count: int) -> None:
-    if not _WORKFLOW_DEBUG:
+    _log(f"│ [{task_id}] tool_calls_made: {count}")
+    if not _workflow_debug():
         return
     color = "green" if count > 0 else "red"
     console.print(f"[bold {color}]│ tool_calls_made: {count}[/bold {color}]")
 
 
 def debug_worker_result(task_id: str, result: str) -> None:
-    if not _WORKFLOW_DEBUG:
+    _log(f"│ [{task_id}] Result:\n{result}\n└──────────────────────────────────────────────────────────┘")
+    if not _workflow_debug():
         return
     from rich.markup import escape
     console.print(f"[bold green]│ Result:[/bold green] {escape(result[:1000])}")

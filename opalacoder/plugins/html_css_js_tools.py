@@ -412,19 +412,15 @@ def html_css_js_reviewer(
     if errors_before is not None:
         unresolved = errors_before & errors_after
         new_errors = errors_after - errors_before
-        bad = sorted(unresolved) + sorted(new_errors)
+        bad = sorted(new_errors)
         if bad:
-            label = (
-                f"{len(unresolved)} unresolved + {len(new_errors)} new error(s)"
-                if unresolved and new_errors
-                else (f"{len(unresolved)} error(s) still unresolved" if unresolved else f"{len(new_errors)} new error(s) introduced")
-            )
+            label = f"{len(new_errors)} new error(s) introduced"
             return {
                 "done": False,
                 "summary": f"H2 reviewer: {label} after worker ran.",
                 "corrections": bad[:10],
             }
-        return {"done": True, "summary": "H2 reviewer: all blocking errors resolved.", "corrections": []}
+        return {"done": True, "summary": "H2 reviewer: no new blocking errors introduced.", "corrections": []}
 
     # No before-snapshot: reject if any blocking errors remain
     blocking = sorted(errors_after)

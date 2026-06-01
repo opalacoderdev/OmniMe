@@ -1,13 +1,8 @@
-default: gemini/gemini-3.5-flash
-alternative: gemini/gemini-3.5-flash
-
-complexity_inference_mode: double
-git_strategy: auto
-response_mode: "last"
-
-heartbeats_scale_factor: 1
+default: ollama/gemma4:latest
+alternative: ollama/gemma4:latest
 
 # Global LLM defaults applied to all agents unless overridden below.
+# Non-agent settings (git_strategy, vector_index, etc.) live in config.yaml
 llm_defaults:
   temperature: 1.0
   max_tokens: 8128
@@ -16,13 +11,10 @@ llm_defaults:
 # Per-agent overrides. Only fields listed here are overridden;
 # everything else falls back to llm_defaults.
 #
-# Roles:
-#   intent_classifier    — classifies user intent (greetings/question/plan/chat)
-#   complexity_evaluator — decides default vs alternative model
-#   chat_agent           — conversational assistant with memory
-#   landscape_planner    — high-level strategic planner
-#   refinement_agent     — refines plan based on user feedback
-#   skill_selector       — routes request to the appropriate skills
+# Roles (skills-oriented architecture):
+#   memgpt               — fixed chat-orchestrator: converses + delegates via run_skill
+#   landscape_planner    — high-level strategic planner (inside implement-feature)
+#   refinement_agent     — refines plan based on user feedback (inside implement-feature)
 #   orchestrator         — drives the plan→execute→review loop (JSON oracle calls)
 #   worker               — LLMAgentBlock that executes each task command with tools
 
@@ -33,35 +25,15 @@ agents:
   # reasoning field, leaving message.content empty and causing silent misclassification
   # (ollama issue #15288). Leave unset for planning/execution agents.
 
-  intent_classifier:
-    temperature: 0
-    # max_tokens: 20
-    num_ctx: 2048
-    # reasoning_effort: "none"
-
-  complexity_evaluator:
-    temperature: 0
-    # max_tokens: 64
-    num_ctx: 2048
-    # reasoning_effort: "none"
-
-  chat_agent:
+  # memgpt = the fixed chat-orchestrator of the skills-oriented architecture.
+  # It converses AND delegates to skills via run_skill, so a single turn may spend
+  # several heartbeats (read memory + run_skill + send_message, plus retries). A
+  # larger budget and context keep multi-turn skill sessions from being cut off.
+  memgpt:
     temperature: 1.0
-    max_tokens: 2048
-    num_ctx: 8192
-    max_heartbeats: 10
+    num_ctx: 16384
+    max_heartbeats: 20
     debug: false
-
-  # enricher = chat_agent running in Mode A (silent memory-retrieval pass).
-  # reasoning_effort must be "none": thinking leaves tool_calls empty (ollama issue #15288).
-  # chat_agent (synthesizer / Mode B) has no such restriction.
-  enricher:
-    temperature: 0.3
-    max_tokens: 1024
-    num_ctx: 8192
-    max_heartbeats: 10
-    debug: false
-    reasoning_effort: "none"
 
   landscape_planner:
     temperature: 1.0
@@ -72,12 +44,6 @@ agents:
     temperature: 1.0
     num_ctx: 8192
     reasoning_effort: "none"
-
-  skill_selector:
-    temperature: 0
-    # max_tokens: 64
-    num_ctx: 4096
-    # reasoning_effort: "none"
 
   orchestrator:
     temperature: 1.0

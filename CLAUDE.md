@@ -21,8 +21,7 @@ Key things to understand from that repo:
 
 ## Project Context
 
-Read `ARCH_SUMMARY.md` before making changes. It contains the current project status,
-known issues, and decisions already made. Do not re-litigate what is documented there.
+Read `docs/specs` before making changes. It contains the current project status, known issues, and decisions already made. Do not re-litigate what is documented there.
 
 ## Build & Test Commands
 Run tests on tests dir after you implement a new feature.

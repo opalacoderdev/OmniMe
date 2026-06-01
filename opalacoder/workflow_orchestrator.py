@@ -63,6 +63,7 @@ class Task(BaseModel):
     related_files: list[str]  # files the worker must read before acting
     context: str        # operational detail: classes, IDs, APIs, contracts between files
     depends_on: list[str] = []  # ids of tasks that must complete before this one
+    review_only: bool = False    # True = task only reads/inspects, no file writes required
     status: str = "pending"      # pending | done | failed
     failure_count: int = 0       # incremented each time reviewer says done=False
     oracle_failure_count: int = 0  # incremented when reviewer oracle itself fails (format error)
@@ -73,6 +74,28 @@ class Task(BaseModel):
         if not isinstance(v, str):
             return json.dumps(v)
         return v
+
+    @field_validator("commands", mode="before")
+    @classmethod
+    def _coerce_commands(cls, v):
+        if not isinstance(v, list):
+            return v
+        result = []
+        for item in v:
+            if isinstance(item, str):
+                result.append(item)
+            elif isinstance(item, dict):
+                # Model emitted a structured object instead of a plain string command.
+                # Extract the most descriptive text field available, or serialize the dict.
+                for key in ("action", "goal", "description", "step", "command", "text"):
+                    if key in item and isinstance(item[key], str):
+                        result.append(item[key])
+                        break
+                else:
+                    result.append(json.dumps(item))
+            else:
+                result.append(str(item))
+        return result
 
 
 def _validate_task(task: Task) -> str | None:
@@ -393,7 +416,8 @@ class WorkflowOrchestratorStrategy(BaseOrchestratorStrategy):
                 ".btn-clear/.btn-number/.btn-operator/.btn-equals (color variants). "
                 "Button IDs match their labels (e.g. id='add', id='7')."
             ),
-            "depends_on": []
+            "depends_on": [],
+            "review_only": False
         }, indent=2)
 
         return f"""\
@@ -412,10 +436,11 @@ Each task MUST follow this exact schema:
 Field rules:
 - id: short unique identifier (t1, t2, ...)
 - goal: one sentence — what this task achieves and WHY (e.g. "to style the HTML defined in index.html")
-- commands: ordered list of atomic steps; each step is a separate worker action
+- commands: ordered list of atomic steps; each step is a PLAIN TEXT STRING describing what to do
+  * CRITICAL: every element MUST be a string. NEVER put a JSON object or dict inside commands.
   * Be concrete: "Add class .btn-login with display:flex, background:#e94560 to style.css"
   * NOT vague: "style the button"
-  * For fix/refactor tasks: if a skill bug-detection tool is available (listed below), the FIRST command MUST call it on the relevant file to identify existing issues before editing
+  * Each command is a plain text instruction string — NEVER a JSON object
 - related_files: files the worker MUST read before acting (source of truth for class names, IDs, APIs)
   * CSS/JS tasks MUST list the HTML or source file that defines the selectors/IDs being used
 - context: operational detail the worker needs WITHOUT reading files:
@@ -423,6 +448,8 @@ Field rules:
   * For JS: list every element ID, event type, and function contract
   * For Python: list function signatures, return types, imports needed
 - depends_on: list of task ids that must complete before this one (empty list if none)
+- review_only: true if the task ONLY reads, inspects, or runs diagnostic tools — no file writes expected.
+  Set to false for any task that creates or modifies files.
 
 Ordering rules:
 - Tasks that produce files another task depends on MUST come first.
@@ -444,6 +471,70 @@ Hard rules:
             "- Create tasks ONLY for the files explicitly named in 'FIX REQUIRED IN <file>'.\n"
             "- Do NOT create tasks for files the scan does not flag. If the scan says JS is correct, do NOT add a JS task.\n"
             "- One bug = one fix task in the exact file named. Do not invent follow-up refactoring tasks.\n"
+            if skill_tool_names else ""
+        )
+
+    def _planner_system_bugfix(self, project_context: str, session, skill_tool_names: list[str] = None) -> str:
+        proj_path = "."
+        if project_context:
+            m = re.search(r"PATH:\s*(.+?)\]", project_context)
+            proj_path = m.group(1).strip() if m else "."
+
+        task_schema_example = json.dumps({
+            "id": "t1",
+            "goal": "Fix the divide-by-zero error in calculator.py line 42",
+            "commands": [
+                "Read calculator.py lines 38-50 to confirm the buggy division expression",
+                "Edit calculator.py: add guard `if divisor == 0: return None` before line 42"
+            ],
+            "related_files": ["calculator.py"],
+            "context": (
+                "Bug is in function `divide(a, b)` at line 42: `return a / b` raises ZeroDivisionError "
+                "when b=0. Fix must return None (or raise ValueError) without changing function signature."
+            ),
+            "depends_on": [],
+            "review_only": False
+        }, indent=2)
+
+        return f"""\
+You are a software bugfix planner for the project at `{proj_path}`.
+You have received VECTOR CONTEXT: ranked code chunks most semantically similar to the bug report.
+Use them as the primary source of truth for locating the defect.
+
+Break the fix into focused, fully self-contained IMPLEMENTATION tasks.
+
+IMPORTANT: Workers share NO memory and have NO access to each other's output.
+Every task description must be 100% self-contained.
+
+Output ONLY valid JSON — no prose, no markdown fences:
+{{"tasks": [<task>, ...]}}
+
+Each task MUST follow this exact schema:
+{task_schema_example}
+
+Field rules:
+- id: short unique identifier (t1, t2, ...)
+- goal: one sentence — what specific bug this task fixes and in which file/function
+- commands: ordered list of atomic steps; each step is a PLAIN TEXT STRING
+  * CRITICAL: every element MUST be a string. NEVER put a JSON object or dict inside commands.
+  * The FIRST command MUST be a string like: "Read script.js lines 38-50 to inspect the buggy section"
+  * Be concrete about line numbers and exact expressions when known from vector context
+- related_files: only files mentioned in the vector context or directly implicated by the bug
+- context: exact details from vector context the worker needs (function names, line ranges, expressions)
+- depends_on: task ids that must complete first (usually empty for bugfixes)
+- review_only: true if the task ONLY reads, inspects, or runs diagnostic tools — no file writes expected.
+  Set to false for any task that creates or modifies files.
+
+Hard rules:
+- ONLY modify files present in the vector context unless the bug clearly propagates to another file.
+- Do NOT create new files unless explicitly required by the fix.
+- Do NOT refactor, rename, or clean up code beyond what is needed to fix the reported bug.
+- Never add tasks like "gather requirements" or "ask the user".
+- The user request is COMPLETE — fix it directly.
+""" + (
+            f"\nAvailable skill tools (workers have these as callable functions):\n"
+            + "\n".join(f"- {name}" for name in skill_tool_names)
+            + "\nFor fix tasks, the first command MUST call the relevant skill tool on the target file.\n"
             if skill_tool_names else ""
         )
 
@@ -509,18 +600,27 @@ Correction task schema:
     # Planning phase (human-in-the-loop)
     # ------------------------------------------------------------------
 
-    async def _plan_and_refine(self, user_request: str, history: str, session, store) -> str:
+    async def _plan_and_refine(self, user_request: str, history: str, session, store,
+                               interactive: bool = True) -> str:
         """Generate a natural-language plan, show it to the user, save plan.md,
         and let the user refine it or press Enter to approve.
         Raises T.UserCancelled if the user types /cancel.
+
+        When *interactive* is False (e.g. the implement-feature skill running its
+        Level-3 script non-interactively), the panorama is auto-approved without
+        prompting — there is no terminal to read from. The user still converses
+        with the MemGPT orchestrator afterwards.
         """
         import os as _os
 
         T.section("Phase 1 — Implementation Overview")
         panorama_text = await generate_panorama(user_request, self.model, history=history)
 
-        T.section("Phase 2 — Plan Refinement")
-        approved_plan = await refine_plan(user_request, panorama_text, self.model, session, store)
+        if interactive:
+            T.section("Phase 2 — Plan Refinement")
+            approved_plan = await refine_plan(user_request, panorama_text, self.model, session, store)
+        else:
+            approved_plan = panorama_text
 
         project_path = getattr(session, "project_path", ".") or "."
         plan_file_path = _os.path.join(project_path, "plan.md")
@@ -697,6 +797,8 @@ Correction task schema:
     async def run(self, user_request: str, history: str, **kwargs) -> str:
         session = kwargs.get("session")
         store = kwargs.get("store")
+        intent: str = kwargs.get("intent", "newfeat")
+        interactive: bool = kwargs.get("interactive", True)
 
         project_context = (
             session.context_header()
@@ -741,7 +843,9 @@ Correction task schema:
         # Passing raw history here caused the planner to act on unrelated prior tasks.
         approved_plan = ""
         if session and store:
-            approved_plan = await self._plan_and_refine(user_request, "", session, store)
+            approved_plan = await self._plan_and_refine(
+                user_request, "", session, store, interactive=interactive
+            )
         # ──────────────────────────────────────────────────────────────
 
         # Auto-checkpoint before any worker modifies files — enables /undo
@@ -766,25 +870,18 @@ Correction task schema:
             T.debug_oracle("code_index", 0, f"Index build skipped: {_idx_err}")
 
         # Load tools declared in active skills (plugin system)
-        _project_skills = kwargs.get("project_skills") or []
         _project_path = get_project_path()
-        try:
-            from .skills import load_skill_tools, load_skill_reviewers
-            _skill_tools = load_skill_tools(_project_skills, _project_path)
-            _skill_reviewers = load_skill_reviewers(_project_skills, _project_path)
-        except Exception as _st_err:
-            T.debug_oracle("skill_tools", 0, f"Skill tools load failed: {_st_err}")
-            _skill_tools = []
-            _skill_reviewers = []
-        _skill_tool_names = [
-            getattr(st, "name", None) or getattr(st, "__name__", str(st))
-            for st in _skill_tools
-        ]
+        # Plugin-tools (skill-declared `tools:`/`reviewer:`) were retired with the
+        # skills-oriented refactor: skills now run their detectors explicitly via
+        # Level-3 scripts (e.g. html-css-js → check_contracts.py), not through an
+        # implicit worker-injected reviewer. No skill tools/reviewers are loaded.
+        _skill_tool_names: list[str] = []
 
-        # No fallback default reviewer: the existing git-changed-files pre-checks
-        # already handle "no files changed" cases, and the LLM reviewer handles the rest.
-
-        planner_sys = self._planner_system(project_context, session, _skill_tool_names or None)
+        _is_bugfix = intent == "bugfix"
+        if _is_bugfix:
+            planner_sys = self._planner_system_bugfix(project_context, session, _skill_tool_names or None)
+        else:
+            planner_sys = self._planner_system(project_context, session, _skill_tool_names or None)
         reviewer_sys = self._reviewer_system(project_context)
 
         # Project snapshot fetched once — used to prime oracle without tools
@@ -917,32 +1014,7 @@ Correction task schema:
                     changed.append(fname.strip())
             return changed
 
-        def _run_skill_scan() -> set[str]:
-            """Run all skill tools and return the set of blocking error lines.
-
-            Used to snapshot errors before and after a worker runs so the reviewer
-            can compare: same errors still present → task failed, regardless of type.
-            """
-            errors: set[str] = set()
-            for st in _skill_tools:
-                try:
-                    raw_fn = getattr(st, "_func", None)
-                    if raw_fn is None and callable(st):
-                        raw_fn = st
-                    if raw_fn is None:
-                        continue
-                    output = raw_fn(".")
-                    if not isinstance(output, str):
-                        continue
-                    for line in output.splitlines():
-                        # Collect every error/contract line — not just specific patterns
-                        if line.startswith("[CONTRACT") or line.startswith("[SYNTAX ERROR]") or line.startswith("[ERROR]"):
-                            errors.add(line.strip())
-                except Exception:
-                    pass
-            return errors
-
-        async def _review_task(task: Task, worker_result: str, plan: PlanOutput, skill_reviewers: list = None, errors_before: set[str] = None) -> VerifyOutput | None:
+        async def _review_task(task: Task, worker_result: str, plan: PlanOutput) -> VerifyOutput | None:
             """Deterministic pre-checks first; only call the LLM reviewer when needed."""
 
             # ── 1. Lint (authoritative) ────────────────────────────────────
@@ -1006,7 +1078,8 @@ Correction task schema:
                 )
 
             # Worker did not call any write tool and did not change any files → hard reject
-            if not worker_called_write and not changed_files and invoked:
+            # Skip this check for review_only tasks — they are not expected to write anything.
+            if not task.review_only and not worker_called_write and not changed_files and invoked:
                 T.debug_oracle("reviewer", 0,
                     f"[AUTO-REJECT] {task.id}: no write tool, no files changed (invoked={sorted(invoked)})")
                 AGENT_PROGRESS.record_task_failure(
@@ -1045,77 +1118,6 @@ Correction task schema:
             if changed_files:
                 changed_note = f"\n[Files changed on disk]: {', '.join(changed_files)}\n"
 
-            # ── 4b. H2: compare error sets before/after (deterministic, zero-LLM cost) ──
-            # errors_before was captured before the worker ran.
-            # Re-run the scan now and check if the same errors still exist.
-            if errors_before is not None and _skill_tools:
-                errors_after = _run_skill_scan()
-                unresolved = errors_before & errors_after
-                new_errors = errors_after - errors_before
-                if unresolved or new_errors:
-                    lines = sorted(unresolved) + sorted(new_errors)
-                    summary = (
-                        f"H2: {len(unresolved)} error(s) still unresolved after worker ran."
-                        if unresolved else
-                        f"H2: {len(new_errors)} new error(s) introduced by worker."
-                    )
-                    T.debug_oracle("skill_reviewer", 0, f"[H2-REJECT] {task.id}: {summary}")
-                    AGENT_PROGRESS.record_task_failure(task.id, f"[H2] {summary[:120]}")
-                    return VerifyOutput(
-                        done=False,
-                        summary=summary + "\n" + "\n".join(lines[:5]),
-                        corrections=[Task(
-                            id=f"{task.id}_h2fix",
-                            goal=task.goal,
-                            commands=[
-                                f"The following errors still exist — fix them in the correct file:\n"
-                                + "\n".join(lines[:5])
-                            ],
-                            related_files=task.related_files,
-                            context=task.context,
-                            depends_on=[],
-                        )],
-                    )
-
-            # ── 4c. Call skill reviewers (plugin-defined, get errors_before for comparison) ──
-            if skill_reviewers:
-                for rev_fn in skill_reviewers:
-                    import inspect as _inspect
-                    sig = _inspect.signature(rev_fn)
-                    try:
-                        if "errors_before" in sig.parameters:
-                            rev_result = rev_fn(
-                                _project_path,
-                                task.goal,
-                                task.related_files,
-                                errors_before=errors_before,
-                            )
-                        else:
-                            rev_result = rev_fn(_project_path, task.goal, task.related_files)
-                    except Exception as _rev_err:
-                        T.debug_oracle("skill_reviewer", 0, f"reviewer error: {_rev_err}")
-                        continue
-                    if not isinstance(rev_result, dict):
-                        continue
-                    if not rev_result.get("done", True):
-                        corrections_raw = rev_result.get("corrections", [])
-                        corrections = [
-                            Task(
-                                id=f"{task.id}_skrev",
-                                goal=task.goal,
-                                commands=corrections_raw if isinstance(corrections_raw, list) else [str(corrections_raw)],
-                                related_files=task.related_files,
-                                context=task.context,
-                                depends_on=[],
-                            )
-                        ] if corrections_raw else []
-                        AGENT_PROGRESS.record_task_failure(task.id, f"skill reviewer rejected: {rev_result.get('summary', '')[:120]}")
-                        return VerifyOutput(
-                            done=False,
-                            summary=rev_result.get("summary", "Skill reviewer rejected the task."),
-                            corrections=corrections,
-                        )
-
             # All checks passed — proceed to LLM reviewer
             # ── 5. Call LLM reviewer with factual context ──────────────────
             task_json = json.dumps(task.model_dump(), indent=2)
@@ -1145,13 +1147,15 @@ Correction task schema:
             try:
                 result = await self._run_worker(
                     task, project_context, worker_llm_kwargs, sub_hb, worker_debug,
-                    skill_tools=_skill_tools,
                 )
                 if result.lower().startswith("[error"):
                     AGENT_PROGRESS.record_worker_error(task.id, result)
                 return result
             except Exception as e:
+                import traceback as _tb
+                full_tb = _tb.format_exc()
                 AGENT_PROGRESS.record_worker_error(task.id, str(e))
+                T.debug_oracle(f"worker_exception_{task.id}", 0, full_tb)
                 return f"[ERROR executing {task.id}]: {e}"
 
         async def _orchestration_loop():
@@ -1194,49 +1198,49 @@ Correction task schema:
 
             file_snippets = _extract_file_snippets(user_request)
 
-            # Run skill tools eagerly before planning so the planner sees actual errors.
-            # This prevents the planner from guessing the wrong file based on symptoms.
-            skill_tool_output = ""
-            if _skill_tools:
-                skill_tool_parts: list[str] = []
-                for st in _skill_tools:
-                    try:
-                        # FunctionBlock wraps the original sync function in _func;
-                        # call it directly to avoid async overhead.
-                        raw_fn = getattr(st, "_func", None)
-                        if raw_fn is None and callable(st):
-                            raw_fn = st
-                        if raw_fn is None:
-                            continue
-                        result_raw = raw_fn(".")
-                        if result_raw and isinstance(result_raw, str):
-                            # Only include blocking errors in the planning prompt.
-                            # INFO/WARNING lines would cause the planner to fix unrelated things.
-                            blocking_lines = [
-                                line for line in result_raw.splitlines()
-                                if any(tag in line for tag in ("[CONTRACT ERROR]", "[SYNTAX ERROR]", "[ERROR]"))
-                            ]
-                            if blocking_lines:
-                                tool_name = getattr(st, "name", getattr(raw_fn, "__name__", "tool"))
-                                skill_tool_parts.append(
-                                    f"[{tool_name}]\n" + "\n".join(blocking_lines)
-                                )
-                    except Exception:
-                        pass
-                if skill_tool_parts:
-                    skill_tool_output = "\nSkill tool pre-scan (run before planning — tells you WHICH FILE has the bug):\n" + "\n\n".join(skill_tool_parts) + "\n"
-
             file_section = ""
-            if file_snippets or skill_tool_output:
-                file_section = "\nRelevant file contents and diagnostics (read before planning):\n"
-                if file_snippets:
-                    file_section += file_snippets + "\n"
-                if skill_tool_output:
-                    file_section += skill_tool_output
+            if file_snippets:
+                file_section = (
+                    "\nRelevant file contents (read before planning):\n"
+                    + file_snippets + "\n"
+                )
+
+            # ── bugfix: build vector index and retrieve relevant chunks ──
+            vector_chunk_section = ""
+            if _is_bugfix:
+                try:
+                    from .vector_index import set_vector_project
+                    from .config import get_vector_config
+                    vcfg = get_vector_config()
+                    vidx = set_vector_project(get_project_path())
+                    T.debug_oracle("vector_index", 0, "Building vector index…")
+                    vstats = vidx.build(
+                        embedding_model=vcfg["embedding_model"],
+                        embedding_fallback=vcfg["embedding_fallback"],
+                        chunk_size=vcfg["chunk_size"],
+                        chunk_overlap=vcfg["chunk_overlap"],
+                    )
+                    T.debug_oracle("vector_index", 0, f"Vector index ready: {vstats}")
+                    ranked = vidx.retrieve(
+                        query=user_request,
+                        top_k=vcfg["top_k"],
+                        embedding_model=vcfg["embedding_model"],
+                        embedding_fallback=vcfg["embedding_fallback"],
+                    )
+                    if ranked:
+                        vector_chunk_section = (
+                            "\nChunks most likely related to the bug (retrieved by semantic search — use as leads, not restrictions):\n"
+                            + vidx.format_for_prompt(ranked)
+                            + "\n"
+                        )
+                        T.debug_oracle("vector_index", 0, f"Retrieved {len(ranked)} chunks for bugfix planner")
+                except Exception as _vidx_err:
+                    T.debug_oracle("vector_index", 0, f"Vector retrieval skipped: {_vidx_err}")
 
             planning_prompt = (
                 f"Project files:\n{snapshot}\n"
                 f"{file_section}\n"
+                f"{vector_chunk_section}"
                 f"Conversation history:\n{history}\n"
                 f"{plan_section}\n"
                 f"User request:\n{user_request}"
@@ -1246,6 +1250,7 @@ Correction task schema:
                 PlanOutput, planner_sys, planning_prompt,
                 model=self.model, llm_kwargs=llm_kwargs,
             )
+
 
             if plan is None or not plan.tasks:
                 final_summary = (
@@ -1296,15 +1301,13 @@ Correction task schema:
                     except Exception as _ck_err:
                         T.debug_oracle("vcs", 0, f"Per-task checkpoint failed: {_ck_err}")
 
-                errors_before = _run_skill_scan() if _skill_tools else None
-
                 worker_result = await _run_worker_safe(task)
                 T.debug_worker_result(task.id, worker_result)
                 _save_intermediate("task", f"[{task.id}] {worker_result[:500]}")
                 tasks_executed += 1
 
                 # ── Phase 3: Review this task ──────────────────────────────
-                review = await _review_task(task, worker_result, plan, skill_reviewers=_skill_reviewers, errors_before=errors_before)
+                review = await _review_task(task, worker_result, plan)
                 T.debug_oracle(f"reviewer_{task.id}", 0, str(review))
                 if review is None:
                     # Reviewer oracle could not produce valid JSON — this is a format

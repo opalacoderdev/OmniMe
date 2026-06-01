@@ -1,311 +1,224 @@
-import importlib
-import importlib.util
 import os
-import re
-import sys
-from typing import Callable
-
-# Skill scopes:
-#   "all"          — injected everywhere: intent classifier AND orchestrator (default)
-#   "orchestrator" — injected ONLY into the planner/executor, NEVER into the intent classifier
-#   "classifier"   — injected ONLY into the intent classifier
-SCOPE_ALL = "all"
-SCOPE_ORCHESTRATOR = "orchestrator"
-SCOPE_CLASSIFIER = "classifier"
 
 
-def _skill_search_dirs(project_path: str = "") -> list[str]:
-    """Return skill directories in priority order."""
-    dirs = []
-    # 1. Project's own skills dir
+# ===========================================================================
+# Skills-oriented architecture (target design) — see docs/specs/06
+# ---------------------------------------------------------------------------
+# A skill is a DIRECTORY containing a SKILL.md (Anthropic format). Frontmatter
+# carries only `name`, `description`, and an optional `model`. Discovery loads
+# Level-1 metadata (name + description) into the MemGPT system prompt; the body
+# and bundled resources/scripts (Level 2/3) are read on demand by the sub-agent.
+# ===========================================================================
+
+# The chat-orchestrator skill is always loaded regardless of skills.yaml.
+MANDATORY_SKILLS = ("chat-orchestrator",)
+
+# Directory name of the skill manifest file inside each skill directory.
+SKILL_MANIFEST = "SKILL.md"
+
+
+def skill_search_dirs(project_path: str = "") -> list[str]:
+    """Return directories that may contain skill subdirectories, in priority order.
+
+    Target design (docs/specs/06 §5):
+      1. <project>/skills/
+      2. <project>/.opalacoder/skills/
+      3. ~/.opalacoder/skills/
+      4. <package>/skills/  and  <repo-root>/skills/  (bundled / mandatory)
+    """
+    dirs: list[str] = []
     if project_path:
         dirs.append(os.path.join(project_path, "skills"))
-    # 2. Package skills dir (when installed via wheel)
+        dirs.append(os.path.join(project_path, ".opalacoder", "skills"))
+    dirs.append(os.path.expanduser("~/.opalacoder/skills"))
     package_dir = os.path.dirname(os.path.abspath(__file__))
     dirs.append(os.path.join(package_dir, "skills"))
-    # 3. Repo root skills dir (when running from source)
     repo_root = os.path.dirname(package_dir)
     dirs.append(os.path.join(repo_root, "skills"))
-    # 4. User global skills
-    dirs.append(os.path.expanduser("~/.opalacoder/skills"))
-    return dirs
+    # De-duplicate while preserving order
+    seen: set[str] = set()
+    out: list[str] = []
+    for d in dirs:
+        ad = os.path.abspath(d)
+        if ad not in seen:
+            seen.add(ad)
+            out.append(d)
+    return out
 
 
-def _parse_skill_file(filepath: str) -> dict | None:
+def _parse_frontmatter(text: str) -> tuple[dict, str]:
+    """Split a SKILL.md into (frontmatter dict, body).
+
+    Accepts standard YAML frontmatter delimited by leading/trailing `---`.
+    Only flat `key: value` pairs are read (name, description, model); this avoids
+    a hard YAML dependency for the common case. Returns ({}, text) when absent.
+    """
+    fm: dict[str, str] = {}
+    stripped = text.lstrip("﻿")  # tolerate BOM
+    if not stripped.startswith("---"):
+        return fm, text
+    # Find the closing delimiter line
+    lines = stripped.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return fm, text
+    end = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end = i
+            break
+    if end is None:
+        return fm, text
+    for line in lines[1:end]:
+        if not line.strip() or ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        fm[key.strip().lower()] = val.strip()
+    body = "\n".join(lines[end + 1:]).strip()
+    return fm, body
+
+
+def parse_skill_md(skill_dir: str) -> dict | None:
+    """Parse a skill directory's SKILL.md into a metadata dict, or None.
+
+    Returned dict:
+      name, description, model (optional, "" if absent),
+      dir (absolute path to the skill directory),
+      manifest (absolute path to SKILL.md),
+      body (Level-2 instructions text).
+    The directory name is the canonical fallback for `name`.
+    """
+    manifest = os.path.join(skill_dir, SKILL_MANIFEST)
+    if not os.path.isfile(manifest):
+        return None
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            content = f.read()
+        with open(manifest, "r", encoding="utf-8") as f:
+            text = f.read()
     except Exception:
         return None
-
-    tags_match = re.search(r"^tags:\s*(.+)$", content, re.IGNORECASE | re.MULTILINE)
-    desc_match = re.search(r"^description:\s*(.+)$", content, re.IGNORECASE | re.MULTILINE)
-    scope_match = re.search(r"^scope:\s*(.+)$", content, re.IGNORECASE | re.MULTILINE)
-    reviewer_match = re.search(r"^reviewer:\s*(\S+)", content, re.IGNORECASE | re.MULTILINE)
-
-    # Parse multi-line YAML list under "tools:" until next non-indented key or end
-    tools: list[str] = []
-    tools_block = re.search(r"^tools:\s*\n((?:[ \t]+-[ \t]+\S+\n?)+)", content, re.IGNORECASE | re.MULTILINE)
-    if tools_block:
-        for line in tools_block.group(1).splitlines():
-            entry = re.sub(r"^[ \t]+-[ \t]+", "", line).strip()
-            if entry:
-                tools.append(entry)
-
-    tags = [t.strip().lower() for t in tags_match.group(1).split(",") if t.strip()] if tags_match else []
-    description = desc_match.group(1).strip() if desc_match else "No description"
-    scope = scope_match.group(1).strip().lower() if scope_match else SCOPE_ALL
-    reviewer = reviewer_match.group(1).strip() if reviewer_match else None
-
-    clean_content = re.sub(r"^(tags|description|scope|reviewer):\s*.+\n?", "", content, flags=re.IGNORECASE | re.MULTILINE).strip()
-    clean_content = re.sub(r"^tools:\s*\n((?:[ \t]+-[ \t]+\S+\n?)+)", "", clean_content, flags=re.IGNORECASE | re.MULTILINE).strip()
-    clean_content = re.sub(r"^---\n?", "", clean_content, flags=re.MULTILINE).strip()
-
-    name = os.path.basename(filepath).replace(".md", "")
-    return {"name": name, "description": description, "tags": tags, "scope": scope, "tools": tools, "reviewer": reviewer, "content": clean_content}
+    fm, body = _parse_frontmatter(text)
+    name = fm.get("name") or os.path.basename(os.path.normpath(skill_dir))
+    description = fm.get("description", "")
+    model = fm.get("model", "")
+    return {
+        "name": name,
+        "description": description,
+        "model": model,
+        "dir": os.path.abspath(skill_dir),
+        "manifest": os.path.abspath(manifest),
+        "body": body,
+    }
 
 
-def _plugin_search_dirs(project_path: str = "") -> list[str]:
-    """Return plugin search directories in priority order."""
-    dirs = []
-    if project_path:
-        dirs.append(os.path.join(project_path, "plugins"))
-    cwd = os.getcwd()
-    if cwd != project_path:
-        dirs.append(os.path.join(cwd, ".opalacoder", "plugins"))
-    dirs.append(os.path.expanduser("~/.opalacoder/plugins"))
-    package_dir = os.path.dirname(os.path.abspath(__file__))
-    dirs.append(os.path.join(package_dir, "plugins"))
-    return dirs
+def discover_skills(project_path: str = "") -> list[dict]:
+    """Discover all skill directories (containing SKILL.md) across search dirs.
 
-
-def find_plugin_module(module_name: str, project_path: str = "") -> str | None:
-    """Return the path to <module_name>.py in plugin search dirs, or None."""
-    filename = module_name if module_name.endswith(".py") else f"{module_name}.py"
-    for d in _plugin_search_dirs(project_path):
-        candidate = os.path.join(d, filename)
-        if os.path.isfile(candidate):
-            return candidate
-    return None
-
-
-def load_skill_tools(project_skills: list[dict], project_path: str = "") -> list[Callable]:
-    """Load all tool functions declared in skill frontmatter.
-
-    Each tool entry is "module_name.function_name". The module is located via
-    find_plugin_module() and loaded dynamically. Returns a flat list of callables.
+    First occurrence of a skill name wins (project skills shadow bundled ones).
+    Returns a list of metadata dicts (see parse_skill_md).
     """
-    loaded: list[Callable] = []
-    seen_modules: dict[str, object] = {}
-
-    for skill in project_skills:
-        for tool_ref in skill.get("tools", []):
-            parts = tool_ref.rsplit(".", 1)
-            if len(parts) != 2:
+    found: list[dict] = []
+    seen_names: set[str] = set()
+    for base in skill_search_dirs(project_path):
+        if not os.path.isdir(base):
+            continue
+        for entry in sorted(os.listdir(base)):
+            skill_dir = os.path.join(base, entry)
+            if not os.path.isdir(skill_dir):
                 continue
-            module_name, func_name = parts
-
-            if module_name not in seen_modules:
-                mod_path = find_plugin_module(module_name, project_path)
-                if mod_path is None:
-                    continue
-                try:
-                    spec = importlib.util.spec_from_file_location(module_name, mod_path)
-                    mod = importlib.util.module_from_spec(spec)
-                    # Make the module available under its name so relative imports work
-                    sys.modules.setdefault(module_name, mod)
-                    spec.loader.exec_module(mod)
-                    seen_modules[module_name] = mod
-                except Exception:
-                    continue
-            else:
-                mod = seen_modules[module_name]
-
-            fn = getattr(mod, func_name, None)
-            # Accept both plain callables and FunctionBlock objects (returned by @as_tool)
-            if fn is not None and (callable(fn) or hasattr(fn, "run")):
-                loaded.append(fn)
-
-    return loaded
+            meta = parse_skill_md(skill_dir)
+            if meta is None or meta["name"] in seen_names:
+                continue
+            seen_names.add(meta["name"])
+            found.append(meta)
+    return found
 
 
-def load_skill_reviewers(project_skills: list[dict], project_path: str = "") -> list[Callable]:
-    """Load reviewer functions declared in skill frontmatter under `reviewer:`.
+def read_skills_yaml(project_path: str) -> list[str] | None:
+    """Return the list of skill names declared in <project>/skills.yaml, or None.
 
-    Each reviewer entry is "module_name.function_name". The function must have
-    the signature:
-
-        def my_reviewer(project_path: str, task_goal: str,
-                        related_files: list[str]) -> dict:
-            ...
-            return {"done": bool, "summary": str, "corrections": list[str]}
-
-    Returns a flat list of reviewer callables (one per skill that declares one).
+    None means the file is absent → caller loads all discovered skills.
+    An empty/!malformed file yields an empty list → only mandatory skills load.
     """
-    loaded: list[Callable] = []
-    seen_modules: dict[str, object] = {}
-
-    for skill in project_skills:
-        reviewer_ref = skill.get("reviewer")
-        if not reviewer_ref:
-            continue
-        parts = reviewer_ref.rsplit(".", 1)
-        if len(parts) != 2:
-            continue
-        module_name, func_name = parts
-
-        if module_name not in seen_modules:
-            mod_path = find_plugin_module(module_name, project_path)
-            if mod_path is None:
-                continue
-            try:
-                spec = importlib.util.spec_from_file_location(module_name, mod_path)
-                mod = importlib.util.module_from_spec(spec)
-                sys.modules.setdefault(module_name, mod)
-                spec.loader.exec_module(mod)
-                seen_modules[module_name] = mod
-            except Exception:
-                continue
-        else:
-            mod = seen_modules[module_name]
-
-        fn = getattr(mod, func_name, None)
-        if fn is not None and callable(fn):
-            loaded.append(fn)
-
-    return loaded
-
-
-def load_skills(project_path: str = "") -> list[dict]:
-    """Load all available skill files from the search dirs."""
-    skills = []
-    loaded_files: set[str] = set()
-
-    for s_dir in _skill_search_dirs(project_path):
-        if not os.path.isdir(s_dir):
-            continue
-        for filename in sorted(os.listdir(s_dir)):
-            if not filename.endswith(".md") or filename in loaded_files:
-                continue
-            skill = _parse_skill_file(os.path.join(s_dir, filename))
-            if skill:
-                skills.append(skill)
-                loaded_files.add(filename)
-
-    return skills
-
-
-def load_project_skills(project_path: str, skill_names: list[str]) -> list[dict]:
-    """Load only the skills listed in the project's skill_names, always including opalacoder."""
-    names = set(skill_names)
-    names.add("opalacoder")
-    all_skills = load_skills(project_path)
-    return [s for s in all_skills if s["name"] in names]
-
-
-def find_skill_file(skill_name: str, project_path: str = "") -> str | None:
-    """Return the path to <skill_name>.md if found in any search dir, else None."""
-    filename = skill_name if skill_name.endswith(".md") else f"{skill_name}.md"
-    for s_dir in _skill_search_dirs(project_path):
-        candidate = os.path.join(s_dir, filename)
-        if os.path.isfile(candidate):
-            return candidate
-    return None
-
-
-async def select_skills_for_project(model: str, description: str, project_path: str = "") -> list[str]:
-    """Use an LLM to pick skills relevant to a new project description. Always includes opalacoder."""
-    all_skills = load_skills(project_path)
-    catalog = "\n".join(f"- {s['name']}: {s['description']}" for s in all_skills if s['name'] != "opalacoder")
-    if not catalog:
-        return ["opalacoder"]
-
-    prompt = (
-        f"PROJECT DESCRIPTION: {description}\n\n"
-        f"AVAILABLE SKILLS:\n{catalog}\n\n"
-        "List the skill names (comma-separated) that are relevant to this project. "
-        "Reply with skill names only, nothing else."
-    )
-
-    from .agents import make_skill_selector
-    from agenticblocks.blocks.llm.agent import AgentInput
-
-    selector = make_skill_selector(model)
+    path = os.path.join(project_path, "skills.yaml")
+    if not os.path.isfile(path):
+        return None
     try:
-        result = await selector.run(AgentInput(prompt=prompt))
-        selected = [w.strip().lower() for w in result.response.replace("\n", ",").split(",") if w.strip()]
-        valid_names = {s["name"].lower(): s["name"] for s in all_skills}
-        chosen = ["opalacoder"] + [valid_names[n] for n in selected if n in valid_names and valid_names[n] != "opalacoder"]
-        return chosen if chosen else ["opalacoder"]
+        import yaml
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        declared = data.get("skills", []) if isinstance(data, dict) else []
+        return [str(s).strip() for s in declared if str(s).strip()]
     except Exception:
-        return ["opalacoder"]
+        return []
 
 
-def _filter_by_scope(skills: list, target_scope: str) -> list:
-    """Return only skills that are allowed in the given target context."""
-    if target_scope == SCOPE_CLASSIFIER:
-        # Classifier gets: scope=all and scope=classifier
-        return [s for s in skills if s["scope"] in (SCOPE_ALL, SCOPE_CLASSIFIER)]
-    elif target_scope == SCOPE_ORCHESTRATOR:
-        # Orchestrator gets: scope=all and scope=orchestrator
-        return [s for s in skills if s["scope"] in (SCOPE_ALL, SCOPE_ORCHESTRATOR)]
-    # Fallback: return all
-    return skills
+def write_skills_yaml(project_path: str, skill_names: list[str]) -> None:
+    """Write the active skill set to <project>/skills.yaml.
+
+    skills.yaml is the single source of truth for which skills' Level-1 metadata
+    the MemGPT loads (docs/specs/06 §5). Mandatory skills are always implied; we
+    do not persist them here.
+    """
+    import yaml
+    declared = [s for s in dict.fromkeys(skill_names) if s not in MANDATORY_SKILLS]
+    os.makedirs(project_path, exist_ok=True)
+    path = os.path.join(project_path, "skills.yaml")
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump({"skills": declared}, f, allow_unicode=True, sort_keys=False)
 
 
-def get_relevant_skills(text: str, scope: str = SCOPE_ALL, project_skills: list[dict] = None) -> str:
-    """Keyword-matching skill selector. Uses project_skills if provided."""
-    skills = _filter_by_scope(project_skills if project_skills is not None else load_skills(), scope)
-    if not skills:
-        return ""
-
-    text_lower = text.lower()
-    words = set(re.findall(r'\b\w+\b', text_lower))
-    injected_contents = []
-
-    for skill in skills:
-        for tag in skill["tags"]:
-            if (tag in words) or (" " in tag and tag in text_lower):
-                injected_contents.append(f"--- REFERENCE MATERIAL: {skill['name']} (Use ONLY if applicable to the task) ---\n{skill['content']}")
-                break
-
-    if not injected_contents:
-        return ""
-
-    return "\nOPTIONAL BEST PRACTICES / REFERENCE:\n" + "\n\n".join(injected_contents)
+def add_skill_to_project(project_path: str, skill_name: str) -> tuple[bool, str]:
+    """Add a skill to the project's skills.yaml. Returns (changed, message)."""
+    if find_skill_dir(skill_name, project_path) is None:
+        return False, f"skill '{skill_name}' not found in any search dir."
+    if skill_name in MANDATORY_SKILLS:
+        return False, f"skill '{skill_name}' is always active (mandatory)."
+    # Absent skills.yaml means "only mandatory active" → start from an empty set.
+    declared = read_skills_yaml(project_path) or []
+    if skill_name in declared:
+        return False, f"skill '{skill_name}' is already active."
+    declared.append(skill_name)
+    write_skills_yaml(project_path, declared)
+    return True, f"skill '{skill_name}' added."
 
 
-async def get_relevant_skills_llm(model: str, request: str, scope: str = SCOPE_ALL, project_skills: list[dict] = None) -> str:
-    """LLM-based semantic skill selector. Uses project_skills if provided."""
-    skills = _filter_by_scope(project_skills if project_skills is not None else load_skills(), scope)
-    if not skills:
-        return ""
+def remove_skill_from_project(project_path: str, skill_name: str) -> tuple[bool, str]:
+    """Remove a skill from the project's skills.yaml. Returns (changed, message)."""
+    if skill_name in MANDATORY_SKILLS:
+        return False, f"skill '{skill_name}' is mandatory and cannot be removed."
+    declared = read_skills_yaml(project_path) or []
+    if skill_name not in declared:
+        return False, f"skill '{skill_name}' is not active."
+    declared = [s for s in declared if s != skill_name]
+    write_skills_yaml(project_path, declared)
+    return True, f"skill '{skill_name}' removed."
 
-    skills_catalog = "\n".join([f"- {s['name']}: {s['description']}" for s in skills])
-    prompt = f"USER REQUEST: {request}\n\nAVAILABLE SKILLS:\n{skills_catalog}"
 
-    from .agents import make_skill_selector
-    from agenticblocks.blocks.llm.agent import AgentInput
-    from . import terminal as T
+def active_skills(project_path: str = "") -> list[dict]:
+    """Return the skills active for a project.
 
-    T.thinking("Selecting skill context (Semantic Router)...")
-    selector = make_skill_selector(model)
-    try:
-        result = await selector.run(AgentInput(prompt=prompt))
-        selected_text = result.response.lower()
-    except Exception as e:
-        T.error(f"Skill router error: {e}")
-        return ""
+    A project only loads the mandatory skills plus the ones it explicitly opts into
+    via <project>/skills.yaml. This keeps new projects minimal — no development skill
+    is loaded unless the user adds it (with /addskill or by listing it in skills.yaml).
 
-    injected_contents = []
-    selected_skill_names = []
-    for skill in skills:
-        if skill["name"].lower() in selected_text:
-            injected_contents.append(f"--- REFERENCE MATERIAL: {skill['name']} (Use ONLY if applicable to the task) ---\n{skill['content']}")
-            selected_skill_names.append(skill["name"])
+    Rules:
+      - Mandatory skills (chat-orchestrator) are always active.
+      - No skills.yaml (or empty) → only the mandatory skills.
+      - With skills.yaml → mandatory + the declared skills.
+    """
+    discovered = discover_skills(project_path)
+    declared = read_skills_yaml(project_path) if project_path else None
+    allowed = set(MANDATORY_SKILLS) | set(declared or [])
+    return [s for s in discovered if s["name"] in allowed]
 
-    if not injected_contents:
-        return ""
 
-    T.info(f"Active skills: {', '.join(selected_skill_names)}")
-    return "\nOPTIONAL BEST PRACTICES / REFERENCE:\n" + "\n\n".join(injected_contents)
+def level1_metadata(skills: list[dict]) -> str:
+    """Render Level-1 metadata (name + description) for the MemGPT system prompt."""
+    return "\n".join(f"- {s['name']}: {s['description']}".rstrip() for s in skills)
+
+
+def find_skill_dir(skill_name: str, project_path: str = "") -> str | None:
+    """Return the absolute path of a skill directory by name, or None."""
+    for s in discover_skills(project_path):
+        if s["name"] == skill_name:
+            return s["dir"]
+    return None

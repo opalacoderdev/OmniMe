@@ -56,12 +56,19 @@ def _init_schema(db_path: str) -> None:
         except sqlite3.OperationalError:
             pass
 
+        # Migração: modelo alternativo por projeto ("" → usa o ALTERNATIVE_MODEL global)
+        try:
+            conn.execute("ALTER TABLE projects ADD COLUMN alternative_model TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+
 
 @dataclass
 class ProjectData:
     name: str
     mode: str = "plan"
     model: str = ""
+    alternative_model: str = ""   # "" → falls back to the global ALTERNATIVE_MODEL
     project_name: str = ""
     project_path: str = ""
     skills: list = field(default_factory=lambda: ["opalacoder"])
@@ -109,21 +116,21 @@ class ProjectStore:
             ).fetchall()
             return [dict(r) for r in rows]
 
-    def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "") -> ProjectData:
+    def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "") -> ProjectData:
         now = datetime.now(timezone.utc).isoformat()
         _skills = skills if skills is not None else ["opalacoder"]
         if "opalacoder" not in _skills:
             _skills = ["opalacoder"] + _skills
         with _conn(self.db_path) as conn:
             conn.execute(
-                "INSERT INTO projects (name, created_at, updated_at, mode, model, project_name, project_path, skills, description, core_memory) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (name, now, now, mode, model, project_name, project_path, json.dumps(_skills), description, ""),
+                "INSERT INTO projects (name, created_at, updated_at, mode, model, alternative_model, project_name, project_path, skills, description, core_memory) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (name, now, now, mode, model, alternative_model, project_name, project_path, json.dumps(_skills), description, ""),
             )
-        return ProjectData(name=name, mode=mode, model=model, project_name=project_name, project_path=project_path, skills=_skills, description=description, core_memory="")
+        return ProjectData(name=name, mode=mode, model=model, alternative_model=alternative_model, project_name=project_name, project_path=project_path, skills=_skills, description=description, core_memory="")
 
-    def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "") -> ProjectData:
+    def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "") -> ProjectData:
         self.delete(name)
-        return self.create(name, mode, model, project_name, project_path, skills, description)
+        return self.create(name, mode, model, project_name, project_path, skills, description, alternative_model)
 
     def delete(self, name: str) -> None:
         with _conn(self.db_path) as conn:
@@ -158,6 +165,7 @@ class ProjectStore:
                 name=name,
                 mode=row["mode"],
                 model=row["model"],
+                alternative_model=row["alternative_model"] if "alternative_model" in row.keys() else "",
                 project_name=row["project_name"],
                 project_path=row["project_path"],
                 skills=json.loads(row["skills"]),
@@ -177,12 +185,13 @@ class ProjectStore:
             _skills = ["opalacoder"] + _skills
         with _conn(self.db_path) as conn:
             conn.execute(
-                """UPDATE projects SET updated_at=?, mode=?, model=?, project_name=?, project_path=?,
+                """UPDATE projects SET updated_at=?, mode=?, model=?, alternative_model=?, project_name=?, project_path=?,
                    skills=?, description=?, request=?, plan_text=?, subplans=?, results=?, core_memory=? WHERE name=?""",
                 (
                     now,
                     project.mode,
                     project.model,
+                    project.alternative_model,
                     project.project_name,
                     project.project_path,
                     json.dumps(_skills, ensure_ascii=False),

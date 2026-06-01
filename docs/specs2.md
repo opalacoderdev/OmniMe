@@ -1,1 +1,0 @@
-No roteamento baseado em profile, mostrar o profile como um plano para o usuário e pedi que ele altere para o agente poder continuar.

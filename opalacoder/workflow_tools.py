@@ -105,6 +105,65 @@ def edit_file(path: str, old_str: str, new_str: str, line: int = 0) -> str:
 
 
 @as_tool(
+    name="replace_lines",
+    description=(
+        "Replace a specific range of lines in a file with new content, followed by an automatic syntax/lint check. "
+        "Provide the 1-based start_line and end_line, and the new_str to replace them with. "
+        "Use this instead of edit_file when you want to be precise or if edit_file fails with old_str not found."
+    ),
+)
+def replace_lines(path: str, start_line: int, end_line: int, new_str: str) -> str:
+    resolved = _resolve_path(path)
+    AGENT_PROGRESS.update("replace_lines", f"path={_preview(resolved)} lines={start_line}-{end_line}")
+
+    if start_line <= 0 or end_line < start_line:
+        return "Error: Invalid line range. start_line must be > 0 and end_line >= start_line."
+
+    try:
+        with open(resolved, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines(keepends=True)
+    except FileNotFoundError:
+        return f"Error: file not found: {resolved}"
+    except Exception as e:
+        return f"Error reading {resolved}: {e}"
+
+    if start_line > len(lines):
+        return f"Error: start_line ({start_line}) is beyond the end of the file ({len(lines)} lines)."
+
+    # Replace lines [start_line-1 : end_line]
+    # new_str might not have a trailing newline, so we add one if the original block had it.
+    prefix = lines[:start_line - 1]
+    suffix = lines[end_line:]
+    
+    new_content = "".join(prefix) + new_str
+    if new_str and not new_str.endswith("\n"):
+        new_content += "\n"
+    new_content += "".join(suffix)
+
+    try:
+        with open(resolved, "w", encoding="utf-8") as f:
+            f.write(new_content)
+    except Exception as e:
+        return f"Error writing {resolved}: {e}"
+
+    lint_output = _auto_lint(resolved)
+    if lint_output:
+        _fail_counts[resolved] = _fail_counts.get(resolved, 0) + 1
+        AGENT_PROGRESS.record_lint_error(resolved)
+        msg = f"Edit applied but lint check failed:\n{lint_output}"
+        if _fail_counts[resolved] >= 2:
+            msg += _DECOMPOSE_HINT
+        return msg
+
+    _fail_counts[resolved] = 0
+    try:
+        CODE_INDEX.rebuild_file(resolved)
+    except Exception:
+        pass
+    return f"Lines {start_line}-{end_line} replaced successfully in {path}. Lint check passed."
+
+
+@as_tool(
     name="find_symbol",
     description=(
         "Find a function, class, or method by name across the entire project (all languages) "
@@ -251,14 +310,23 @@ def send_message(message: str) -> str:
 
 
 def get_workflow_tools(skill_tools: list = None) -> list:
-    """Return all base tools plus workflow-specific composite/smart tools.
+    """Return the minimal tool set for workers plus skill tools when active.
 
-    skill_tools: additional callables loaded from skill plugin declarations.
+    Intentionally small — large tool lists confuse small models.
+    Workers execute atomic commands; they read, edit, write, run, and signal done.
     """
-    from .tools import get_available_tools
-    base = get_available_tools() + [edit_file, find_symbol, find_callers, read_file, send_message]
+    from .tools import write_file, run_command, search_code, read_content_pos
+    base = [
+        read_file,        # token-aware read (workflow_tools version)
+        read_content_pos, # read specific line range of large files
+        write_file,       # create new files or full rewrites
+        edit_file,        # find-replace + auto-lint (primary edit tool)
+        replace_lines,    # line-range replace when edit_file old_str fails
+        run_command,      # lint, compile, node --check
+        search_code,      # grep across project when worker needs to locate something
+        send_message,     # signals task completion (termination tool)
+    ]
     if skill_tools:
-        # Deduplicate by tool name (FunctionBlock.name) or __name__ for plain callables
         base_names = {getattr(t, "name", None) or getattr(t, "__name__", None) for t in base}
         for st in skill_tools:
             st_name = getattr(st, "name", None) or getattr(st, "__name__", None)
