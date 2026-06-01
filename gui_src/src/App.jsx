@@ -71,12 +71,6 @@ export default function App() {
   const [thinkingLogs, setThinkingLogs] = useState([]);
   const [showAdvancedParams, setShowAdvancedParams] = useState(false);
   const [newProjError, setNewProjError] = useState('');
-
-  useEffect(() => {
-    if (!showNewProjectModal) {
-      setNewProjError('');
-    }
-  }, [showNewProjectModal]);
   
   // IDE Settings States
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -189,6 +183,12 @@ export default function App() {
   const handleEditorDidMount = (editor, monaco) => {
     editorRef.current = editor;
   };
+
+  useEffect(() => {
+    if (!showNewProjectModal) {
+      setNewProjError('');
+    }
+  }, [showNewProjectModal]);
 
   // Initial load
   useEffect(() => {
