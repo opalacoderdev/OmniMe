@@ -119,14 +119,23 @@ def get_agent_llm_kwargs(agent_name: str) -> dict:
     """Return merged litellm kwargs for *agent_name*.
 
     Priority (highest first):
-      1. Per-agent override in agents.yaml ``agents.<name>``
-      2. Global ``llm_defaults`` in agents.yaml
-      3. Hard-coded defaults above
+      1. Project-specific model_params (dynamically merged if session exists)
+      2. Per-agent override in agents.yaml ``agents.<name>``
+      3. Global ``llm_defaults`` in agents.yaml
+      4. Hard-coded defaults above
 
     Non-litellm fields (model, max_heartbeats) are excluded.
     """
     merged = dict(_LLM_DEFAULTS)
     merged.update(_AGENT_OVERRIDES.get(agent_name, {}))
+
+    try:
+        from .tools import _PROJECT_SESSION
+        if _PROJECT_SESSION and hasattr(_PROJECT_SESSION, "model_params") and _PROJECT_SESSION.model_params:
+            merged.update(_PROJECT_SESSION.model_params)
+    except Exception:
+        pass
+
     for field in _NON_LITELLM_FIELDS:
         merged.pop(field, None)
     return merged

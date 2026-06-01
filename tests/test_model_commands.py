@@ -93,3 +93,28 @@ def test_old_db_migrates_without_alternative_model_column(tmp_path):
     p.alternative_model = "gemini/x"
     store.save(p)
     assert store.load("old").alternative_model == "gemini/x"
+
+
+def test_set_model_param_valid(tmp_path):
+    state, store = _state(tmp_path)
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["temperature", "0.8"]))
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["num_ctx", "4096"]))
+    assert state.project.model_params["temperature"] == 0.8
+    assert state.project.model_params["num_ctx"] == 4096
+    assert store.load("t").model_params["temperature"] == 0.8
+    assert store.load("t").model_params["num_ctx"] == 4096
+
+
+def test_set_model_param_invalid(tmp_path):
+    state, store = _state(tmp_path)
+    # Invalid bounds temperature
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["temperature", "2.5"]))
+    assert "temperature" not in state.project.model_params
+
+    # Invalid non-numeric
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["max_tokens", "abc"]))
+    assert "max_tokens" not in state.project.model_params
+
+    # Unknown parameter name
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["invalid_param", "1.0"]))
+    assert "invalid_param" not in state.project.model_params

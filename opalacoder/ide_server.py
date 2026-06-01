@@ -48,6 +48,7 @@ class AsyncHTTPServer:
         self.static_dir = static_dir
         self.active_queues = []
         self.active_terminal = None
+        self.active_agent_task = None
 
     async def start(self):
         self.server = await asyncio.start_server(self.handle_request, self.host, self.port)
@@ -304,9 +305,23 @@ class AsyncHTTPServer:
                 self.send_response(writer, 400, b'{"error":"project_name is required"}', "application/json")
                 return
                 
-            if not os.path.exists(project_path) or not os.path.isdir(project_path):
-                self.send_response(writer, 400, b'{"error":"Project path does not exist or is not a directory"}', "application/json")
-                return
+            abs_path = os.path.abspath(project_path) if project_path else os.getcwd()
+            if os.path.exists(abs_path):
+                if not os.path.isdir(abs_path):
+                    self.send_response(writer, 400, json.dumps({"error": f"The path '{project_path}' exists but is not a directory."}).encode('utf-8'), "application/json")
+                    return
+                if not os.access(abs_path, os.W_OK):
+                    self.send_response(writer, 400, json.dumps({"error": f"Permission denied: No write access to directory '{project_path}'."}).encode('utf-8'), "application/json")
+                    return
+            else:
+                try:
+                    os.makedirs(abs_path, exist_ok=True)
+                except PermissionError:
+                    self.send_response(writer, 400, json.dumps({"error": f"Permission denied: Cannot create directory '{project_path}'."}).encode('utf-8'), "application/json")
+                    return
+                except Exception as e:
+                    self.send_response(writer, 400, json.dumps({"error": f"Failed to create directory: {str(e)}"}).encode('utf-8'), "application/json")
+                    return
                 
             db_key = project_name.replace(" ", "_").lower()
             if store.exists(db_key):
@@ -378,6 +393,56 @@ class AsyncHTTPServer:
                     self.send_response(writer, 400, b'{"error":"Project path does not exist or is not a directory"}', "application/json")
                     return
                 project.project_path = os.path.abspath(new_path)
+
+            if "model_params" in data:
+                params = data["model_params"]
+                if not isinstance(params, dict):
+                    self.send_response(writer, 400, b'{"error":"model_params must be a JSON object"}', "application/json")
+                    return
+                validated = {}
+                for k, v in params.items():
+                    if k in {"max_tokens", "num_ctx"}:
+                        try:
+                            val = int(v) if v is not None and v != "" else None
+                            if val is not None:
+                                if val <= 0:
+                                    raise ValueError()
+                                validated[k] = val
+                        except (ValueError, TypeError):
+                            self.send_response(writer, 400, f'{{"error":"{k} must be a positive integer"}}'.encode('utf-8'), "application/json")
+                            return
+                    elif k == "temperature":
+                        try:
+                            val = float(v) if v is not None and v != "" else None
+                            if val is not None:
+                                if not (0.0 <= val <= 2.0):
+                                    raise ValueError()
+                                validated[k] = val
+                        except (ValueError, TypeError):
+                            self.send_response(writer, 400, b'{"error":"temperature must be a float between 0.0 and 2.0"}', "application/json")
+                            return
+                    elif k == "top_p":
+                        try:
+                            val = float(v) if v is not None and v != "" else None
+                            if val is not None:
+                                if not (0.0 <= val <= 1.0):
+                                    raise ValueError()
+                                validated[k] = val
+                        except (ValueError, TypeError):
+                            self.send_response(writer, 400, b'{"error":"top_p must be a float between 0.0 and 1.0"}', "application/json")
+                            return
+                    elif k in {"frequency_penalty", "presence_penalty"}:
+                        try:
+                            val = float(v) if v is not None and v != "" else None
+                            if val is not None:
+                                if not (-2.0 <= val <= 2.0):
+                                    raise ValueError()
+                                validated[k] = val
+                        except (ValueError, TypeError):
+                            self.send_response(writer, 400, f'{{"error":"{k} must be a float between -2.0 and 2.0"}}'.encode('utf-8'), "application/json")
+                            return
+                project.model_params = validated
+
             store.save(project)
             res_data = {
                 "name": project.name,
@@ -387,6 +452,7 @@ class AsyncHTTPServer:
                 "alternative_model": project.alternative_model,
                 "mode": project.mode,
                 "description": project.description,
+                "model_params": project.model_params,
             }
             self.send_response(writer, 200, json.dumps(res_data).encode(), "application/json")
 
@@ -434,6 +500,8 @@ class AsyncHTTPServer:
             async def run_agent():
                 try:
                     await handle_run(data)
+                except asyncio.CancelledError:
+                    event_queue.put_nowait({"event": "cancelled", "message": "Agent execution was interrupted."})
                 except Exception as e:
                     import traceback
                     err_msg = traceback.format_exc()
@@ -442,6 +510,7 @@ class AsyncHTTPServer:
                     event_queue.put_nowait(None)
 
             agent_task = asyncio.create_task(run_agent())
+            self.active_agent_task = agent_task
 
             try:
                 while True:
@@ -450,15 +519,37 @@ class AsyncHTTPServer:
                         break
                     send_chunk(json.dumps(event) + "\n")
                     await writer.drain()
+            except asyncio.CancelledError:
+                if not agent_task.done():
+                    agent_task.cancel()
+                try:
+                    await agent_task
+                except Exception:
+                    pass
+                event_queue.put_nowait({"event": "cancelled", "message": "Agent execution was interrupted."})
             except Exception as e:
                 print(f"Streaming error: {e}")
             finally:
+                if self.active_agent_task == agent_task:
+                    self.active_agent_task = None
                 if event_queue in self.active_queues:
                     self.active_queues.remove(event_queue)
                 writer.write(b"0\r\n\r\n")
                 await writer.drain()
                 writer.close()
-                await agent_task
+                try:
+                    await agent_task
+                except Exception:
+                    pass
+
+        # 7b2. Interrupt Agent
+        elif path == '/api/opalacoder/interrupt' and method == 'POST':
+            if self.active_agent_task and not self.active_agent_task.done():
+                self.active_agent_task.cancel()
+                self.send_response(writer, 200, b'{"success":true,"message":"Agent execution interrupted"}', "application/json")
+            else:
+                self.send_response(writer, 200, b'{"success":false,"message":"No active agent running"}', "application/json")
+            return
 
         # 7c. Terminal stream
         elif path == '/api/terminal/stream':

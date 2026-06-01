@@ -244,7 +244,12 @@ async def cmd_models(state: REPLState, _args: list[str]) -> None:
     T.console.print(f"\n[dim]Models for project '{state.display_name}':[/dim]")
     T.console.print(f"  [cyan]main[/cyan]        {main_model}")
     T.console.print(f"  [cyan]alternative[/cyan] {alt_model}  [dim]({alt_origin})[/dim]")
-    T.console.print(f"\n[dim]Change with /set-main-model <id> or /set-alternative-model <id>.[/dim]\n")
+    params = getattr(state.project, "model_params", {})
+    if params:
+        T.console.print(f"  [cyan]parameters[/cyan]")
+        for k, v in params.items():
+            T.console.print(f"    {k}: {v}")
+    T.console.print(f"\n[dim]Change with /set-main-model <id>, /set-alternative-model <id>, or /set-model-param <name> <value>.[/dim]\n")
 
 
 @_registry.register("/set-main-model", usage="<model_id>",
@@ -271,6 +276,52 @@ async def cmd_set_alternative_model(state: REPLState, args: list[str]) -> str | 
     state.store.save(state.project)
     _rebuild_memgpt(state)
     T.success(f"Alternative model set to '{model_id}' for this project.")
+
+
+@_registry.register("/set-model-param", usage="<param_name> <value>",
+                    description="Set advanced model parameter (temperature, max_tokens, num_ctx, top_p, frequency_penalty, presence_penalty)")
+async def cmd_set_model_param(state: REPLState, args: list[str]) -> str | None:
+    if len(args) < 2:
+        T.error("Usage: /set-model-param <param_name> <value>\n"
+                "Allowed params: temperature, max_tokens, num_ctx, top_p, frequency_penalty, presence_penalty")
+        return "continue"
+    
+    param = args[0].strip().lower()
+    val_str = args[1].strip()
+    
+    allowed_params = {"temperature", "max_tokens", "num_ctx", "top_p", "frequency_penalty", "presence_penalty"}
+    if param not in allowed_params:
+        T.error(f"Unknown parameter '{param}'. Allowed parameters: {', '.join(allowed_params)}")
+        return "continue"
+        
+    try:
+        if param in {"max_tokens", "num_ctx"}:
+            val = int(val_str)
+            if val <= 0:
+                raise ValueError("Must be a positive integer")
+        elif param == "temperature":
+            val = float(val_str)
+            if not (0.0 <= val <= 2.0):
+                raise ValueError("Must be between 0.0 and 2.0")
+        elif param == "top_p":
+            val = float(val_str)
+            if not (0.0 <= val <= 1.0):
+                raise ValueError("Must be between 0.0 and 1.0")
+        elif param in {"frequency_penalty", "presence_penalty"}:
+            val = float(val_str)
+            if not (-2.0 <= val <= 2.0):
+                raise ValueError("Must be between -2.0 and 2.0")
+    except ValueError as e:
+        T.error(f"Invalid value for '{param}': {e}")
+        return "continue"
+
+    if not hasattr(state.project, "model_params") or state.project.model_params is None:
+        state.project.model_params = {}
+    
+    state.project.model_params[param] = val
+    state.store.save(state.project)
+    _rebuild_memgpt(state)
+    T.success(f"Model parameter '{param}' set to {val} for this project.")
 
 
 @_registry.register("/undo", description=_("undo_desc"))

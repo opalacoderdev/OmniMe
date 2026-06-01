@@ -190,6 +190,21 @@ async def handle_run(data: dict):
     # Setup project context if provided
     if "project_path" in data or "project_name" in data:
         await handle_load_project(data)
+
+    if current_project and current_project.project_path:
+        state_dir = os.path.join(current_project.project_path, ".opalacoder")
+        os.makedirs(state_dir, exist_ok=True)
+        state_file = os.path.join(state_dir, "_editor_state.json")
+        editor_state = {
+            "current_file": data.get("current_file", ""),
+            "editor_content": data.get("editor_content", ""),
+            "selected_text": data.get("selected_text", "")
+        }
+        try:
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump(editor_state, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Warning: Failed to save editor state: {e}", file=sys.stderr)
     
     # Intercept and process slash commands (like /help, /undo, /commit)
     if prompt.startswith("/"):

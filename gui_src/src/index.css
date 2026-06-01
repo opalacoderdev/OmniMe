@@ -649,6 +649,13 @@ input:focus, select:focus, textarea:focus {
   user-select: none;
 }
 
+/* Disable copying text in chat messages */
+.vscode-chat-history,
+.vscode-chat-msg-content,
+.vscode-chat-msg-header {
+  user-select: none;
+}
+
 
 
 

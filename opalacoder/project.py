@@ -37,7 +37,10 @@ def _init_schema(db_path: str) -> None:
                 request         TEXT NOT NULL DEFAULT '',
                 plan_text       TEXT NOT NULL DEFAULT '',
                 subplans        TEXT NOT NULL DEFAULT '[]',
-                results         TEXT NOT NULL DEFAULT '{}'
+                results         TEXT NOT NULL DEFAULT '{}',
+                core_memory     TEXT NOT NULL DEFAULT '',
+                alternative_model TEXT NOT NULL DEFAULT '',
+                model_params    TEXT NOT NULL DEFAULT '{}'
             );
 
             CREATE TABLE IF NOT EXISTS project_history (
@@ -62,6 +65,12 @@ def _init_schema(db_path: str) -> None:
         except sqlite3.OperationalError:
             pass
 
+        # Migração: model_params
+        try:
+            conn.execute("ALTER TABLE projects ADD COLUMN model_params TEXT NOT NULL DEFAULT '{}'")
+        except sqlite3.OperationalError:
+            pass
+
 
 @dataclass
 class ProjectData:
@@ -78,6 +87,7 @@ class ProjectData:
     subplans: list = field(default_factory=list)
     results: dict = field(default_factory=dict)
     core_memory: str = ""
+    model_params: dict = field(default_factory=dict)
     history: list = field(default_factory=list)   # [{role, content}]
 
     def clear_state(self) -> None:
@@ -112,15 +122,27 @@ class ProjectStore:
     def list_projects(self) -> list[dict]:
         with _conn(self.db_path) as conn:
             rows = conn.execute(
-                "SELECT name, project_name, project_path, created_at, updated_at, mode, model, alternative_model, description FROM projects ORDER BY updated_at DESC"
+                "SELECT name, project_name, project_path, created_at, updated_at, mode, model, alternative_model, description, model_params FROM projects ORDER BY updated_at DESC"
             ).fetchall()
-            return [dict(r) for r in rows]
+            res = []
+            for r in rows:
+                d = dict(r)
+                if "model_params" in d and d["model_params"]:
+                    try:
+                        d["model_params"] = json.loads(d["model_params"])
+                    except Exception:
+                        d["model_params"] = {}
+                else:
+                    d["model_params"] = {}
+                res.append(d)
+            return res
 
-    def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "", api_key: str = None, api_base: str = None) -> ProjectData:
+    def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "", api_key: str = None, api_base: str = None, model_params: dict = None) -> ProjectData:
         now = datetime.now(timezone.utc).isoformat()
         _skills = skills if skills is not None else ["opalacoder"]
         if "opalacoder" not in _skills:
             _skills = ["opalacoder"] + _skills
+        _model_params = model_params if model_params is not None else {}
 
         # Ensure the project path is absolute and exists
         abs_proj_path = os.path.abspath(project_path) if project_path else os.getcwd()
@@ -187,14 +209,14 @@ class ProjectStore:
 
         with _conn(self.db_path) as conn:
             conn.execute(
-                "INSERT INTO projects (name, created_at, updated_at, mode, model, alternative_model, project_name, project_path, skills, description, core_memory) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                (name, now, now, mode, model, alternative_model, project_name, abs_proj_path, json.dumps(_skills), description, ""),
+                "INSERT INTO projects (name, created_at, updated_at, mode, model, alternative_model, project_name, project_path, skills, description, core_memory, model_params) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name, now, now, mode, model, alternative_model, project_name, abs_proj_path, json.dumps(_skills), description, "", json.dumps(_model_params)),
             )
-        return ProjectData(name=name, mode=mode, model=model, alternative_model=alternative_model, project_name=project_name, project_path=abs_proj_path, skills=_skills, description=description, core_memory="")
+        return ProjectData(name=name, mode=mode, model=model, alternative_model=alternative_model, project_name=project_name, project_path=abs_proj_path, skills=_skills, description=description, core_memory="", model_params=_model_params)
 
-    def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "") -> ProjectData:
+    def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "", model_params: dict = None) -> ProjectData:
         self.delete(name)
-        return self.create(name, mode, model, project_name, project_path, skills, description, alternative_model)
+        return self.create(name, mode, model, project_name, project_path, skills, description, alternative_model, model_params=model_params)
 
     def delete(self, name: str) -> None:
         with _conn(self.db_path) as conn:
@@ -239,6 +261,7 @@ class ProjectStore:
                 subplans=json.loads(row["subplans"]),
                 results=json.loads(row["results"]),
                 core_memory=row["core_memory"] if "core_memory" in row.keys() else "",
+                model_params=json.loads(row["model_params"]) if "model_params" in row.keys() else {},
                 history=[dict(r) for r in hist_rows],
             )
 
@@ -247,10 +270,11 @@ class ProjectStore:
         _skills = list(project.skills)
         if "opalacoder" not in _skills:
             _skills = ["opalacoder"] + _skills
+        _model_params = project.model_params if hasattr(project, "model_params") else {}
         with _conn(self.db_path) as conn:
             conn.execute(
                 """UPDATE projects SET updated_at=?, mode=?, model=?, alternative_model=?, project_name=?, project_path=?,
-                   skills=?, description=?, request=?, plan_text=?, subplans=?, results=?, core_memory=? WHERE name=?""",
+                   skills=?, description=?, request=?, plan_text=?, subplans=?, results=?, core_memory=?, model_params=? WHERE name=?""",
                 (
                     now,
                     project.mode,
@@ -265,6 +289,7 @@ class ProjectStore:
                     json.dumps(project.subplans, ensure_ascii=False),
                     json.dumps(project.results, ensure_ascii=False),
                     project.core_memory,
+                    json.dumps(_model_params, ensure_ascii=False),
                     project.name,
                 ),
             )
