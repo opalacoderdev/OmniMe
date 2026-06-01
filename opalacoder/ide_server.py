@@ -835,13 +835,24 @@ def start_gui_server(host="127.0.0.1", port=3000):
         except Exception:
             pass
 
+        # Determine screen dimensions dynamically if possible
+        width = 1000
+        height = 650
+        try:
+            screens = webview.screens
+            if screens:
+                primary = screens[0]
+                width = max(800, int(primary.width * 0.80))
+                height = max(600, int(primary.height * 0.75))
+        except Exception:
+            pass
+
         window = webview.create_window(
             title="OpalaCoder IDE",
             url=url,
-            width=1440,
-            height=900,
+            width=width,
+            height=height,
             resizable=True,
-            min_size=(800, 600),
             text_select=True,
         )
 

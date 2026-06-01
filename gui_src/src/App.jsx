@@ -179,9 +179,41 @@ export default function App() {
   const chatEndRef = useRef(null);
   const logEndRef = useRef(null);
   const editorRef = useRef(null);
+  const saveFileRef = useRef(null);
 
   const handleEditorDidMount = (editor, monaco) => {
     editorRef.current = editor;
+
+    editor.onKeyDown((e) => {
+      const browserEvent = e.browserEvent;
+      const isCtrl = browserEvent.ctrlKey || browserEvent.metaKey;
+      const key = browserEvent.key;
+      const code = browserEvent.code;
+
+      if (isCtrl && (key === '+' || key === '=' || code === 'Equal' || code === 'NumpadAdd')) {
+        browserEvent.preventDefault();
+        browserEvent.stopPropagation();
+        setEditorFontSize(prev => {
+          const nextVal = Math.min(30, prev + 1);
+          safeSetLocalStorage('editorFontSize', nextVal);
+          return nextVal;
+        });
+      } else if (isCtrl && (key === '-' || code === 'Minus' || code === 'NumpadSubtract')) {
+        browserEvent.preventDefault();
+        browserEvent.stopPropagation();
+        setEditorFontSize(prev => {
+          const nextVal = Math.max(10, prev - 1);
+          safeSetLocalStorage('editorFontSize', nextVal);
+          return nextVal;
+        });
+      } else if (isCtrl && key === 's') {
+        browserEvent.preventDefault();
+        browserEvent.stopPropagation();
+        if (saveFileRef.current) {
+          saveFileRef.current();
+        }
+      }
+    });
   };
 
   useEffect(() => {
@@ -257,17 +289,21 @@ export default function App() {
   // Keybindings (Ctrl+S to save, Ctrl+ / Ctrl- to zoom)
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      const isCtrl = e.ctrlKey || e.metaKey;
+      const key = e.key;
+      const code = e.code;
+
+      if (isCtrl && key === 's') {
         e.preventDefault();
         saveFile();
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=')) {
+      } else if (isCtrl && (key === '+' || key === '=' || code === 'Equal' || code === 'NumpadAdd')) {
         e.preventDefault();
         setEditorFontSize(prev => {
           const nextVal = Math.min(30, prev + 1);
           safeSetLocalStorage('editorFontSize', nextVal);
           return nextVal;
         });
-      } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+      } else if (isCtrl && (key === '-' || code === 'Minus' || code === 'NumpadSubtract')) {
         e.preventDefault();
         setEditorFontSize(prev => {
           const nextVal = Math.max(10, prev - 1);
@@ -832,6 +868,10 @@ export default function App() {
       setIsSaving(false);
     }
   };
+
+  useEffect(() => {
+    saveFileRef.current = saveFile;
+  }, [saveFile]);
 
   const handleCreateProject = async (e) => {
     e.preventDefault();

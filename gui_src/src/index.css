@@ -649,11 +649,11 @@ input:focus, select:focus, textarea:focus {
   user-select: none;
 }
 
-/* Disable copying text in chat messages */
+/* Enable selection in chat messages */
 .vscode-chat-history,
 .vscode-chat-msg-content,
 .vscode-chat-msg-header {
-  user-select: none;
+  user-select: text !important;
 }
 
 
