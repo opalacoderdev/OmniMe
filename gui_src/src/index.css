@@ -85,7 +85,7 @@ code, pre {
 input, select, textarea {
   background-color: var(--vscode-input-bg);
   border: 1px solid var(--vscode-border);
-  color: #cccccc;
+  color: var(--vscode-text-fg);
   font-family: inherit;
   font-size: 13px;
   padding: 6px 8px;
