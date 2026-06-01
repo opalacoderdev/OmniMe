@@ -68,6 +68,15 @@ export default function App() {
   const [activeSidebarTab, setActiveSidebarTab] = useState('explorer');
   const [activeBottomTab, setActiveBottomTab] = useState('output');
   const [problems, setProblems] = useState([]);
+  const [thinkingLogs, setThinkingLogs] = useState([]);
+  const [showAdvancedParams, setShowAdvancedParams] = useState(false);
+  const [newProjError, setNewProjError] = useState('');
+
+  useEffect(() => {
+    if (!showNewProjectModal) {
+      setNewProjError('');
+    }
+  }, [showNewProjectModal]);
   
   // IDE Settings States
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -110,6 +119,12 @@ export default function App() {
   // Project settings edit modal state
   // Shape: { name, project_name, project_path, model, alternative_model, mode, description } | null
   const [editingProject, setEditingProject] = useState(null);
+
+  useEffect(() => {
+    if (!editingProject) {
+      setShowAdvancedParams(false);
+    }
+  }, [editingProject]);
 
   const fetchProblems = async () => {
     if (!activeProject) return;
@@ -165,10 +180,15 @@ export default function App() {
   const [newProjModel, setNewProjModel] = useState('gemini/gemini-2.5-flash');
   const [newProjMode, setNewProjMode] = useState('auto');
   const [newProjApiKey, setNewProjApiKey] = useState('');
-  const [newProjApiBase, setNewProjApiBase] = useState('');
+  const [newProjApiBase, setNewProjApiBase] = useState('http://localhost:11434/v1');
 
   const chatEndRef = useRef(null);
   const logEndRef = useRef(null);
+  const editorRef = useRef(null);
+
+  const handleEditorDidMount = (editor, monaco) => {
+    editorRef.current = editor;
+  };
 
   // Initial load
   useEffect(() => {
@@ -234,12 +254,26 @@ export default function App() {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [terminalLogs]);
 
-  // Keybindings (Ctrl+S to save)
+  // Keybindings (Ctrl+S to save, Ctrl+ / Ctrl- to zoom)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         saveFile();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=')) {
+        e.preventDefault();
+        setEditorFontSize(prev => {
+          const nextVal = Math.min(30, prev + 1);
+          safeSetLocalStorage('editorFontSize', nextVal);
+          return nextVal;
+        });
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+        e.preventDefault();
+        setEditorFontSize(prev => {
+          const nextVal = Math.max(10, prev - 1);
+          safeSetLocalStorage('editorFontSize', nextVal);
+          return nextVal;
+        });
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -802,6 +836,7 @@ export default function App() {
   const handleCreateProject = async (e) => {
     e.preventDefault();
     if (!newProjName || !newProjPath) return;
+    setNewProjError('');
     try {
       const res = await fetch('/api/opalacoder/create-project', {
         method: 'POST',
@@ -823,13 +858,15 @@ export default function App() {
         setNewProjPath('');
         setNewProjDesc('');
         setNewProjApiKey('');
-        setNewProjApiBase('');
+        setNewProjApiBase('http://localhost:11434/v1');
         fetchProjects();
       } else {
         const err = await res.json();
+        setNewProjError(err.error || 'Erro ao criar projeto.');
         addLog('error', `Erro ao criar projeto: ${err.error}`);
       }
     } catch (err) {
+      setNewProjError(err.message || 'Erro ao criar projeto.');
       addLog('error', `Erro ao criar: ${err.message}`);
     }
   };
@@ -864,6 +901,7 @@ export default function App() {
       alternative_model: proj.alternative_model || '',
       mode: proj.mode || 'auto',
       description: proj.description || '',
+      model_params: proj.model_params || {},
     });
   };
 
@@ -882,6 +920,7 @@ export default function App() {
           alternative_model: editingProject.alternative_model,
           mode: editingProject.mode,
           description: editingProject.description,
+          model_params: editingProject.model_params,
         })
       });
       if (res.ok) {
@@ -914,6 +953,21 @@ export default function App() {
   };
 
 
+  const handleInterruptAgent = async () => {
+    try {
+      const res = await fetch('/api/opalacoder/interrupt', {
+        method: 'POST',
+      });
+      if (res.ok) {
+        addLog('info', 'Sinal de interrupção enviado ao agente.');
+      } else {
+        addLog('error', 'Falha ao enviar sinal de interrupção.');
+      }
+    } catch (err) {
+      addLog('error', `Erro ao interromper: ${err.message}`);
+    }
+  };
+
   const handleSendMessage = async (e) => {
     if (e) e.preventDefault();
     if (!chatInput.trim() || !activeProject || isAgentRunning) return;
@@ -923,7 +977,21 @@ export default function App() {
     setChatMessages(prev => [...prev, { role: 'user', content: userText }]);
     setIsAgentRunning(true);
     setProblems([]);
+    setThinkingLogs([]);
     addLog('info', `Iniciando agente para prompt: "${userText}"`);
+
+    let selectedText = '';
+    if (editorRef.current) {
+      try {
+        const model = editorRef.current.getModel();
+        const selection = editorRef.current.getSelection();
+        if (model && selection) {
+          selectedText = model.getValueInRange(selection);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
 
     try {
       const res = await fetch('/api/opalacoder/run', {
@@ -935,7 +1003,10 @@ export default function App() {
           prompt: userText,
           project_name: activeProject.name,
           project_path: activeProject.project_path,
-          model: activeProject.model
+          model: activeProject.model,
+          current_file: selectedFile || '',
+          editor_content: fileContent || '',
+          selected_text: selectedText || '',
         })
       });
 
@@ -998,6 +1069,11 @@ export default function App() {
         break;
       case 'thought':
         addLog('thought', data.content);
+        setThinkingLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), content: data.content }]);
+        break;
+      case 'cancelled':
+        addLog('warning', data.message || 'Execução cancelada.');
+        setChatMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Interrompido: ${data.message || 'A execução do agente foi parada.'}` }]);
         break;
       case 'tool_call':
         addLog('tool_call', `Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`);
@@ -1382,6 +1458,7 @@ export default function App() {
                   theme={theme === 'light' ? 'light' : 'vs-dark'}
                   value={fileContent}
                   onChange={(val) => setFileContent(val)}
+                  onMount={handleEditorDidMount}
                   options={{
                     minimap: { enabled: true },
                     fontSize: editorFontSize,
@@ -1428,6 +1505,12 @@ export default function App() {
                   PROBLEMS {problems.length > 0 && <span style={{ marginLeft: '4px', background: '#f48771', color: '#1e1e1e', borderRadius: '10px', padding: '0 6px', fontSize: '10px', fontWeight: 'bold' }}>{problems.length}</span>}
                 </span>
                 <span 
+                  className={`vscode-bottom-tab ${activeBottomTab === 'thinking' ? 'active' : ''}`}
+                  onClick={() => selectTab('thinking')}
+                >
+                  THINKING
+                </span>
+                <span 
                   className={`vscode-bottom-tab ${activeBottomTab === 'terminal' ? 'active' : ''}`}
                   onClick={() => selectTab('terminal')}
                 >
@@ -1435,11 +1518,23 @@ export default function App() {
                 </span>
               </div>
               <div className="flex items-center" style={{ gap: '8px' }}>
-                {(activeBottomTab === 'output' || activeBottomTab === 'problems') && (
+                {(activeBottomTab === 'output' || activeBottomTab === 'problems' || activeBottomTab === 'thinking') && (
                   <button 
-                    onClick={activeBottomTab === 'output' ? () => setTerminalLogs([]) : () => setProblems([])}
+                    onClick={
+                      activeBottomTab === 'output' 
+                        ? () => setTerminalLogs([]) 
+                        : activeBottomTab === 'problems' 
+                        ? () => setProblems([]) 
+                        : () => setThinkingLogs([])
+                    }
                     className="vscode-bottom-panel-clear-btn"
-                    title={activeBottomTab === 'output' ? 'Limpar Output' : 'Limpar Problemas'}
+                    title={
+                      activeBottomTab === 'output' 
+                        ? 'Limpar Output' 
+                        : activeBottomTab === 'problems' 
+                        ? 'Limpar Problemas' 
+                        : 'Limpar Pensamentos'
+                    }
                   >
                     <Trash size={12} />
                     <span>Clear</span>
@@ -1500,6 +1595,22 @@ export default function App() {
                               {prob.message}
                             </pre>
                           </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {activeBottomTab === 'thinking' && (
+                  <div className="vscode-logs" style={{ height: '100%' }}>
+                    {thinkingLogs.length === 0 ? (
+                      <div style={{ color: '#808080', fontStyle: 'italic' }}>Nenhum pensamento gerado ainda. Execute uma instrução para ver o raciocínio do agente...</div>
+                    ) : (
+                      thinkingLogs.map((log, i) => (
+                        <div key={i} className="text-[#da70d6]" style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '4px' }}>
+                          <span style={{ color: '#5a5a5a' }}>[{log.timestamp}]</span>
+                          <span style={{ fontWeight: 'bold' }}>[THOUGHT]</span>
+                          <span style={{ whiteSpace: 'pre-wrap', flex: 1, fontFamily: 'Consolas, monospace' }}>{log.content}</span>
                         </div>
                       ))
                     )}
@@ -1604,14 +1715,26 @@ export default function App() {
                   placeholder={!activeProject ? "Defina um projeto..." : isAgentRunning ? "Pensando..." : "Pergunte ao OpalaCoder..."}
                   style={{ flex: 1 }}
                 />
-                <button 
-                  type="submit"
-                  disabled={!activeProject || isAgentRunning || !chatInput.trim()}
-                  className="vscode-button"
-                  style={{ padding: '6px' }}
-                >
-                  <ArrowRight size={14} />
-                </button>
+                {isAgentRunning ? (
+                  <button 
+                    type="button"
+                    onClick={handleInterruptAgent}
+                    className="vscode-button"
+                    style={{ padding: '6px', backgroundColor: '#f48771', color: '#1e1e1e' }}
+                    title="Interromper agente"
+                  >
+                    <X size={14} />
+                  </button>
+                ) : (
+                  <button 
+                    type="submit"
+                    disabled={!activeProject || !chatInput.trim()}
+                    className="vscode-button"
+                    style={{ padding: '6px' }}
+                  >
+                    <ArrowRight size={14} />
+                  </button>
+                )}
               </div>
             </form>
           </aside>
@@ -1792,6 +1915,12 @@ export default function App() {
                 </div>
               </div>
 
+              {newProjError && (
+                <div style={{ color: '#f48771', fontSize: '11px', marginTop: '4px', whiteSpace: 'pre-wrap' }}>
+                  ⚠️ {newProjError}
+                </div>
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '12px', borderTop: '1px solid #3c3c3c', marginTop: '4px' }}>
                 <button 
                   type="button" 
@@ -1959,6 +2088,167 @@ export default function App() {
                   rows={2}
                   style={{ resize: 'none' }}
                 />
+              </div>
+
+              {/* Collapsible advanced parameters */}
+              <div className="flex flex-col" style={{ marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedParams(!showAdvancedParams)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#007acc',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 0',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    textAlign: 'left',
+                    width: 'fit-content'
+                  }}
+                >
+                  <span>{showAdvancedParams ? '▼' : '▶'} Parâmetros do Modelo (Avançado)</span>
+                </button>
+
+                {showAdvancedParams && (
+                  <div
+                    style={{
+                      border: '1px solid #3c3c3c',
+                      borderRadius: '4px',
+                      padding: '12px',
+                      marginTop: '8px',
+                      backgroundColor: '#252526',
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '12px'
+                    }}
+                  >
+                    <div className="flex flex-col" style={{ gap: '4px' }}>
+                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Temperature</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="2"
+                        placeholder="Ex: 0.7"
+                        value={editingProject.model_params?.temperature !== undefined ? editingProject.model_params.temperature : ''}
+                        onChange={e => {
+                          const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                          setEditingProject(p => {
+                            const nextParams = { ...p.model_params };
+                            if (val === undefined) delete nextParams.temperature;
+                            else nextParams.temperature = val;
+                            return { ...p, model_params: nextParams };
+                          });
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex flex-col" style={{ gap: '4px' }}>
+                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Max Tokens</label>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Ex: 4096"
+                        value={editingProject.model_params?.max_tokens !== undefined ? editingProject.model_params.max_tokens : ''}
+                        onChange={e => {
+                          const val = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                          setEditingProject(p => {
+                            const nextParams = { ...p.model_params };
+                            if (val === undefined) delete nextParams.max_tokens;
+                            else nextParams.max_tokens = val;
+                            return { ...p, model_params: nextParams };
+                          });
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex flex-col" style={{ gap: '4px' }}>
+                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Context Window (num_ctx)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Ex: 8192"
+                        value={editingProject.model_params?.num_ctx !== undefined ? editingProject.model_params.num_ctx : ''}
+                        onChange={e => {
+                          const val = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                          setEditingProject(p => {
+                            const nextParams = { ...p.model_params };
+                            if (val === undefined) delete nextParams.num_ctx;
+                            else nextParams.num_ctx = val;
+                            return { ...p, model_params: nextParams };
+                          });
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex flex-col" style={{ gap: '4px' }}>
+                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Top P</label>
+                      <input
+                        type="number"
+                        step="0.05"
+                        min="0"
+                        max="1"
+                        placeholder="Ex: 0.9"
+                        value={editingProject.model_params?.top_p !== undefined ? editingProject.model_params.top_p : ''}
+                        onChange={e => {
+                          const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                          setEditingProject(p => {
+                            const nextParams = { ...p.model_params };
+                            if (val === undefined) delete nextParams.top_p;
+                            else nextParams.top_p = val;
+                            return { ...p, model_params: nextParams };
+                          });
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex flex-col" style={{ gap: '4px' }}>
+                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Frequency Penalty</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="-2"
+                        max="2"
+                        placeholder="Ex: 0.0"
+                        value={editingProject.model_params?.frequency_penalty !== undefined ? editingProject.model_params.frequency_penalty : ''}
+                        onChange={e => {
+                          const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                          setEditingProject(p => {
+                            const nextParams = { ...p.model_params };
+                            if (val === undefined) delete nextParams.frequency_penalty;
+                            else nextParams.frequency_penalty = val;
+                            return { ...p, model_params: nextParams };
+                          });
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex flex-col" style={{ gap: '4px' }}>
+                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Presence Penalty</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="-2"
+                        max="2"
+                        placeholder="Ex: 0.0"
+                        value={editingProject.model_params?.presence_penalty !== undefined ? editingProject.model_params.presence_penalty : ''}
+                        onChange={e => {
+                          const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                          setEditingProject(p => {
+                            const nextParams = { ...p.model_params };
+                            if (val === undefined) delete nextParams.presence_penalty;
+                            else nextParams.presence_penalty = val;
+                            return { ...p, model_params: nextParams };
+                          });
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
@@ -2212,7 +2502,7 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#cccccc' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Versão</span>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.19 alfa</span>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.20 alfa</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Autor</span>
