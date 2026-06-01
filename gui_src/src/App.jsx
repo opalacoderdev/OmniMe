@@ -1819,7 +1819,7 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#cccccc' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Versão</span>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.4 alfa</span>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.5 alfa</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Autor</span>
