@@ -1,48 +1,40 @@
 ---
 name: html-css-js
-description: Regras de boas práticas e detector de contratos para web vanilla (HTML/CSS/JavaScript puro). Use ao criar ou corrigir páginas/apps web sem framework, bundler ou npm.
+description: Best practice rules and contract detector for vanilla web (pure HTML/CSS/JavaScript). Use when creating or fixing web pages/apps without frameworks, bundlers, or npm.
 ---
 
 # HTML / CSS / JavaScript (vanilla)
 
-Aplique estas regras quando o usuário pedir explicitamente uma aplicação web
-**vanilla** (sem React/Vue, sem bundler, sem npm). A saída são arquivos `.html`,
-`.css` e `.js` que abrem direto no navegador.
+Apply these rules when the user explicitly requests a **vanilla** web application (no React/Vue, no bundler, no npm). The outputs are `.html`, `.css`, and `.js` files that open directly in the browser.
 
-## Estrutura de arquivos
-Prefira um único `index.html`; para complexidade média, separe em `index.html` +
-`style.css` + `script.js`.
+## File Structure
+Prefer a single `index.html`; for medium complexity, separate into `index.html` + `style.css` + `script.js`.
 
-## Regras de HTML
-1. Sempre `<!DOCTYPE html>` e `<meta charset="UTF-8">`.
-2. `<link rel="stylesheet" href="style.css">` no `<head>`.
-3. `<script src="script.js" defer></script>` (o `defer` garante DOM pronto).
-4. Todo elemento interativo com `id` único e claro.
+## HTML Rules
+1. Always `<!DOCTYPE html>` and `<meta charset="UTF-8">`.
+2. `<link rel="stylesheet" href="style.css">` inside `<head>`.
+3. `<script src="script.js" defer></script>` (using `defer` ensures the DOM is ready).
+4. Every interactive element must have a unique and clear `id`.
 
-## Regras de JavaScript
-1. Sempre `defer` no `<script>` ou envolva em `DOMContentLoaded`.
-2. Nunca `var`; use `const`/`let`.
-3. Nunca chame `addEventListener` em elemento possivelmente `null` — verifique
-   `getElementById` ou use `defer`.
-4. Para cálculos com strings (ex. display de calculadora), use `parseFloat`/`parseInt`.
+## JavaScript Rules
+1. Always use `defer` in `<script>` or wrap logic in `DOMContentLoaded`.
+2. Never use `var`; use `const`/`let`.
+3. Never call `addEventListener` on a possibly `null` element — verify with `getElementById` or use `defer`.
+4. For string calculations (e.g., calculator display), use `parseFloat`/`parseInt`.
 
-## Regras de CSS
-1. Variáveis CSS (`--color-primary`) em `:root`.
-2. `box-sizing: border-box` global.
-3. Sem `float`; use flexbox/grid.
-4. Botões com `:hover` e `:active`.
+## CSS Rules
+1. CSS variables (`--color-primary`) in `:root`.
+2. `box-sizing: border-box` globally.
+3. No `float`; use flexbox/grid.
+4. Buttons with `:hover` and `:active`.
 
-## Detecção de contratos (script)
+## Contract Detection (script)
 
-Antes de propor uma correção em HTML/CSS/JS, rode o detector de bugs de contrato
-com `run_command`, usando o caminho ABSOLUTO do script (indicado no seu prompt na
-seção "Scripts available in this skill"):
+Before proposing any fix in HTML/CSS/JS, run the contract bug detector with `run_command`, using the ABSOLUTE path of the script (indicated in your prompt in the "Scripts available in this skill" section):
 
 ```
-python <CAMINHO-ABSOLUTO>/check_contracts.py --project-path <DIRETÓRIO-DO-PROJETO>
+python <ABSOLUTE-PATH>/check_contracts.py --project-path <PROJECT-DIRECTORY>
 ```
 
-Ele reporta linhas `[CONTRACT ERROR]` / `[SYNTAX ERROR]` / `[WARNING]` / `[INFO]`.
-Uma `[CONTRACT ERROR]` indicando incompatibilidade entre o HTML e o JS deve ser
-corrigida **no arquivo apontado** (geralmente o HTML, na linha indicada) — não
-invente correções fora do que o detector aponta.
+It reports `[CONTRACT ERROR]` / `[SYNTAX ERROR]` / `[WARNING]` / `[INFO]` lines.
+A `[CONTRACT ERROR]` indicating an incompatibility between the HTML and the JS must be fixed **in the pointed file** (usually the HTML, at the indicated line) — do not invent fixes outside what the detector points out.

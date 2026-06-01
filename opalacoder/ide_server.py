@@ -254,6 +254,29 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
+        # 3.6. Rename File/Directory
+        elif path == '/api/file/rename' and method == 'POST':
+            project_path = data.get('projectPath')
+            old_path = data.get('oldPath')
+            new_path = data.get('newPath')
+            if not project_path or not old_path or not new_path:
+                self.send_response(writer, 400, b'{"error":"projectPath, oldPath and newPath are required"}', "application/json")
+                return
+            full_old_path = os.path.abspath(os.path.join(project_path, old_path))
+            full_new_path = os.path.abspath(os.path.join(project_path, new_path))
+            if not full_old_path.startswith(os.path.abspath(project_path)) or not full_new_path.startswith(os.path.abspath(project_path)):
+                self.send_response(writer, 403, b'{"error":"Forbidden: Path traversal detected"}', "application/json")
+                return
+            try:
+                if os.path.exists(full_old_path):
+                    os.makedirs(os.path.dirname(full_new_path), exist_ok=True)
+                    os.rename(full_old_path, full_new_path)
+                    self.send_response(writer, 200, b'{"success":true}', "application/json")
+                else:
+                    self.send_response(writer, 404, b'{"error":"Source file not found"}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
         # 4. List Projects
         elif path == '/api/opalacoder/list-projects':
             from opalacoder.config import DEFAULT_DB_PATH
@@ -279,6 +302,10 @@ class AsyncHTTPServer:
             
             if not project_name:
                 self.send_response(writer, 400, b'{"error":"project_name is required"}', "application/json")
+                return
+                
+            if not os.path.exists(project_path) or not os.path.isdir(project_path):
+                self.send_response(writer, 400, b'{"error":"Project path does not exist or is not a directory"}', "application/json")
                 return
                 
             db_key = project_name.replace(" ", "_").lower()
@@ -346,7 +373,11 @@ class AsyncHTTPServer:
             if "mode" in data and data["mode"]:
                 project.mode = data["mode"]
             if "project_path" in data and data["project_path"]:
-                project.project_path = os.path.abspath(data["project_path"])
+                new_path = data["project_path"]
+                if not os.path.exists(new_path) or not os.path.isdir(new_path):
+                    self.send_response(writer, 400, b'{"error":"Project path does not exist or is not a directory"}', "application/json")
+                    return
+                project.project_path = os.path.abspath(new_path)
             store.save(project)
             res_data = {
                 "name": project.name,
@@ -453,7 +484,6 @@ class AsyncHTTPServer:
             headers = (
                 "HTTP/1.1 200 OK\r\n"
                 "Content-Type: text/event-stream\r\n"
-                "Transfer-Encoding: chunked\r\n"
                 "Access-Control-Allow-Origin: *\r\n"
                 "Cache-Control: no-cache\r\n"
                 "Connection: keep-alive\r\n\r\n"
@@ -464,20 +494,17 @@ class AsyncHTTPServer:
             term_queue = asyncio.Queue()
             self.active_terminal.queues.append(term_queue)
 
-            def send_chunk(data_bytes: bytes):
+            def send_data(data_bytes: bytes):
                 import base64
                 payload = f"data: {base64.b64encode(data_bytes).decode('utf-8')}\n\n"
-                chunk = payload.encode('utf-8')
-                writer.write(f"{len(chunk):X}\r\n".encode('utf-8'))
-                writer.write(chunk)
-                writer.write(b"\r\n")
+                writer.write(payload.encode('utf-8'))
 
             try:
                 while True:
                     data = await term_queue.get()
                     if data is None:
                         break
-                    send_chunk(data)
+                    send_data(data)
                     await writer.drain()
             except Exception as e:
                 print(f"Terminal stream exception: {e}")
@@ -485,8 +512,6 @@ class AsyncHTTPServer:
                 if self.active_terminal and term_queue in self.active_terminal.queues:
                     self.active_terminal.queues.remove(term_queue)
                 try:
-                    writer.write(b"0\r\n\r\n")
-                    await writer.drain()
                     writer.close()
                 except:
                     pass
@@ -617,6 +642,53 @@ class AsyncHTTPServer:
                 writer.write(b"0\r\n\r\n")
                 await writer.drain()
                 writer.close()
+        # 7h. Check Optional Dependencies Status
+        elif path == '/api/settings/check-dependencies' and method == 'GET':
+            try:
+                from sentence_transformers import SentenceTransformer
+                installed = True
+            except ImportError:
+                installed = False
+            self.send_response(writer, 200, json.dumps({"installed": installed}).encode('utf-8'), "application/json")
+        # 7i. Problems scan
+        elif path == '/api/opalacoder/problems' and method == 'GET':
+            project_path = query.get('projectPath', [None])[0]
+            if not project_path:
+                self.send_response(writer, 400, b'{"error":"projectPath parameter is required"}', "application/json")
+                return
+            if not os.path.exists(project_path) or not os.path.isdir(project_path):
+                self.send_response(writer, 404, b'{"error":"Directory not found"}', "application/json")
+                return
+            try:
+                import time
+                import sys
+                from opalacoder.tools import _collect_python_files, _layer_linters, _layer_ast, set_project_context
+                from opalacoder.project import ProjectData
+                
+                session = ProjectData(name="problems_scan", project_name="problems_scan", project_path=project_path)
+                set_project_context(session, None)
+                
+                py_files = _collect_python_files(project_path, ".")
+                all_bugs = []
+                if py_files:
+                    all_bugs.extend(_layer_linters(py_files, project_path))
+                    all_bugs.extend(_layer_ast(py_files, project_path))
+                
+                bugs_list = []
+                for b in all_bugs:
+                    bugs_list.append({
+                        "id": f"{b.file}:{b.line or 0}:{b.rule}:{b.message[:30]}",
+                        "tool": b.source,
+                        "message": f"[{b.rule}] {b.message}",
+                        "severity": b.severity,
+                        "filepath": b.file,
+                        "line": b.line or 0,
+                        "timestamp": time.strftime("%H:%M:%S")
+                    })
+                self.send_response(writer, 200, json.dumps({"problems": bugs_list}).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
         else:
             self.send_response(writer, 404, b'{"error":"Not Found"}', "application/json")
 
@@ -679,6 +751,7 @@ def start_gui_server(host="127.0.0.1", port=3000):
             height=900,
             resizable=True,
             min_size=(800, 600),
+            text_select=True,
         )
 
         print(f"[OpalaCoder] Launching desktop window → {url}")

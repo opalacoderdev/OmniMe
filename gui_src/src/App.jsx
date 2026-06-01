@@ -9,6 +9,8 @@ import {
   File, 
   Plus, 
   Trash2, 
+  Edit2,
+  Trash,
   RefreshCw, 
   X, 
   Undo, 
@@ -53,6 +55,9 @@ export default function App() {
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileContent, setFileContent] = useState('');
+  const [openFiles, setOpenFiles] = useState([]);
+  const [fileContents, setFileContents] = useState({});
+  const [rightClickedNode, setRightClickedNode] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
@@ -81,6 +86,7 @@ export default function App() {
   const [isInstallingDeps, setIsInstallingDeps] = useState(false);
   const [installDepsStatus, setInstallDepsStatus] = useState('');
   const [installDepsLog, setInstallDepsLog] = useState('');
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
 
   const terminalRef = useRef(null);
@@ -105,6 +111,19 @@ export default function App() {
   // Shape: { name, project_name, project_path, model, alternative_model, mode, description } | null
   const [editingProject, setEditingProject] = useState(null);
 
+  const fetchProblems = async () => {
+    if (!activeProject) return;
+    try {
+      const res = await fetch(`/api/opalacoder/problems?projectPath=${encodeURIComponent(activeProject.project_path)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setProblems(data.problems || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch problems", err);
+    }
+  };
+
   const startResizing = (mouseDownEvent, direction) => {
     mouseDownEvent.preventDefault();
     const startX = mouseDownEvent.clientX;
@@ -119,12 +138,12 @@ export default function App() {
         const newWidth = Math.max(150, Math.min(600, startWidthLeft + deltaX));
         setSidebarWidth(newWidth);
       } else if (direction === 'right') {
-        const deltaX = startX - mouseMoveEvent.clientX;
-        const newWidth = Math.max(200, Math.min(800, startWidthRight + deltaX));
+        const deltaX = mouseMoveEvent.clientX - startX;
+        const newWidth = Math.max(200, Math.min(600, startWidthRight - deltaX));
         setChatWidth(newWidth);
       } else if (direction === 'bottom') {
-        const deltaY = startY - mouseMoveEvent.clientY;
-        const newHeight = Math.max(80, Math.min(600, startHeightBottom + deltaY));
+        const deltaY = mouseMoveEvent.clientY - startY;
+        const newHeight = Math.max(100, Math.min(600, startHeightBottom - deltaY));
         setBottomPanelHeight(newHeight);
       }
     };
@@ -154,12 +173,27 @@ export default function App() {
   // Initial load
   useEffect(() => {
     fetchProjects();
+    const checkOptionalDeps = async () => {
+      try {
+        const res = await fetch('/api/settings/check-dependencies');
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.installed) {
+            setShowInstallPrompt(true);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to check optional dependencies", e);
+      }
+    };
+    checkOptionalDeps();
   }, []);
 
   // Sync files and greetings when project changes
   useEffect(() => {
     if (activeProject) {
       fetchFiles();
+      fetchProblems();
       setChatMessages([
         { role: 'assistant', content: `Olá! Estou pronto para auxiliar no projeto **${activeProject.project_name || activeProject.name}**.` }
       ]);
@@ -167,6 +201,9 @@ export default function App() {
       setFiles([]);
       setSelectedFile(null);
       setFileContent('');
+      setOpenFiles([]);
+      setFileContents({});
+      setProblems([]);
     }
   }, [activeProject]);
 
@@ -481,15 +518,28 @@ export default function App() {
     if (!activeProject) return;
     e.preventDefault();
     e.stopPropagation();
+    setRightClickedNode(null);
     setContextMenu({
       x: e.clientX,
       y: e.clientY
     });
   };
 
-  const handleCreateNewFile = async () => {
+  const handleNodeContextMenu = (e, node) => {
     if (!activeProject) return;
-    const filename = window.prompt("Nome do novo arquivo (ex: src/utils.py):");
+    e.preventDefault();
+    e.stopPropagation();
+    setRightClickedNode(node);
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY
+    });
+  };
+
+  const handleCreateNewFile = async (parentPath) => {
+    if (!activeProject) return;
+    const defaultPath = parentPath ? `${parentPath}/` : '';
+    const filename = window.prompt("Nome do novo arquivo (ex: src/utils.py):", defaultPath);
     if (!filename) return;
     
     try {
@@ -506,8 +556,8 @@ export default function App() {
       if (res.ok) {
         addLog('info', `Arquivo criado: ${filename}`);
         await fetchFiles();
-        setSelectedFile(filename);
-        setFileContent('');
+        // Open it in the editor
+        await handleFileSelect(filename);
       } else {
         const errData = await res.json();
         addLog('error', `Falha ao criar arquivo: ${errData.error}`);
@@ -518,44 +568,201 @@ export default function App() {
     }
   };
 
-  const handleDeleteSelectedFile = async () => {
-    if (!activeProject || !selectedFile) return;
-    if (!window.confirm(`Tem certeza que deseja deletar o arquivo "${selectedFile}"?`)) return;
-    
+  const handleRenameNode = async (node) => {
+    if (!activeProject || !node) return;
+    const newPath = window.prompt(`Digite o novo caminho/nome para "${node.path}":`, node.path);
+    if (!newPath || newPath === node.path) return;
+
+    try {
+      const res = await fetch('/api/file/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectPath: activeProject.project_path,
+          oldPath: node.path,
+          newPath: newPath
+        })
+      });
+
+      if (res.ok) {
+        addLog('info', `${node.isDirectory ? 'Diretório' : 'Arquivo'} renomeado de ${node.path} para ${newPath}`);
+        
+        if (!node.isDirectory) {
+          // If it is a file, update tabs
+          setOpenFiles(prev => prev.map(f => f === node.path ? newPath : f));
+          setFileContents(prev => {
+            const next = { ...prev };
+            const content = next[node.path];
+            delete next[node.path];
+            next[newPath] = content;
+            return next;
+          });
+          if (selectedFile === node.path) {
+            setSelectedFile(newPath);
+          }
+        } else {
+          // If it's a directory, update any open files inside it
+          const prefix = `${node.path}/`;
+          setOpenFiles(prev => prev.map(f => f.startsWith(prefix) ? f.replace(node.path, newPath) : f));
+          setFileContents(prev => {
+            const next = {};
+            for (const [k, v] of Object.entries(prev)) {
+              if (k.startsWith(prefix)) {
+                next[k.replace(node.path, newPath)] = v;
+              } else {
+                next[k] = v;
+              }
+            }
+            return next;
+          });
+          if (selectedFile && selectedFile.startsWith(prefix)) {
+            setSelectedFile(prev => prev.replace(node.path, newPath));
+          }
+        }
+        await fetchFiles();
+      } else {
+        const errData = await res.json();
+        addLog('error', `Falha ao renomear: ${errData.error}`);
+        alert(`Erro ao renomear: ${errData.error}`);
+      }
+    } catch (err) {
+      addLog('error', `Erro ao renomear: ${err.message}`);
+    }
+  };
+
+  const handleDeleteNode = async (node) => {
+    if (!activeProject || !node) return;
+    const confirmMsg = `Tem certeza que deseja deletar o ${node.isDirectory ? 'diretório' : 'arquivo'} "${node.path}"?${node.isDirectory ? ' Todos os arquivos internos serão removidos!' : ''}`;
+    if (!window.confirm(confirmMsg)) return;
+
     try {
       const res = await fetch('/api/file/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectPath: activeProject.project_path,
-          filePath: selectedFile
+          filePath: node.path
         })
       });
-      
+
       if (res.ok) {
-        addLog('info', `Arquivo excluído: ${selectedFile}`);
-        setSelectedFile(null);
-        setFileContent('');
+        addLog('info', `${node.isDirectory ? 'Diretório' : 'Arquivo'} excluído: ${node.path}`);
+        
+        if (!node.isDirectory) {
+          // Remove from tabs
+          setOpenFiles(prev => prev.filter(f => f !== node.path));
+          setFileContents(prev => {
+            const next = { ...prev };
+            delete next[node.path];
+            return next;
+          });
+          if (selectedFile === node.path) {
+            setSelectedFile(prev => {
+              const remaining = openFiles.filter(f => f !== node.path);
+              if (remaining.length > 0) {
+                const nextActive = remaining[remaining.length - 1];
+                setTimeout(() => {
+                  setFileContent(fileContents[nextActive] || '');
+                }, 0);
+                return nextActive;
+              }
+              setFileContent('');
+              return null;
+            });
+          }
+        } else {
+          // Remove all open files inside this directory
+          const prefix = `${node.path}/`;
+          setOpenFiles(prev => prev.filter(f => !f.startsWith(prefix)));
+          setFileContents(prev => {
+            const next = {};
+            for (const [k, v] of Object.entries(prev)) {
+              if (!k.startsWith(prefix)) {
+                next[k] = v;
+              }
+            }
+            return next;
+          });
+          if (selectedFile && selectedFile.startsWith(prefix)) {
+            setSelectedFile(prev => {
+              const remaining = openFiles.filter(f => !f.startsWith(prefix));
+              if (remaining.length > 0) {
+                const nextActive = remaining[remaining.length - 1];
+                setTimeout(() => {
+                  setFileContent(fileContents[nextActive] || '');
+                }, 0);
+                return nextActive;
+              }
+              setFileContent('');
+              return null;
+            });
+          }
+        }
         await fetchFiles();
       } else {
         const errData = await res.json();
-        addLog('error', `Falha ao deletar arquivo: ${errData.error}`);
-        alert(`Erro ao deletar arquivo: ${errData.error}`);
+        addLog('error', `Falha ao deletar: ${errData.error}`);
+        alert(`Erro ao deletar: ${errData.error}`);
       }
     } catch (err) {
-      addLog('error', `Erro na chamada de exclusão de arquivo: ${err.message}`);
+      addLog('error', `Erro ao deletar: ${err.message}`);
     }
   };
 
+  const handleCloseTab = (filePath, e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
+    if (selectedFile === filePath) {
+      setFileContents(prev => ({ ...prev, [filePath]: fileContent }));
+    }
+
+    setOpenFiles(prev => {
+      const remaining = prev.filter(f => f !== filePath);
+      
+      if (selectedFile === filePath) {
+        if (remaining.length > 0) {
+          const nextActive = remaining[remaining.length - 1];
+          setSelectedFile(nextActive);
+          setFileContent(fileContents[nextActive] || '');
+        } else {
+          setSelectedFile(null);
+          setFileContent('');
+        }
+      }
+      return remaining;
+    });
+  };
 
   const handleFileSelect = async (filePath) => {
     if (!activeProject) return;
+    
+    if (selectedFile) {
+      setFileContents(prev => ({ ...prev, [selectedFile]: fileContent }));
+    }
+
+    setOpenFiles(prev => {
+      if (!prev.includes(filePath)) {
+        return [...prev, filePath];
+      }
+      return prev;
+    });
+    
     setSelectedFile(filePath);
+
+    if (fileContents[filePath] !== undefined) {
+      setFileContent(fileContents[filePath]);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/file/read?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(filePath)}`);
       if (res.ok) {
         const data = await res.json();
         setFileContent(data.content);
+        setFileContents(prev => ({ ...prev, [filePath]: data.content }));
       } else {
         addLog('error', `Erro ao ler arquivo: ${filePath}`);
       }
@@ -579,7 +786,9 @@ export default function App() {
       });
       if (res.ok) {
         addLog('info', `Arquivo salvo: ${selectedFile}`);
+        setFileContents(prev => ({ ...prev, [selectedFile]: fileContent }));
         fetchGitStatus();
+        fetchProblems();
       } else {
         addLog('error', `Erro ao salvar arquivo: ${selectedFile}`);
       }
@@ -770,9 +979,11 @@ export default function App() {
 
     } catch (err) {
       addLog('error', `Falha na execução: ${err.message}`);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Falha na execução: ${err.message}` }]);
     } finally {
       setIsAgentRunning(false);
       fetchFiles();
+      fetchProblems();
     }
   };
 
@@ -820,6 +1031,7 @@ export default function App() {
         break;
       case 'error':
         addLog('error', data.message);
+        setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Erro do Agente: ${data.message}` }]);
         break;
       case 'problem':
         addLog('error', `[Problema em ${data.tool}]: ${data.message}`);
@@ -1010,6 +1222,7 @@ export default function App() {
                         node={node} 
                         selectedFile={selectedFile} 
                         handleFileSelect={handleFileSelect} 
+                        handleNodeContextMenu={handleNodeContextMenu}
                       />
                     ))}
                   </div>
@@ -1124,16 +1337,28 @@ export default function App() {
             <div className="vscode-editor-panel">
               {/* Tab Header bar */}
               <div className="vscode-tabs">
-                <div className="flex h-full">
-                  <div className="vscode-tab">
-                    <span style={{ color: '#ffffff' }}>{selectedFile.split('/').pop()}</span>
-                    <button 
-                      onClick={() => setSelectedFile(null)} 
-                      className="vscode-tab-close-btn"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
+                <div className="flex h-full overflow-x-auto" style={{ gap: '2px' }}>
+                  {openFiles.map(filePath => {
+                    const isActive = filePath === selectedFile;
+                    return (
+                      <div 
+                        key={filePath}
+                        onClick={() => handleFileSelect(filePath)}
+                        className={`vscode-tab ${isActive ? 'active' : ''}`}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        <span style={{ color: isActive ? '#ffffff' : '#a0a0a0' }}>
+                          {filePath.split('/').pop()}
+                        </span>
+                        <button 
+                          onClick={(e) => handleCloseTab(filePath, e)} 
+                          className="vscode-tab-close-btn"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
                 
                 <div>
@@ -1152,6 +1377,7 @@ export default function App() {
               <div className="vscode-editor-container">
                 <Editor
                   height="100%"
+                  path={selectedFile}
                   language={getLanguage(selectedFile)}
                   theme={theme === 'light' ? 'light' : 'vs-dark'}
                   value={fileContent}
@@ -1208,12 +1434,24 @@ export default function App() {
                   TERMINAL
                 </span>
               </div>
-              <button 
-                onClick={() => setIsTerminalCollapsed(!isTerminalCollapsed)}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
-              >
-                {isTerminalCollapsed ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
-              </button>
+              <div className="flex items-center" style={{ gap: '8px' }}>
+                {(activeBottomTab === 'output' || activeBottomTab === 'problems') && (
+                  <button 
+                    onClick={activeBottomTab === 'output' ? () => setTerminalLogs([]) : () => setProblems([])}
+                    className="vscode-bottom-panel-clear-btn"
+                    title={activeBottomTab === 'output' ? 'Limpar Output' : 'Limpar Problemas'}
+                  >
+                    <Trash size={12} />
+                    <span>Clear</span>
+                  </button>
+                )}
+                <button 
+                  onClick={() => setIsTerminalCollapsed(!isTerminalCollapsed)}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
+                >
+                  {isTerminalCollapsed ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
+                </button>
+              </div>
             </div>
             
             {!isTerminalCollapsed && (
@@ -1404,6 +1642,52 @@ export default function App() {
         </div>
       </footer>
 
+      {/* Prompt for optional dependencies on startup */}
+      {showInstallPrompt && (
+        <div className="vscode-modal-overlay">
+          <div className="vscode-modal" style={{ maxWidth: '440px', width: '90%' }}>
+            <div className="vscode-sidebar-header" style={{ padding: '10px 16px' }}>
+              <span className="vscode-sidebar-title" style={{ color: '#ffffff' }}>MÓDULOS OPCIONAIS REQUERIDOS</span>
+              <button 
+                onClick={() => setShowInstallPrompt(false)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div style={{ padding: '16px', color: '#cccccc', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <p style={{ fontSize: '13px', lineHeight: '1.5' }}>
+                Os módulos opcionais para embeddings offline (<code>sentence-transformers</code>) não foram encontrados no ambiente.
+              </p>
+              <p style={{ fontSize: '12px', color: '#888888', lineHeight: '1.4' }}>
+                Recomendamos a instalação para habilitar o processamento local de vetores e a indexação de código sem depender de APIs externas.
+              </p>
+              
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px', borderTop: '1px solid #3c3c3c', paddingTop: '12px' }}>
+                <button 
+                  onClick={() => setShowInstallPrompt(false)}
+                  className="vscode-button"
+                  style={{ backgroundColor: '#3c3c3c', color: '#ffffff' }}
+                >
+                  Ignorar
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowInstallPrompt(false);
+                    setIsSettingsOpen(true);
+                    setSettingsTab('preferences');
+                    handleInstallOptionalDeps();
+                  }}
+                  className="vscode-button"
+                >
+                  Instalar Agora
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* VSCode Style New Project Modal */}
       {showNewProjectModal && (
         <div className="vscode-modal-overlay">
@@ -1537,19 +1821,33 @@ export default function App() {
         >
           <div 
             className="vscode-context-menu-item"
-            onClick={handleCreateNewFile}
+            onClick={() => {
+              const p = rightClickedNode
+                ? (rightClickedNode.isDirectory ? rightClickedNode.path : rightClickedNode.path.split('/').slice(0, -1).join('/'))
+                : '';
+              handleCreateNewFile(p);
+            }}
           >
             <Plus size={13} style={{ color: '#007acc' }} />
             <span>New File...</span>
           </div>
-          {selectedFile && (
-            <div 
-              className="vscode-context-menu-item"
-              onClick={handleDeleteSelectedFile}
-            >
-              <Trash2 size={13} style={{ color: '#f48771' }} />
-              <span>Delete File</span>
-            </div>
+          {rightClickedNode && (
+            <>
+              <div 
+                className="vscode-context-menu-item"
+                onClick={() => handleRenameNode(rightClickedNode)}
+              >
+                <Edit2 size={13} style={{ color: '#e2b52b' }} />
+                <span>Rename...</span>
+              </div>
+              <div 
+                className="vscode-context-menu-item"
+                onClick={() => handleDeleteNode(rightClickedNode)}
+              >
+                <Trash2 size={13} style={{ color: '#f48771' }} />
+                <span>Delete</span>
+              </div>
+            </>
           )}
         </div>
       )}
@@ -1914,7 +2212,7 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#cccccc' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Versão</span>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.17 alfa</span>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.19 alfa</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Autor</span>
@@ -1945,7 +2243,7 @@ export default function App() {
 }
 
 // Subcomponente de nó de arquivo para respeitar as Regras de Hooks
-function FileNode({ node, selectedFile, handleFileSelect }) {
+function FileNode({ node, selectedFile, handleFileSelect, handleNodeContextMenu }) {
   const isDir = node.isDirectory;
   const [isOpen, setIsOpen] = useState(false);
 
@@ -1955,6 +2253,7 @@ function FileNode({ node, selectedFile, handleFileSelect }) {
         <div 
           onClick={() => setIsOpen(!isOpen)} 
           className="vscode-tree-node"
+          onContextMenu={(e) => handleNodeContextMenu(e, node)}
         >
           {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           <Folder size={14} className="text-white" style={{ color: '#e8a838' }} />
@@ -1968,6 +2267,7 @@ function FileNode({ node, selectedFile, handleFileSelect }) {
                 node={child} 
                 selectedFile={selectedFile} 
                 handleFileSelect={handleFileSelect} 
+                handleNodeContextMenu={handleNodeContextMenu}
               />
             ))}
           </div>
@@ -1981,6 +2281,7 @@ function FileNode({ node, selectedFile, handleFileSelect }) {
     <div 
       onClick={() => handleFileSelect(node.path)}
       className={`vscode-tree-node ${isSelected ? 'active' : ''}`}
+      onContextMenu={(e) => handleNodeContextMenu(e, node)}
     >
       <File size={13} style={{ color: '#a0a0a0' }} />
       <span className="truncate">{node.name}</span>
