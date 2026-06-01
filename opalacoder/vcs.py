@@ -84,8 +84,8 @@ def _init_shadow_git(project_path: str):
         subprocess.run(cmd_exclude, shell=True, capture_output=True, cwd=project_path)
         
         # Initial commit
-        _run_shadow_git("add .")
-        _run_shadow_git("commit -m 'Initial checkpoint (Auto)'")
+        _run_shadow_git("add .", project_path)
+        _run_shadow_git("commit -m 'Initial checkpoint (Auto)'", project_path)
 
 def _auto_checkpoint(message: str, project_path: str | None = None):
     """Automatically create a checkpoint in the shadow git."""
