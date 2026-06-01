@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opalacoder"
-version = "0.1.5"
+version = "0.1.6"
 description = "Autonomous coding agent with interactive planning and modular execution"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -29,6 +29,7 @@ dependencies = [
     "tree-sitter-language-pack>=1.8.0",
     "chromadb>=0.4.0",
     "pywebview>=4.0",
+    "PyQt6>=6.0.0",
 ]
 
 [project.optional-dependencies]
