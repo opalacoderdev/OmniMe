@@ -67,7 +67,7 @@ async def cmd_help(_state: REPLState, _args: list[str]) -> None:
 
 @_registry.register("/clear", description="Clear project memory and history")
 async def cmd_clear(state: REPLState, _args: list[str]) -> None:
-    if T.confirm("Are you sure you want to clear this project's memory?"):
+    if await T.aconfirm("Are you sure you want to clear this project's memory?"):
         state.project = state.store.overwrite(
             state.project.name, state.project.mode, state.project.model,
             state.project.project_name, state.project.project_path,
@@ -152,7 +152,7 @@ async def cmd_delete(state: REPLState, args: list[str]) -> str | None:
     import os
     import shutil
     if project_to_delete and project_to_delete.project_path and os.path.exists(project_to_delete.project_path):
-        if T.confirm(_("delete_dir_confirm", path=project_to_delete.project_path), default=False):
+        if await T.aconfirm(_("delete_dir_confirm", path=project_to_delete.project_path), default=False):
             try:
                 shutil.rmtree(project_to_delete.project_path)
                 T.success(_("dir_deleted", path=project_to_delete.project_path))

@@ -81,8 +81,8 @@ Legenda: **(reuso)** código atual reaproveitado · **(refatorar)** muda de pape
 
 > **Seleção de skills do projeto — via `skills.yaml`.** O subconjunto ativo de
 > skills (que define quais metadados Level 1 entram no MemGPT) é declarado num
-> `skills.yaml` no diretório do projeto. Sem `skills.yaml`, carregam-se todas as
-> skills encontradas; com ele, só as obrigatórias + as declaradas. Substitui o
+> `skills.yaml` no diretório do projeto. Sem `skills.yaml`, carregam-se apenas as
+> skills obrigatórias; com ele, as obrigatórias + as declaradas. Substitui o
 > antigo `select_skills_for_project`. Ver
 > [06 §5](06-skills-e-plugins.md#5-carregamento-de-skills-diretórios--skillsyaml).
 

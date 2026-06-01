@@ -229,6 +229,30 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
+        # 3.5. Delete File
+        elif path == '/api/file/delete' and method == 'POST':
+            project_path = data.get('projectPath')
+            file_path = data.get('filePath')
+            if not project_path or not file_path:
+                self.send_response(writer, 400, b'{"error":"projectPath and filePath are required"}', "application/json")
+                return
+            full_path = os.path.abspath(os.path.join(project_path, file_path))
+            if not full_path.startswith(os.path.abspath(project_path)):
+                self.send_response(writer, 403, b'{"error":"Forbidden: Path traversal detected"}', "application/json")
+                return
+            try:
+                if os.path.exists(full_path):
+                    if os.path.isdir(full_path):
+                        import shutil
+                        shutil.rmtree(full_path)
+                    else:
+                        os.remove(full_path)
+                    self.send_response(writer, 200, b'{"success":true}', "application/json")
+                else:
+                    self.send_response(writer, 404, b'{"error":"File not found"}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
         # 4. List Projects
         elif path == '/api/opalacoder/list-projects':
             from opalacoder.config import DEFAULT_DB_PATH
@@ -249,6 +273,8 @@ class AsyncHTTPServer:
             model = data.get("model") or DEFAULT_MODEL
             mode = data.get("mode") or "auto"
             skills = data.get("skills", [])
+            api_key = data.get("api_key")
+            api_base = data.get("api_base")
             
             if not project_name:
                 self.send_response(writer, 400, b'{"error":"project_name is required"}', "application/json")
@@ -267,6 +293,8 @@ class AsyncHTTPServer:
                     project_path=os.path.abspath(project_path),
                     skills=skills,
                     description=description,
+                    api_key=api_key,
+                    api_base=api_base,
                 )
                 res_data = {
                     "project_name": project.project_name,
@@ -292,8 +320,22 @@ class AsyncHTTPServer:
             else:
                 self.send_response(writer, 404, json.dumps({"error": f"Project '{project_name}' not found"}).encode('utf-8'), "application/json")
 
-        # 7. Run Agent (Streaming)
+        # 7a. Input Response (resolves a pending GUI confirm/ask request)
+        elif path == '/api/opalacoder/input_response' and method == 'POST':
+            req_id = data.get("id", "")
+            value = data.get("value", "")
+            from opalacoder.agent_stdin import _gui_input_pending
+            fut = _gui_input_pending.get(req_id)
+            if fut and not fut.done():
+                fut.get_loop().call_soon_threadsafe(fut.set_result, value)
+                self.send_response(writer, 200, b'{"ok":true}', "application/json")
+            else:
+                self.send_response(writer, 404, b'{"error":"No pending request with that id"}', "application/json")
+            return
+
+        # 7b. Run Agent (Streaming)
         elif path == '/api/opalacoder/run' and method == 'POST':
+
             headers = (
                 "HTTP/1.1 200 OK\r\n"
                 "Content-Type: text/plain\r\n"

@@ -1,5 +1,5 @@
-default: ollama/gemma4:latest
-alternative: ollama/gemma4:latest
+default: ollama/ministral-3:14b
+alternative: ollama/ministral-3:14b
 
 # Global LLM defaults applied to all agents unless overridden below.
 # Non-agent settings (git_strategy, vector_index, etc.) live in config.yaml

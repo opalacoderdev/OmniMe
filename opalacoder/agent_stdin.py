@@ -13,6 +13,10 @@ sys.stdout = sys.stderr
 # Hook to intercept event prints (e.g. for Python GUI server)
 event_hook = None
 
+# Pending GUI input requests: maps request-id -> asyncio.Future so that the
+# /api/opalacoder/input_response endpoint can resolve them.
+_gui_input_pending: dict = {}
+
 def print_event(event: str, data: dict):
     payload = {"event": event, **data}
     _real_stdout.write(json.dumps(payload) + "\n")
@@ -86,32 +90,46 @@ current_memgpt = None
 
 def wrap_tool(original_tool):
     """Wrap a tool to output events on call and completion."""
-    name = getattr(original_tool, "name", None) or getattr(original_tool, "__name__", None)
-    desc = getattr(original_tool, "description", None) or getattr(original_tool, "__doc__", None)
-    func = getattr(original_tool, "_func", None) or original_tool
+    from pydantic import BaseModel
+    from agenticblocks.core.function_block import FunctionBlock
     
-    if inspect.iscoroutinefunction(func):
-        @as_tool(name=name, description=desc)
-        async def wrapped(*args, **kwargs):
-            print_event("tool_call", {"tool": name, "arguments": kwargs})
-            try:
-                result = await func(*args, **kwargs)
-            except Exception as e:
-                result = f"Error: {e}"
-            print_event("tool_result", {"tool": name, "result": str(result)})
-            return result
-        return wrapped
-    else:
-        @as_tool(name=name, description=desc)
-        def wrapped(*args, **kwargs):
-            print_event("tool_call", {"tool": name, "arguments": kwargs})
-            try:
-                result = func(*args, **kwargs)
-            except Exception as e:
-                result = f"Error: {e}"
-            print_event("tool_result", {"tool": name, "result": str(result)})
-            return result
-        return wrapped
+    if not hasattr(original_tool, "run"):
+        name = getattr(original_tool, "name", None) or getattr(original_tool, "__name__", None)
+        desc = getattr(original_tool, "description", None) or getattr(original_tool, "__doc__", None)
+        original_tool = FunctionBlock(original_tool, name=name, description=desc)
+        
+    name = getattr(original_tool, "name", None) or getattr(original_tool, "__name__", None)
+    original_run = original_tool.run
+    
+    async def wrapped_run(*args, **kwargs) -> BaseModel:
+        # Resolve the input_data (BaseModel) correctly
+        if args and isinstance(args[0], BaseModel):
+            input_data = args[0]
+        elif "input" in kwargs and isinstance(kwargs["input"], BaseModel):
+            input_data = kwargs["input"]
+        else:
+            # Fallback if args/kwargs don't match expected pattern
+            raise TypeError("wrapped_run expects a Pydantic BaseModel as its first argument or 'input' keyword argument.")
+            
+        dump_kwargs = input_data.model_dump()
+        print_event("tool_call", {"tool": name, "arguments": dump_kwargs})
+        try:
+            result = await original_run(input_data)
+            if hasattr(result, "result"):
+                res_val = result.result
+            else:
+                res_val = result.model_dump()
+        except Exception as e:
+            res_val = f"Error: {e}"
+            raise
+        finally:
+            print_event("tool_result", {"tool": name, "result": str(res_val)})
+        return result
+        
+    object.__setattr__(original_tool, "run", wrapped_run)
+    return original_tool
+
+
 
 # Monkey-patch get_workflow_tools to automatically wrap tools returned to sub-agents
 original_get_workflow_tools = get_workflow_tools
@@ -181,6 +199,9 @@ async def handle_run(data: dict):
             orig_error = T.error
             orig_info = T.info
             orig_warning = T.warning
+            orig_confirm = T.confirm
+            orig_ask = T.ask
+            orig_async_confirm_hook = T._async_confirm_hook
             
             def mock_success(*args_m, **kwargs_m):
                 msg = " ".join(str(x) for x in args_m)
@@ -194,12 +215,45 @@ async def handle_run(data: dict):
             def mock_warning(*args_m, **kwargs_m):
                 msg = " ".join(str(x) for x in args_m)
                 messages.append(f"⚠️ {msg}")
-                
+            def mock_confirm(prompt: str, default: bool = True) -> bool:
+                # Sync fallback — kept for safety, but commands now use await T.aconfirm()
+                # which will delegate to _gui_confirm_hook below.
+                messages.append(f"🔔 {prompt} → {'yes' if default else 'no'} (auto-confirmed)")
+                return default
+            def mock_ask(prompt: str) -> str:
+                messages.append(f"🔔 {prompt} → (no input in GUI mode)")
+                return ""
+
+            async def _gui_confirm_hook(prompt: str, default: bool = True) -> bool:
+                """Emit input_request event and wait for the frontend Yes/No response."""
+                import uuid
+                req_id = str(uuid.uuid4())
+                print_event("input_request", {
+                    "id": req_id,
+                    "prompt": prompt,
+                    "options": ["yes", "no"],
+                    "default": "yes" if default else "no",
+                })
+                loop = asyncio.get_event_loop()
+                fut = loop.create_future()
+                _gui_input_pending[req_id] = fut
+                try:
+                    raw = await asyncio.wait_for(asyncio.shield(fut), timeout=120.0)
+                    return raw.strip().lower() in ("yes", "y", "s", "sim", "true", "1")
+                except asyncio.TimeoutError:
+                    messages.append(f"⚠️ Confirm timed out — using default ({'yes' if default else 'no'}).")
+                    return default
+                finally:
+                    _gui_input_pending.pop(req_id, None)
+
             T.success = mock_success
             T.error = mock_error
             T.info = mock_info
             T.warning = mock_warning
-            
+            T.confirm = mock_confirm
+            T.ask = mock_ask
+            T._async_confirm_hook = _gui_confirm_hook
+
             print_event("agent_started", {"agent": "cli_command", "model": ""})
             try:
                 state = REPLState(current_project, current_store)
@@ -281,6 +335,9 @@ async def handle_run(data: dict):
                 T.error = orig_error
                 T.info = orig_info
                 T.warning = orig_warning
+                T.confirm = orig_confirm
+                T.ask = orig_ask
+                T._async_confirm_hook = orig_async_confirm_hook
                 
             response = "\n".join(messages)
             if not response:

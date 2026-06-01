@@ -104,7 +104,7 @@ A divisão-chave do OpalaCoder:
 > OpalaCoder mira modelos locais com `num_ctx` 2048–16384, onde o Level 1 de
 > *todas* as skills concorre com o prompt-base do MemGPT e a memória clássica. A
 > estratégia adotada é **filtrar via `skills.yaml`** (ver §3): sem `skills.yaml`,
-> carregam-se os metadados de todas as skills encontradas; **com `skills.yaml`,
+> carregam-se apenas as skills obrigatórias; **com `skills.yaml`,
 > apenas as obrigatórias + as declaradas** entram nos metadados — controlando o
 > orçamento naturalmente. Projetos com muitas skills devem usar `skills.yaml`.
 
@@ -190,6 +190,7 @@ ordem de prioridade:
 2. `<projeto>/.opalacoder/skills/` — skills locais do projeto.
 3. `~/.opalacoder/skills/` — skills globais do usuário.
 4. `<pacote>/skills/` — skills embutidas (obrigatórias).
+5. `*/skills_store/` — repositório opcional de skills; apenas skills listadas em `skills.yaml` são ativadas.
 
 > O projeto gerenciado pode trazer suas próprias skills em `skills/`, que são
 > descobertas e têm os metadados carregados nos do MemGPT.
@@ -202,8 +203,7 @@ carregadas conforme a regra de filtro abaixo.
 
 ### Filtro por `skills.yaml`
 
-- **Sem `skills.yaml` no diretório do projeto** → carregam-se **todas** as skills
-  encontradas nos diretórios de busca (metadados Level 1 de todas no MemGPT).
+- **Sem `skills.yaml` no diretório do projeto** → carregam-se **apenas as skills obrigatórias** (como `chat-orchestrator`).
 - **Com `skills.yaml`** → carregam-se **apenas as obrigatórias + as declaradas**
   nele. É o mecanismo de controle de orçamento de tokens (§2).
 

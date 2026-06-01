@@ -20,7 +20,7 @@
 ## Visão em uma frase
 
 Um **agente MemGPT fixo** conversa com o usuário, mantém memória no padrão MemGPT
-clássico e carrega no system prompt os **metadados (Level 1)** de todas as skills.
+clássico e carrega no system prompt os **metadados (Level 1)** das skills ativas.
 Quando o pedido casa com uma skill, ele chama a tool **`run_skill`**, que
 instancia um **sub-agente simples** embutindo a `SKILL.md` (formato Anthropic,
 *progressive disclosure* em 3 níveis). Skills complexas — como `implement-feature`
@@ -53,7 +53,7 @@ Level 3 via bash**. O sub-agente fala com o usuário por ferramenta, e um
 | Interceptador = wrapper na tool `send_message` | [06 §4](06-skills-e-plugins.md#4-interceptador-de-diálogo) |
 | `newfeat`/`bugfix` = parâmetro `intent` único de `implement-feature` | [06 §7](06-skills-e-plugins.md#7-skills-embutidas-previstas) |
 | `command_hint` = instrução na skill `chat-orchestrator` | [02 §3](02-memgpt-orquestrador.md#3-o-que-é-eliminado-do-desenho-atual) |
-| Por padrão (sem `skills.yaml`) carregam-se **todas** as skills; só `chat-orchestrator` é obrigatória | [06 §5](06-skills-e-plugins.md#5-carregamento-de-skills-diretórios--skillsyaml) |
+| Por padrão (sem `skills.yaml`) carregam-se **apenas** as skills obrigatórias; só `chat-orchestrator` é obrigatória | [06 §5](06-skills-e-plugins.md#5-carregamento-de-skills-diretórios--skillsyaml) |
 | Campo `model` da `SKILL.md` é **repassado ao script** (`--model`) em skills script-driven | [06 §1](06-skills-e-plugins.md#1-formato-de-skill-padrão-anthropic--claudeai), [03 §2](03-skill-implement-feature.md#2-o-motor-loop-reusado) |
 | Execução de scripts de skill entra em `SENSITIVE_OPS` (aprovação no modo `edit`) | [06 §6](06-skills-e-plugins.md#6-segurança-skills-executam-bash-sem-sandbox) |
 | Motor de memória = `MemGPTAgentBlock` do framework; **remover** `opalacoder/memgpt.py` (Gemini fora de escopo) | [04 §1](04-memoria.md#1-memória-memgpt-clássica-do-chat-orquestrador) |

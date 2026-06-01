@@ -18,7 +18,7 @@ O MemGPT chat-orquestrador é instanciado uma vez por sessão e:
 - Tem uma **skill fixa embutida — `chat-orchestrator`** (ver
   [06](06-skills-e-plugins.md#7-skills-embutidas-previstas)) que define seu
   comportamento: o que conversar e o que orquestrar.
-- Carrega no system prompt os **metadados Level 1 de todas as skills** disponíveis
+- Carrega no system prompt os **metadados Level 1 das skills ativas**
   (`name` + `description`), para descoberta/roteamento.
 - Mantém memória no **padrão MemGPT clássico** (ver
   [04-memoria.md](04-memoria.md)).
@@ -30,7 +30,7 @@ Composição do system prompt do MemGPT:
 ```
 [ system prompt base do MemGPT (regras de heartbeat/tool-only/memória) ]
 + [ skill fixa chat-orchestrator: como conversar e quando orquestrar ]
-+ [ metadados Level 1 de todas as skills disponíveis ]
++ [ metadados Level 1 das skills ativas ]
 + [ ferramentas: run_skill, read_core_memory, append_core_memory,
     search_conversation_history ]
 ```

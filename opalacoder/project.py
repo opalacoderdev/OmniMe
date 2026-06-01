@@ -116,17 +116,81 @@ class ProjectStore:
             ).fetchall()
             return [dict(r) for r in rows]
 
-    def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "") -> ProjectData:
+    def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "", api_key: str = None, api_base: str = None) -> ProjectData:
         now = datetime.now(timezone.utc).isoformat()
         _skills = skills if skills is not None else ["opalacoder"]
         if "opalacoder" not in _skills:
             _skills = ["opalacoder"] + _skills
+
+        # Ensure the project path is absolute and exists
+        abs_proj_path = os.path.abspath(project_path) if project_path else os.getcwd()
+        try:
+            os.makedirs(abs_proj_path, exist_ok=True)
+
+            # 1. Initialize command-line skill inside the project's .opalacoder/skills/command-line/
+            shadow_skill_dir = os.path.join(abs_proj_path, ".opalacoder", "skills", "command-line")
+            os.makedirs(shadow_skill_dir, exist_ok=True)
+
+            package_dir = os.path.dirname(os.path.abspath(__file__))
+            builtin_skill_dir = os.path.join(package_dir, "skills", "command-line")
+            if not os.path.isdir(builtin_skill_dir):
+                repo_root = os.path.dirname(package_dir)
+                builtin_skill_dir = os.path.join(repo_root, "skills", "command-line")
+
+            if os.path.isdir(builtin_skill_dir):
+                import shutil
+                # Copy SKILL.md
+                src_md = os.path.join(builtin_skill_dir, "SKILL.md")
+                if os.path.isfile(src_md):
+                    shutil.copy2(src_md, os.path.join(shadow_skill_dir, "SKILL.md"))
+
+                # Copy scripts/command_executor.py
+                src_script_dir = os.path.join(builtin_skill_dir, "scripts")
+                dest_script_dir = os.path.join(shadow_skill_dir, "scripts")
+                if os.path.isdir(src_script_dir):
+                    os.makedirs(dest_script_dir, exist_ok=True)
+                    src_executor = os.path.join(src_script_dir, "command_executor.py")
+                    if os.path.isfile(src_executor):
+                        shutil.copy2(src_executor, os.path.join(dest_script_dir, "command_executor.py"))
+
+            # 2. Write project's skills.yaml containing the command-line skill
+            from .skills import write_skills_yaml
+            write_skills_yaml(abs_proj_path, ["command-line"])
+
+            # 3. Write API Key and API Base to local .env if provided
+            if api_key or api_base:
+                env_path = os.path.join(abs_proj_path, ".env")
+                env_lines = []
+                if os.path.isfile(env_path):
+                    try:
+                        with open(env_path, "r", encoding="utf-8") as f:
+                            env_lines = f.readlines()
+                    except Exception:
+                        pass
+                
+                def upsert_env(var_name, val):
+                    for i, line in enumerate(env_lines):
+                        if line.strip().startswith(f"{var_name}="):
+                            env_lines[i] = f"{var_name}={val}\n"
+                            return
+                    env_lines.append(f"{var_name}={val}\n")
+                    
+                if api_key:
+                    upsert_env("OPENAI_API_KEY", api_key)
+                if api_base:
+                    upsert_env("OPENAI_API_BASE", api_base)
+                    
+                with open(env_path, "w", encoding="utf-8") as f:
+                    f.writelines(env_lines)
+        except (OSError, PermissionError):
+            pass
+
         with _conn(self.db_path) as conn:
             conn.execute(
                 "INSERT INTO projects (name, created_at, updated_at, mode, model, alternative_model, project_name, project_path, skills, description, core_memory) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                (name, now, now, mode, model, alternative_model, project_name, project_path, json.dumps(_skills), description, ""),
+                (name, now, now, mode, model, alternative_model, project_name, abs_proj_path, json.dumps(_skills), description, ""),
             )
-        return ProjectData(name=name, mode=mode, model=model, alternative_model=alternative_model, project_name=project_name, project_path=project_path, skills=_skills, description=description, core_memory="")
+        return ProjectData(name=name, mode=mode, model=model, alternative_model=alternative_model, project_name=project_name, project_path=abs_proj_path, skills=_skills, description=description, core_memory="")
 
     def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "") -> ProjectData:
         self.delete(name)

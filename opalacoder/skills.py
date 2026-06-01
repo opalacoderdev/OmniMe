@@ -115,6 +115,8 @@ def discover_skills(project_path: str = "") -> list[dict]:
     First occurrence of a skill name wins (project skills shadow bundled ones).
     Returns a list of metadata dicts (see parse_skill_md).
     """
+    # Read explicit skill declarations; None means no skills.yaml (load all except store).
+    declared = read_skills_yaml(project_path)  # list or None
     found: list[dict] = []
     seen_names: set[str] = set()
     for base in skill_search_dirs(project_path):
@@ -124,6 +126,10 @@ def discover_skills(project_path: str = "") -> list[dict]:
             skill_dir = os.path.join(base, entry)
             if not os.path.isdir(skill_dir):
                 continue
+            # Exclude skills located under a "skills_store" directory unless explicitly declared
+            if "skills_store" in os.path.normpath(skill_dir).split(os.sep):
+                if not declared or entry not in declared:
+                    continue
             meta = parse_skill_md(skill_dir)
             if meta is None or meta["name"] in seen_names:
                 continue

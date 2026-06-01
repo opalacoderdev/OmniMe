@@ -153,6 +153,22 @@ def confirm(prompt: str, default: bool = True) -> bool:
     return raw in _("yes_hints")
 
 
+# Optional async hook for GUI mode. When set, aconfirm() awaits it instead of
+# calling the blocking sync confirm(). Set by agent_stdin in GUI context.
+_async_confirm_hook = None  # type: Callable[[str, bool], Coroutine[Any, Any, bool]] | None
+
+
+async def aconfirm(prompt: str, default: bool = True) -> bool:
+    """Async-capable confirm: delegates to GUI hook if available, sync otherwise."""
+    if _async_confirm_hook is not None:
+        return await _async_confirm_hook(prompt, default)
+    # Fallback: run the blocking sync version in the default executor so the
+    # event loop is not stalled when running in terminal mode.
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, confirm, prompt, default)
+
+
 def choose(prompt: str, options: list[str]) -> str:
     """Let user pick from a numbered list; returns chosen option string."""
     from rich.markup import escape

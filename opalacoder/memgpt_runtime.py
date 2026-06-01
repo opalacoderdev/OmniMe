@@ -29,6 +29,7 @@ from agenticblocks.blocks.llm.memgpt_agent import MemGPTAgentBlock
 from agenticblocks.core.function_block import as_tool
 
 from . import terminal as T
+from .tools import ask_human
 from .config import (
     DEFAULT_MODEL,
     ALTERNATIVE_MODEL,
@@ -227,6 +228,17 @@ def build_run_skill_tool(
         # sub-agent so script-driven skills can pass it through (e.g. --intent).
         prompt = f"INTENT: {intent}\n\n{context}"
         out = await sub_agent.run(AgentInput(prompt=prompt))
+
+        # Check for interactive input marker in the sub-agent's output.
+        if "<<NEED_INPUT>>" in out:
+            # Extract the prompt after the marker, e.g., "<<NEED_INPUT>> Please enter value"
+            parts = out.split("<<NEED_INPUT>>", 1)
+            user_prompt = parts[1].strip() if len(parts) > 1 else "Please provide required input:"
+            # Use the existing ask_human tool to request input via the chat UI.
+            user_response = ask_human(user_prompt)
+            # Append the user response to the original output for context.
+            out = out.replace("<<NEED_INPUT>>", f"[User provided: {user_response}]")
+            # Continue processing with the enriched output.
 
         # The sub-agent's full message was already mirrored into the MemGPT memory
         # by the interceptor (make_intercepted_send_message). Returning the full text
