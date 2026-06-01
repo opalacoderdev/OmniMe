@@ -189,3 +189,19 @@ def test_list_projects_most_recent_first(store):
     names = [p["name"] for p in projects]
     # new_proj was created after old_proj, so it should appear first
     assert names.index("new_proj") < names.index("old_proj")
+
+
+def test_create_initializes_shadow_git(store, tmp_path):
+    proj_dir = tmp_path / "my_new_project"
+    p = store.create(
+        name="shadow_git_test",
+        mode="hybrid",
+        model="fake/model",
+        project_name="Shadow Git Test",
+        project_path=str(proj_dir),
+    )
+    # Check that .opalacoder/.git directory exists
+    git_dir = proj_dir / ".opalacoder" / ".git"
+    assert git_dir.exists()
+    assert git_dir.is_dir()
+

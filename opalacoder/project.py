@@ -204,6 +204,12 @@ class ProjectStore:
                     
                 with open(env_path, "w", encoding="utf-8") as f:
                     f.writelines(env_lines)
+
+            # 4. Initialize VCS shadow git
+            from .vcs import get_vcs_strategy
+            from .config import get_git_strategy
+            vcs = get_vcs_strategy(get_git_strategy(), abs_proj_path)
+            vcs.setup()
         except (OSError, PermissionError):
             pass
 

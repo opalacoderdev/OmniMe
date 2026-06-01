@@ -329,6 +329,10 @@ async def cmd_undo(state: REPLState, _args: list[str]) -> str | None:
     from .vcs import get_vcs_strategy
     from .config import get_git_strategy
     vcs = get_vcs_strategy(get_git_strategy(), state.project.project_path)
+    try:
+        vcs.setup()
+    except Exception as e:
+        T.error(f"Failed to setup VCS: {e}")
     success, msg = vcs.undo_last()
     if success:
         T.success(_("undo_success"))
@@ -346,6 +350,10 @@ async def cmd_commit(state: REPLState, args: list[str]) -> str | None:
     from .vcs import get_vcs_strategy
     from .config import get_git_strategy
     vcs = get_vcs_strategy(get_git_strategy(), state.project.project_path)
+    try:
+        vcs.setup()
+    except Exception as e:
+        T.error(f"Failed to setup VCS: {e}")
     success, msg = vcs.manual_commit(message)
     if success:
         T.success(_("commit_success"))

@@ -1,20 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Editor from '@monaco-editor/react';
-import { 
-  Files, 
-  GitBranch, 
-  MessageSquare, 
-  Settings, 
-  Folder, 
-  File, 
-  Plus, 
-  Trash2, 
+import {
+  Files,
+  GitBranch,
+  MessageSquare,
+  Settings,
+  Folder,
+  FolderPlus,
+  File,
+  Plus,
+  Trash2,
   Edit2,
   Trash,
-  RefreshCw, 
-  X, 
-  Undo, 
-  Check, 
+  RefreshCw,
+  X,
+  Undo,
+  Check,
   ArrowRight,
   ChevronRight,
   ChevronDown,
@@ -71,7 +72,7 @@ export default function App() {
   const [thinkingLogs, setThinkingLogs] = useState([]);
   const [showAdvancedParams, setShowAdvancedParams] = useState(false);
   const [newProjError, setNewProjError] = useState('');
-  
+
   // IDE Settings States
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState('preferences');
@@ -84,6 +85,8 @@ export default function App() {
   const [gitChanges, setGitChanges] = useState([]);
   const [commitMessage, setCommitMessage] = useState('');
   const [isCommitting, setIsCommitting] = useState(false);
+  const [draggedNode, setDraggedNode] = useState(null);
+  const [dragOverPath, setDragOverPath] = useState(null);
 
   // Optional Dependencies States
   const [isInstallingDeps, setIsInstallingDeps] = useState(false);
@@ -179,9 +182,41 @@ export default function App() {
   const chatEndRef = useRef(null);
   const logEndRef = useRef(null);
   const editorRef = useRef(null);
+  const saveFileRef = useRef(null);
 
   const handleEditorDidMount = (editor, monaco) => {
     editorRef.current = editor;
+
+    editor.onKeyDown((e) => {
+      const browserEvent = e.browserEvent;
+      const isCtrl = browserEvent.ctrlKey || browserEvent.metaKey;
+      const key = browserEvent.key;
+      const code = browserEvent.code;
+
+      if (isCtrl && (key === '+' || key === '=' || code === 'Equal' || code === 'NumpadAdd')) {
+        browserEvent.preventDefault();
+        browserEvent.stopPropagation();
+        setEditorFontSize(prev => {
+          const nextVal = Math.min(30, prev + 1);
+          safeSetLocalStorage('editorFontSize', nextVal);
+          return nextVal;
+        });
+      } else if (isCtrl && (key === '-' || code === 'Minus' || code === 'NumpadSubtract')) {
+        browserEvent.preventDefault();
+        browserEvent.stopPropagation();
+        setEditorFontSize(prev => {
+          const nextVal = Math.max(10, prev - 1);
+          safeSetLocalStorage('editorFontSize', nextVal);
+          return nextVal;
+        });
+      } else if (isCtrl && key === 's') {
+        browserEvent.preventDefault();
+        browserEvent.stopPropagation();
+        if (saveFileRef.current) {
+          saveFileRef.current();
+        }
+      }
+    });
   };
 
   useEffect(() => {
@@ -257,17 +292,21 @@ export default function App() {
   // Keybindings (Ctrl+S to save, Ctrl+ / Ctrl- to zoom)
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      const isCtrl = e.ctrlKey || e.metaKey;
+      const key = e.key;
+      const code = e.code;
+
+      if (isCtrl && key === 's') {
         e.preventDefault();
         saveFile();
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=')) {
+      } else if (isCtrl && (key === '+' || key === '=' || code === 'Equal' || code === 'NumpadAdd')) {
         e.preventDefault();
         setEditorFontSize(prev => {
           const nextVal = Math.min(30, prev + 1);
           safeSetLocalStorage('editorFontSize', nextVal);
           return nextVal;
         });
-      } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+      } else if (isCtrl && (key === '-' || code === 'Minus' || code === 'NumpadSubtract')) {
         e.preventDefault();
         setEditorFontSize(prev => {
           const nextVal = Math.max(10, prev - 1);
@@ -310,7 +349,7 @@ export default function App() {
     term.open(terminalRef.current);
     try {
       fitAddon.fit();
-    } catch(e) {}
+    } catch (e) { }
     terminalInstanceRef.current = term;
     fitAddonRef.current = fitAddon;
 
@@ -357,7 +396,7 @@ export default function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'resize', cols, rows, projectPath: activeProject.project_path })
           }).catch(err => console.error("Failed to send terminal resize", err));
-        } catch (e) {}
+        } catch (e) { }
       }
     });
     resizeObserver.observe(terminalRef.current);
@@ -393,9 +432,9 @@ export default function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'resize', cols, rows, projectPath: activeProject.project_path })
           }).catch(err => console.error("Failed to send terminal resize", err));
-          
+
           terminalInstanceRef.current.focus();
-        } catch (e) {}
+        } catch (e) { }
       }, 50);
     }
   }, [activeBottomTab, bottomPanelHeight, activeProject]);
@@ -488,19 +527,19 @@ export default function App() {
       if (!response.ok) {
         throw new Error('Falha ao iniciar instalação');
       }
-      
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
-      
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        
+
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop();
-        
+
         for (const line of lines) {
           if (!line.trim()) continue;
           try {
@@ -575,7 +614,7 @@ export default function App() {
     const defaultPath = parentPath ? `${parentPath}/` : '';
     const filename = window.prompt("Nome do novo arquivo (ex: src/utils.py):", defaultPath);
     if (!filename) return;
-    
+
     try {
       const res = await fetch('/api/file/write', {
         method: 'POST',
@@ -586,7 +625,7 @@ export default function App() {
           content: ''
         })
       });
-      
+
       if (res.ok) {
         addLog('info', `Arquivo criado: ${filename}`);
         await fetchFiles();
@@ -599,6 +638,35 @@ export default function App() {
       }
     } catch (err) {
       addLog('error', `Erro na chamada de criação de arquivo: ${err.message}`);
+    }
+  };
+
+  const handleCreateNewDir = async (parentPath) => {
+    if (!activeProject) return;
+    const defaultPath = parentPath ? `${parentPath}/` : '';
+    const dirname = window.prompt("Nome do novo diretório (ex: src/components):", defaultPath);
+    if (!dirname) return;
+
+    try {
+      const res = await fetch('/api/file/mkdir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectPath: activeProject.project_path,
+          dirPath: dirname
+        })
+      });
+
+      if (res.ok) {
+        addLog('info', `Diretório criado: ${dirname}`);
+        await fetchFiles();
+      } else {
+        const errData = await res.json();
+        addLog('error', `Falha ao criar diretório: ${errData.error}`);
+        alert(`Erro ao criar diretório: ${errData.error}`);
+      }
+    } catch (err) {
+      addLog('error', `Erro na chamada de criação de diretório: ${err.message}`);
     }
   };
 
@@ -620,7 +688,7 @@ export default function App() {
 
       if (res.ok) {
         addLog('info', `${node.isDirectory ? 'Diretório' : 'Arquivo'} renomeado de ${node.path} para ${newPath}`);
-        
+
         if (!node.isDirectory) {
           // If it is a file, update tabs
           setOpenFiles(prev => prev.map(f => f === node.path ? newPath : f));
@@ -664,6 +732,73 @@ export default function App() {
     }
   };
 
+  const handleMoveNode = async (oldPath, targetDirPath, isDirectory) => {
+    if (!activeProject) return;
+    const nodeName = oldPath.split('/').pop();
+    const newPath = targetDirPath ? `${targetDirPath}/${nodeName}` : nodeName;
+    if (oldPath === newPath) return;
+
+    if (isDirectory) {
+      if (newPath === oldPath || newPath.startsWith(`${oldPath}/`)) {
+        addLog('error', 'Não é possível mover um diretório para dentro dele mesmo.');
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch('/api/file/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectPath: activeProject.project_path,
+          oldPath: oldPath,
+          newPath: newPath
+        })
+      });
+
+      if (res.ok) {
+        addLog('info', `${isDirectory ? 'Diretório' : 'Arquivo'} movido de ${oldPath} para ${newPath}`);
+
+        if (!isDirectory) {
+          setOpenFiles(prev => prev.map(f => f === oldPath ? newPath : f));
+          setFileContents(prev => {
+            const next = { ...prev };
+            const content = next[oldPath];
+            delete next[oldPath];
+            next[newPath] = content;
+            return next;
+          });
+          if (selectedFile === oldPath) {
+            setSelectedFile(newPath);
+          }
+        } else {
+          const prefix = `${oldPath}/`;
+          setOpenFiles(prev => prev.map(f => f.startsWith(prefix) ? f.replace(oldPath, newPath) : f));
+          setFileContents(prev => {
+            const next = {};
+            for (const [k, v] of Object.entries(prev)) {
+              if (k.startsWith(prefix)) {
+                next[k.replace(oldPath, newPath)] = v;
+              } else {
+                next[k] = v;
+              }
+            }
+            return next;
+          });
+          if (selectedFile && selectedFile.startsWith(prefix)) {
+            setSelectedFile(prev => prev.replace(oldPath, newPath));
+          }
+        }
+        await fetchFiles();
+      } else {
+        const errData = await res.json();
+        addLog('error', `Falha ao mover: ${errData.error}`);
+      }
+    } catch (err) {
+      addLog('error', `Erro ao mover: ${err.message}`);
+    }
+  };
+
   const handleDeleteNode = async (node) => {
     if (!activeProject || !node) return;
     const confirmMsg = `Tem certeza que deseja deletar o ${node.isDirectory ? 'diretório' : 'arquivo'} "${node.path}"?${node.isDirectory ? ' Todos os arquivos internos serão removidos!' : ''}`;
@@ -681,7 +816,7 @@ export default function App() {
 
       if (res.ok) {
         addLog('info', `${node.isDirectory ? 'Diretório' : 'Arquivo'} excluído: ${node.path}`);
-        
+
         if (!node.isDirectory) {
           // Remove from tabs
           setOpenFiles(prev => prev.filter(f => f !== node.path));
@@ -748,14 +883,14 @@ export default function App() {
       e.stopPropagation();
       e.preventDefault();
     }
-    
+
     if (selectedFile === filePath) {
       setFileContents(prev => ({ ...prev, [filePath]: fileContent }));
     }
 
     setOpenFiles(prev => {
       const remaining = prev.filter(f => f !== filePath);
-      
+
       if (selectedFile === filePath) {
         if (remaining.length > 0) {
           const nextActive = remaining[remaining.length - 1];
@@ -772,7 +907,7 @@ export default function App() {
 
   const handleFileSelect = async (filePath) => {
     if (!activeProject) return;
-    
+
     if (selectedFile) {
       setFileContents(prev => ({ ...prev, [selectedFile]: fileContent }));
     }
@@ -783,7 +918,7 @@ export default function App() {
       }
       return prev;
     });
-    
+
     setSelectedFile(filePath);
 
     if (fileContents[filePath] !== undefined) {
@@ -832,6 +967,10 @@ export default function App() {
       setIsSaving(false);
     }
   };
+
+  useEffect(() => {
+    saveFileRef.current = saveFile;
+  }, [saveFile]);
 
   const handleCreateProject = async (e) => {
     e.preventDefault();
@@ -1112,7 +1251,7 @@ export default function App() {
       case 'problem':
         addLog('error', `[Problema em ${data.tool}]: ${data.message}`);
         setProblems(prev => [
-          ...prev, 
+          ...prev,
           {
             id: Math.random().toString(),
             tool: data.tool,
@@ -1167,21 +1306,21 @@ export default function App() {
 
   return (
     <div className="vscode-app">
-      
+
       {/* Main Row container */}
       <div className="vscode-main">
-        
+
         {/* VSCode Activity Bar (48px wide) */}
         <div className="vscode-activitybar">
           <div className="vscode-activitybar-top">
-            <button 
+            <button
               onClick={() => setActiveSidebarTab('explorer')}
               className={`vscode-activitybar-btn ${activeSidebarTab === 'explorer' ? 'active' : ''}`}
               title="Explorer"
             >
               <Files size={22} />
             </button>
-            <button 
+            <button
               onClick={() => setActiveSidebarTab('git')}
               className={`vscode-activitybar-btn ${activeSidebarTab === 'git' ? 'active' : ''}`}
               title="Source Control"
@@ -1209,19 +1348,19 @@ export default function App() {
                 </span>
               )}
             </button>
-            <button 
+            <button
               onClick={() => setIsChatVisible(!isChatVisible)}
               className={`vscode-activitybar-btn ${isChatVisible ? 'active' : ''}`}
-              title="Copilot Chat"
+              title="Opala Chat"
             >
               <MessageSquare size={22} />
             </button>
           </div>
-          
+
           <div>
-            <button 
+            <button
               onClick={() => setIsSettingsOpen(true)}
-              className="vscode-activitybar-btn" 
+              className="vscode-activitybar-btn"
               title="Settings"
             >
               <Settings size={20} />
@@ -1236,7 +1375,7 @@ export default function App() {
               {/* Sidebar Header */}
               <div className="vscode-sidebar-header">
                 <span className="vscode-sidebar-title">EXPLORER: PROJECTS</span>
-                <button 
+                <button
                   onClick={() => setShowNewProjectModal(true)}
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#c5c5c5' }}
                   title="Novo Projeto..."
@@ -1252,7 +1391,7 @@ export default function App() {
                   {projects.map(p => {
                     const isActive = activeProject && activeProject.name === p.name;
                     return (
-                      <div 
+                      <div
                         key={p.name}
                         onClick={() => handleSelectProject(p)}
                         className={`vscode-project-item ${isActive ? 'active' : ''}`}
@@ -1262,7 +1401,7 @@ export default function App() {
                           <div style={{ fontSize: '10px', color: '#808080' }} className="truncate">{p.project_path}</div>
                         </div>
                         {/* Settings (edit) button */}
-                        <button 
+                        <button
                           onClick={(e) => openEditModal(e, p)}
                           style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0', padding: '2px 4px' }}
                           title="Configurar projeto"
@@ -1270,7 +1409,7 @@ export default function App() {
                           <Settings size={12} />
                         </button>
                         {/* Delete button */}
-                        <button 
+                        <button
                           onClick={(e) => { e.stopPropagation(); handleDeleteProject(p.name); }}
                           style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0', padding: '2px 4px' }}
                           title="Remover projeto"
@@ -1284,7 +1423,30 @@ export default function App() {
               </div>
 
               {/* Files list tree */}
-              <div className="vscode-sidebar-content" onContextMenu={handleWorkspaceContextMenu}>
+              <div
+                className="vscode-sidebar-content"
+                onContextMenu={handleWorkspaceContextMenu}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (draggedNode) {
+                    setDragOverPath('__root__');
+                  }
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  if (dragOverPath === '__root__') {
+                    setDragOverPath(null);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverPath(null);
+                  if (draggedNode) {
+                    handleMoveNode(draggedNode.path, '', draggedNode.isDirectory);
+                  }
+                }}
+                style={dragOverPath === '__root__' ? { border: '2px dashed #007acc', backgroundColor: 'rgba(0, 122, 204, 0.05)' } : {}}
+              >
                 <div className="vscode-sidebar-section-title">Workspace Files</div>
                 {files.length === 0 ? (
                   <div style={{ fontSize: '12px', color: '#808080', padding: '0 4px', fontStyle: 'italic' }}>
@@ -1293,12 +1455,17 @@ export default function App() {
                 ) : (
                   <div>
                     {files.map(node => (
-                      <FileNode 
-                        key={node.path} 
-                        node={node} 
-                        selectedFile={selectedFile} 
-                        handleFileSelect={handleFileSelect} 
+                      <FileNode
+                        key={node.path}
+                        node={node}
+                        selectedFile={selectedFile}
+                        handleFileSelect={handleFileSelect}
                         handleNodeContextMenu={handleNodeContextMenu}
+                        draggedNode={draggedNode}
+                        setDraggedNode={setDraggedNode}
+                        dragOverPath={dragOverPath}
+                        setDragOverPath={setDragOverPath}
+                        handleMoveNode={handleMoveNode}
                       />
                     ))}
                   </div>
@@ -1308,7 +1475,7 @@ export default function App() {
           ) : (
             <div className="vscode-sidebar-content" style={{ padding: '12px', display: 'flex', flexDirection: 'column', height: '100%', gap: '16px' }}>
               <div className="vscode-sidebar-title">SOURCE CONTROL (GIT)</div>
-              
+
               {!activeProject ? (
                 <div style={{ fontSize: '12px', color: '#808080', fontStyle: 'italic' }}>
                   Selecione um projeto para ver as alterações Git.
@@ -1321,16 +1488,16 @@ export default function App() {
                 <div className="flex flex-col flex-1 overflow-hidden" style={{ gap: '16px' }}>
                   {/* Commit message input */}
                   <form onSubmit={handleGitCommit} className="flex flex-col" style={{ gap: '8px' }}>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       placeholder="Mensagem do Commit..."
                       value={commitMessage}
                       onChange={(e) => setCommitMessage(e.target.value)}
                       required
                       style={{ width: '100%', fontSize: '12px' }}
                     />
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="vscode-button"
                       disabled={isCommitting || !commitMessage.trim()}
                       style={{ width: '100%' }}
@@ -1346,7 +1513,7 @@ export default function App() {
                       {gitChanges.map((change, i) => {
                         let statusColor = '#cccccc';
                         let statusLabel = change.status;
-                        
+
                         if (change.status === 'M') {
                           statusColor = '#e2b52b'; // Yellow
                           statusLabel = 'M';
@@ -1359,32 +1526,32 @@ export default function App() {
                         }
 
                         return (
-                          <div 
-                            key={i} 
-                            style={{ 
-                              display: 'flex', 
-                              justifyContent: 'space-between', 
-                              alignItems: 'center', 
-                              fontSize: '12px', 
+                          <div
+                            key={i}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              fontSize: '12px',
                               padding: '4px 6px',
                               borderRadius: '3px',
                               background: 'rgba(255,255,255,0.02)'
                             }}
                           >
-                            <span 
-                              className="truncate" 
+                            <span
+                              className="truncate"
                               title={change.path}
                               style={{ color: '#cccccc', flex: 1, marginRight: '8px' }}
                             >
                               {change.path}
                             </span>
-                            <span 
-                              style={{ 
-                                fontWeight: 'bold', 
-                                color: statusColor, 
-                                fontSize: '11px', 
-                                minWidth: '12px', 
-                                textAlign: 'center' 
+                            <span
+                              style={{
+                                fontWeight: 'bold',
+                                color: statusColor,
+                                fontSize: '11px',
+                                minWidth: '12px',
+                                textAlign: 'center'
                               }}
                             >
                               {statusLabel}
@@ -1401,14 +1568,14 @@ export default function App() {
         </aside>
 
         {/* Left Resizer split bar */}
-        <div 
+        <div
           className="vscode-resizer-horizontal"
           onMouseDown={(e) => startResizing(e, 'left')}
         />
 
         {/* Center Panel (Monaco Editor & Collapsible Console) */}
         <main className="vscode-editor-panel">
-          
+
           {selectedFile ? (
             <div className="vscode-editor-panel">
               {/* Tab Header bar */}
@@ -1417,7 +1584,7 @@ export default function App() {
                   {openFiles.map(filePath => {
                     const isActive = filePath === selectedFile;
                     return (
-                      <div 
+                      <div
                         key={filePath}
                         onClick={() => handleFileSelect(filePath)}
                         className={`vscode-tab ${isActive ? 'active' : ''}`}
@@ -1426,8 +1593,8 @@ export default function App() {
                         <span style={{ color: isActive ? '#ffffff' : '#a0a0a0' }}>
                           {filePath.split('/').pop()}
                         </span>
-                        <button 
-                          onClick={(e) => handleCloseTab(filePath, e)} 
+                        <button
+                          onClick={(e) => handleCloseTab(filePath, e)}
                           className="vscode-tab-close-btn"
                         >
                           <X size={12} />
@@ -1436,9 +1603,9 @@ export default function App() {
                     );
                   })}
                 </div>
-                
+
                 <div>
-                  <button 
+                  <button
                     onClick={saveFile}
                     disabled={isSaving}
                     className="vscode-button"
@@ -1482,7 +1649,7 @@ export default function App() {
 
           {/* Vertical Resizer split bar */}
           {!isTerminalCollapsed && (
-            <div 
+            <div
               className="vscode-resizer-vertical"
               onMouseDown={(e) => startResizing(e, 'bottom')}
             />
@@ -1492,25 +1659,25 @@ export default function App() {
           <div className="vscode-bottom-panel" style={{ height: isTerminalCollapsed ? '30px' : `${bottomPanelHeight}px` }}>
             <div className="vscode-bottom-tabs">
               <div className="vscode-bottom-tab-list">
-                <span 
+                <span
                   className={`vscode-bottom-tab ${activeBottomTab === 'output' ? 'active' : ''}`}
                   onClick={() => selectTab('output')}
                 >
                   OUTPUT (OPALACODER)
                 </span>
-                <span 
+                <span
                   className={`vscode-bottom-tab ${activeBottomTab === 'problems' ? 'active' : ''}`}
                   onClick={() => selectTab('problems')}
                 >
                   PROBLEMS {problems.length > 0 && <span style={{ marginLeft: '4px', background: '#f48771', color: '#1e1e1e', borderRadius: '10px', padding: '0 6px', fontSize: '10px', fontWeight: 'bold' }}>{problems.length}</span>}
                 </span>
-                <span 
+                <span
                   className={`vscode-bottom-tab ${activeBottomTab === 'thinking' ? 'active' : ''}`}
                   onClick={() => selectTab('thinking')}
                 >
                   THINKING
                 </span>
-                <span 
+                <span
                   className={`vscode-bottom-tab ${activeBottomTab === 'terminal' ? 'active' : ''}`}
                   onClick={() => selectTab('terminal')}
                 >
@@ -1519,28 +1686,28 @@ export default function App() {
               </div>
               <div className="flex items-center" style={{ gap: '8px' }}>
                 {(activeBottomTab === 'output' || activeBottomTab === 'problems' || activeBottomTab === 'thinking') && (
-                  <button 
+                  <button
                     onClick={
-                      activeBottomTab === 'output' 
-                        ? () => setTerminalLogs([]) 
-                        : activeBottomTab === 'problems' 
-                        ? () => setProblems([]) 
-                        : () => setThinkingLogs([])
+                      activeBottomTab === 'output'
+                        ? () => setTerminalLogs([])
+                        : activeBottomTab === 'problems'
+                          ? () => setProblems([])
+                          : () => setThinkingLogs([])
                     }
                     className="vscode-bottom-panel-clear-btn"
                     title={
-                      activeBottomTab === 'output' 
-                        ? 'Limpar Output' 
-                        : activeBottomTab === 'problems' 
-                        ? 'Limpar Problemas' 
-                        : 'Limpar Pensamentos'
+                      activeBottomTab === 'output'
+                        ? 'Limpar Output'
+                        : activeBottomTab === 'problems'
+                          ? 'Limpar Problemas'
+                          : 'Limpar Pensamentos'
                     }
                   >
                     <Trash size={12} />
                     <span>Clear</span>
                   </button>
                 )}
-                <button 
+                <button
                   onClick={() => setIsTerminalCollapsed(!isTerminalCollapsed)}
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
                 >
@@ -1548,7 +1715,7 @@ export default function App() {
                 </button>
               </div>
             </div>
-            
+
             {!isTerminalCollapsed && (
               <div style={{ height: 'calc(100% - 30px)', width: '100%' }}>
                 {activeBottomTab === 'output' && (
@@ -1559,13 +1726,13 @@ export default function App() {
                       terminalLogs.map((log, i) => {
                         let color = 'text-[#cccccc]';
                         let label = 'SYSTEM';
-                        
+
                         if (log.type === 'error') { color = 'text-[#f48771] font-semibold'; label = 'ERROR'; }
                         else if (log.type === 'info') { color = 'text-[#75beff]'; label = 'INFO'; }
                         else if (log.type === 'thought') { color = 'text-[#da70d6] italic'; label = 'THOUGHT'; }
                         else if (log.type === 'tool_call') { color = 'text-[#d7ba7d]'; label = 'TOOL'; }
                         else if (log.type === 'tool_result') { color = 'text-[#89d4a5]'; label = 'RESULT'; }
-                        
+
                         return (
                           <div key={i} className={color} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '3px' }}>
                             <span style={{ color: '#5a5a5a' }}>[{log.timestamp}]</span>
@@ -1631,21 +1798,21 @@ export default function App() {
 
         {/* Right Resizer split bar */}
         {isChatVisible && (
-          <div 
+          <div
             className="vscode-resizer-horizontal"
             onMouseDown={(e) => startResizing(e, 'right')}
           />
         )}
 
-        {/* VSCode Copilot Chat (Right Panel) */}
+        {/* Opala Chat (Right Panel) */}
         {isChatVisible && (
           <aside className="vscode-chat" style={{ width: `${chatWidth}px` }}>
             <div className="vscode-chat-header">
               <span className="vscode-sidebar-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <MessageSquare size={12} style={{ color: '#007acc' }} />
-                <span>COPILOT CHAT</span>
+                <span>OPALA CHAT</span>
               </span>
-              <button 
+              <button
                 onClick={() => setIsChatVisible(false)}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
               >
@@ -1675,9 +1842,9 @@ export default function App() {
                 const isUser = msg.role === 'user';
                 return (
                   <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span 
-                       className="vscode-chat-msg-header" 
-                       style={{ color: isUser ? '#75beff' : '#da70d6' }}
+                    <span
+                      className="vscode-chat-msg-header"
+                      style={{ color: isUser ? '#75beff' : '#da70d6' }}
                     >
                       {isUser ? 'VOCÊ' : 'OPALACODER'}
                     </span>
@@ -1707,7 +1874,7 @@ export default function App() {
             {/* Footer input form */}
             <form onSubmit={handleSendMessage} className="vscode-chat-form">
               <div className="vscode-chat-input-row">
-                <input 
+                <input
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
@@ -1716,7 +1883,7 @@ export default function App() {
                   style={{ flex: 1 }}
                 />
                 {isAgentRunning ? (
-                  <button 
+                  <button
                     type="button"
                     onClick={handleInterruptAgent}
                     className="vscode-button"
@@ -1726,7 +1893,7 @@ export default function App() {
                     <X size={14} />
                   </button>
                 ) : (
-                  <button 
+                  <button
                     type="submit"
                     disabled={!activeProject || !chatInput.trim()}
                     className="vscode-button"
@@ -1757,7 +1924,7 @@ export default function App() {
             </span>
           )}
         </div>
-        
+
         <div className="flex items-center" style={{ gap: '12px' }}>
           <span>UTF-8</span>
           <span>LF</span>
@@ -1771,30 +1938,30 @@ export default function App() {
           <div className="vscode-modal" style={{ maxWidth: '440px', width: '90%' }}>
             <div className="vscode-sidebar-header" style={{ padding: '10px 16px' }}>
               <span className="vscode-sidebar-title" style={{ color: '#ffffff' }}>MÓDULOS OPCIONAIS REQUERIDOS</span>
-              <button 
+              <button
                 onClick={() => setShowInstallPrompt(false)}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
               >
                 <X size={14} />
               </button>
             </div>
-            <div style={{ padding: '16px', color: '#cccccc', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="overflow-y-auto flex-1" style={{ padding: '16px', color: '#cccccc', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <p style={{ fontSize: '13px', lineHeight: '1.5' }}>
                 Os módulos opcionais para embeddings offline (<code>sentence-transformers</code>) não foram encontrados no ambiente.
               </p>
               <p style={{ fontSize: '12px', color: '#888888', lineHeight: '1.4' }}>
                 Recomendamos a instalação para habilitar o processamento local de vetores e a indexação de código sem depender de APIs externas.
               </p>
-              
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px', borderTop: '1px solid #3c3c3c', paddingTop: '12px' }}>
-                <button 
+                <button
                   onClick={() => setShowInstallPrompt(false)}
                   className="vscode-button"
                   style={{ backgroundColor: '#3c3c3c', color: '#ffffff' }}
                 >
                   Ignorar
                 </button>
-                <button 
+                <button
                   onClick={() => {
                     setShowInstallPrompt(false);
                     setIsSettingsOpen(true);
@@ -1817,40 +1984,40 @@ export default function App() {
           <div className="vscode-modal">
             <div className="vscode-sidebar-header" style={{ padding: '10px 16px' }}>
               <span className="vscode-sidebar-title" style={{ color: '#ffffff' }}>REGISTRAR NOVO PROJETO</span>
-              <button 
+              <button
                 onClick={() => setShowNewProjectModal(false)}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
               >
                 <X size={14} />
               </button>
             </div>
-            
-            <form onSubmit={handleCreateProject} className="flex flex-col" style={{ padding: '16px', gap: '12px' }}>
+
+            <form onSubmit={handleCreateProject} className="flex flex-col overflow-y-auto flex-1" style={{ padding: '16px', gap: '12px' }}>
               <div className="flex flex-col" style={{ gap: '4px' }}>
                 <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Nome do Projeto *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={newProjName}
                   onChange={(e) => setNewProjName(e.target.value)}
-                  placeholder="Ex: Meu Servidor Web" 
+                  placeholder="Ex: Meu Servidor Web"
                   required
                 />
               </div>
 
               <div className="flex flex-col" style={{ gap: '4px' }}>
                 <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Caminho Absoluto *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={newProjPath}
                   onChange={(e) => setNewProjPath(e.target.value)}
-                  placeholder="Ex: /home/gilzamir/projetos/meu-app" 
+                  placeholder="Ex: /home/gilzamir/projetos/meu-app"
                   required
                 />
               </div>
 
               <div className="flex flex-col" style={{ gap: '4px' }}>
                 <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Descrição</label>
-                <textarea 
+                <textarea
                   value={newProjDesc}
                   onChange={(e) => setNewProjDesc(e.target.value)}
                   placeholder="Descritivo do projeto..."
@@ -1862,21 +2029,21 @@ export default function App() {
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
                   <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Chave de API (Opcional)</label>
-                  <input 
-                    type="password" 
+                  <input
+                    type="password"
                     value={newProjApiKey}
                     onChange={(e) => setNewProjApiKey(e.target.value)}
-                    placeholder="Ex: sk-..." 
+                    placeholder="Ex: sk-..."
                   />
                 </div>
 
                 <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
                   <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>URL Base da API (Opcional)</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={newProjApiBase}
                     onChange={(e) => setNewProjApiBase(e.target.value)}
-                    placeholder="Ex: http://localhost:11434/v1" 
+                    placeholder="Ex: http://localhost:11434/v1"
                   />
                 </div>
               </div>
@@ -1904,7 +2071,7 @@ export default function App() {
 
                 <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
                   <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Modo de Execução</label>
-                  <select 
+                  <select
                     value={newProjMode}
                     onChange={(e) => setNewProjMode(e.target.value)}
                   >
@@ -1922,16 +2089,16 @@ export default function App() {
               )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '12px', borderTop: '1px solid #3c3c3c', marginTop: '4px' }}>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setShowNewProjectModal(false)}
                   className="vscode-button"
                   style={{ backgroundColor: '#3c3c3c', color: '#ffffff' }}
                 >
                   Cancelar
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="vscode-button"
                 >
                   Registrar
@@ -1944,11 +2111,11 @@ export default function App() {
 
       {/* Floating custom context menu */}
       {contextMenu && (
-        <div 
+        <div
           className="vscode-context-menu"
           style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
         >
-          <div 
+          <div
             className="vscode-context-menu-item"
             onClick={() => {
               const p = rightClickedNode
@@ -1960,16 +2127,28 @@ export default function App() {
             <Plus size={13} style={{ color: '#007acc' }} />
             <span>New File...</span>
           </div>
+          <div
+            className="vscode-context-menu-item"
+            onClick={() => {
+              const p = rightClickedNode
+                ? (rightClickedNode.isDirectory ? rightClickedNode.path : rightClickedNode.path.split('/').slice(0, -1).join('/'))
+                : '';
+              handleCreateNewDir(p);
+            }}
+          >
+            <FolderPlus size={13} style={{ color: '#007acc' }} />
+            <span>New Dir...</span>
+          </div>
           {rightClickedNode && (
             <>
-              <div 
+              <div
                 className="vscode-context-menu-item"
                 onClick={() => handleRenameNode(rightClickedNode)}
               >
                 <Edit2 size={13} style={{ color: '#e2b52b' }} />
                 <span>Rename...</span>
               </div>
-              <div 
+              <div
                 className="vscode-context-menu-item"
                 onClick={() => handleDeleteNode(rightClickedNode)}
               >
@@ -1999,7 +2178,7 @@ export default function App() {
               </button>
             </div>
 
-            <form onSubmit={handleUpdateProject} className="flex flex-col" style={{ padding: '16px', gap: '14px' }}>
+            <form onSubmit={handleUpdateProject} className="flex flex-col overflow-y-auto flex-1" style={{ padding: '16px', gap: '14px' }}>
               {/* Internal key (read-only) */}
               <div className="flex flex-col" style={{ gap: '4px' }}>
                 <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>ID Interno (somente leitura)</label>
@@ -2355,7 +2534,7 @@ export default function App() {
 
             {/* Tab selector */}
             <div style={{ display: 'flex', borderBottom: '1px solid var(--vscode-border)', backgroundColor: 'var(--vscode-tab-inactive-bg)' }}>
-              <button 
+              <button
                 onClick={() => setSettingsTab('preferences')}
                 style={{
                   flex: 1,
@@ -2372,7 +2551,7 @@ export default function App() {
               >
                 Preferências
               </button>
-              <button 
+              <button
                 onClick={() => setSettingsTab('about')}
                 style={{
                   flex: 1,
@@ -2391,14 +2570,14 @@ export default function App() {
               </button>
             </div>
 
-            <div className="flex flex-col" style={{ padding: '16px', gap: '14px' }}>
+            <div className="flex flex-col overflow-y-auto flex-1" style={{ padding: '16px', gap: '14px' }}>
               {settingsTab === 'preferences' ? (
                 <>
                   {/* Tema Visual */}
                   <div className="flex flex-col" style={{ gap: '6px' }}>
                     <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Tema de Cor</label>
-                    <select 
-                      value={theme} 
+                    <select
+                      value={theme}
                       onChange={(e) => setTheme(e.target.value)}
                       style={{ width: '100%' }}
                     >
@@ -2410,11 +2589,11 @@ export default function App() {
                   {/* Tamanho da Fonte */}
                   <div className="flex flex-col" style={{ gap: '6px' }}>
                     <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Tamanho da Fonte do Editor</label>
-                    <input 
-                      type="number" 
-                      min="10" 
+                    <input
+                      type="number"
+                      min="10"
                       max="30"
-                      value={editorFontSize} 
+                      value={editorFontSize}
                       onChange={(e) => {
                         const val = Number(e.target.value);
                         setEditorFontSize(val);
@@ -2427,8 +2606,8 @@ export default function App() {
                   {/* Tab Size */}
                   <div className="flex flex-col" style={{ gap: '6px' }}>
                     <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Tamanho do Tab (Espaços)</label>
-                    <select 
-                      value={editorTabSize} 
+                    <select
+                      value={editorTabSize}
                       onChange={(e) => {
                         const val = Number(e.target.value);
                         setEditorTabSize(val);
@@ -2445,8 +2624,8 @@ export default function App() {
                   {/* Word Wrap */}
                   <div className="flex flex-col" style={{ gap: '6px' }}>
                     <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Quebra Automática de Linha (Word Wrap)</label>
-                    <select 
-                      value={editorWordWrap} 
+                    <select
+                      value={editorWordWrap}
                       onChange={(e) => {
                         setEditorWordWrap(e.target.value);
                         safeSetLocalStorage('editorWordWrap', e.target.value);
@@ -2502,7 +2681,7 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#cccccc' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Versão</span>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.20 alfa</span>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.24 alfa</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Autor</span>
@@ -2518,7 +2697,7 @@ export default function App() {
 
             {/* Footer */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 16px', gap: '8px', borderTop: '1px solid var(--vscode-border)', backgroundColor: 'var(--vscode-sidebar-bg)' }}>
-              <button 
+              <button
                 onClick={() => setIsSettingsOpen(false)}
                 className="vscode-button"
               >
@@ -2532,17 +2711,72 @@ export default function App() {
   );
 }
 
-// Subcomponente de nó de arquivo para respeitar as Regras de Hooks
-function FileNode({ node, selectedFile, handleFileSelect, handleNodeContextMenu }) {
+function FileNode({
+  node,
+  selectedFile,
+  handleFileSelect,
+  handleNodeContextMenu,
+  draggedNode,
+  setDraggedNode,
+  dragOverPath,
+  setDragOverPath,
+  handleMoveNode
+}) {
   const isDir = node.isDirectory;
   const [isOpen, setIsOpen] = useState(false);
 
+  const handleDragStart = (e) => {
+    e.stopPropagation();
+    setDraggedNode({ path: node.path, isDirectory: node.isDirectory });
+    e.dataTransfer.setData('text/plain', node.path);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDir) return;
+    if (draggedNode && draggedNode.path !== node.path) {
+      setDragOverPath(node.path);
+      e.dataTransfer.dropEffect = 'move';
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dragOverPath === node.path) {
+      setDragOverPath(null);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverPath(null);
+    if (!isDir) return;
+    if (draggedNode && draggedNode.path !== node.path) {
+      handleMoveNode(draggedNode.path, node.path, draggedNode.isDirectory);
+    }
+  };
+
+  const isDragOver = dragOverPath === node.path;
+  const style = isDragOver ? { backgroundColor: '#2d2d2d', border: '1px dashed #007acc' } : {};
+
   if (isDir) {
     return (
-      <div className="select-none">
-        <div 
-          onClick={() => setIsOpen(!isOpen)} 
+      <div
+        className="select-none"
+        draggable="true"
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <div
+          onClick={() => setIsOpen(!isOpen)}
           className="vscode-tree-node"
+          style={style}
           onContextMenu={(e) => handleNodeContextMenu(e, node)}
         >
           {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -2552,12 +2786,17 @@ function FileNode({ node, selectedFile, handleFileSelect, handleNodeContextMenu 
         {isOpen && (
           <div style={{ paddingLeft: '12px', borderLeft: '1px solid #3c3c3c', marginLeft: '14px' }}>
             {node.children.map(child => (
-              <FileNode 
+              <FileNode
                 key={child.path}
-                node={child} 
-                selectedFile={selectedFile} 
-                handleFileSelect={handleFileSelect} 
+                node={child}
+                selectedFile={selectedFile}
+                handleFileSelect={handleFileSelect}
                 handleNodeContextMenu={handleNodeContextMenu}
+                draggedNode={draggedNode}
+                setDraggedNode={setDraggedNode}
+                dragOverPath={dragOverPath}
+                setDragOverPath={setDragOverPath}
+                handleMoveNode={handleMoveNode}
               />
             ))}
           </div>
@@ -2568,9 +2807,11 @@ function FileNode({ node, selectedFile, handleFileSelect, handleNodeContextMenu 
 
   const isSelected = selectedFile === node.path;
   return (
-    <div 
+    <div
       onClick={() => handleFileSelect(node.path)}
       className={`vscode-tree-node ${isSelected ? 'active' : ''}`}
+      draggable="true"
+      onDragStart={handleDragStart}
       onContextMenu={(e) => handleNodeContextMenu(e, node)}
     >
       <File size={13} style={{ color: '#a0a0a0' }} />
@@ -2585,7 +2826,7 @@ function formatMessageContent(content) {
   const lines = content.split('\n');
   return lines.map((line, idx) => {
     const trimmed = line.trim();
-    
+
     // Títulos: ### Título
     if (trimmed.startsWith('### ')) {
       const title = trimmed.replace('### ', '');
@@ -2595,12 +2836,12 @@ function formatMessageContent(content) {
         </h4>
       );
     }
-    
+
     // Listas: 🔹 **`cmd`** — desc ou ⭐ **`cmd`** — desc
     if (trimmed.startsWith('🔹 ') || trimmed.startsWith('⭐ ')) {
       const icon = trimmed.substring(0, 2);
       const rest = trimmed.substring(2);
-      
+
       const parts = rest.split('—');
       if (parts.length >= 2) {
         const cmdPart = parts[0].replace(/\*\*`|`\*\*/g, '').trim();
@@ -2618,7 +2859,7 @@ function formatMessageContent(content) {
         );
       }
     }
-    
+
     // Notas de Rodapé: _(nota)_
     if (trimmed.startsWith('_(') && trimmed.endsWith(')_')) {
       const note = trimmed.substring(2, trimmed.length - 2);
@@ -2628,7 +2869,7 @@ function formatMessageContent(content) {
         </p>
       );
     }
-    
+
     // Linha comum (respeitando quebra)
     return (
       <div key={idx} style={{ minHeight: '1.2em', color: '#cccccc', fontSize: '13px', margin: '2px 0' }}>

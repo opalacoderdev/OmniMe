@@ -118,3 +118,29 @@ def test_set_model_param_invalid(tmp_path):
     # Unknown parameter name
     asyncio.run(_registry.dispatch(state, "/set-model-param", ["invalid_param", "1.0"]))
     assert "invalid_param" not in state.project.model_params
+
+
+def test_commit_and_undo_commands(tmp_path):
+    state, store = _state(tmp_path)
+    
+    # The project path is tmp_path. Let's create a file inside it to commit.
+    test_file = os.path.join(str(tmp_path), "test_doc.txt")
+    with open(test_file, "w") as f:
+        f.write("hello world")
+        
+    # Dispatch "/commit"
+    res = asyncio.run(_registry.dispatch(state, "/commit", ["first user commit"]))
+    assert res == "continue"
+    
+    # Verify the file is now tracked/committed (i.e. git has no untracked files)
+    from opalacoder.vcs import get_vcs_strategy
+    from opalacoder.config import get_git_strategy
+    vcs = get_vcs_strategy(get_git_strategy(), state.project.project_path)
+    
+    # We should be able to run "/undo"
+    res_undo = asyncio.run(_registry.dispatch(state, "/undo", []))
+    assert res_undo == "continue"
+    
+    # Since we did /undo, the file "test_doc.txt" should be removed by git clean -fd
+    assert not os.path.exists(test_file)
+

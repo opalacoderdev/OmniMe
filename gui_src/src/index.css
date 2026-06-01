@@ -488,9 +488,11 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid var(--vscode-border);
   width: 100%;
   max-w: 400px;
+  max-height: 85vh;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* Layout Utilities (No-Tailwind equivalents) */
@@ -649,11 +651,11 @@ input:focus, select:focus, textarea:focus {
   user-select: none;
 }
 
-/* Disable copying text in chat messages */
+/* Enable selection in chat messages */
 .vscode-chat-history,
 .vscode-chat-msg-content,
 .vscode-chat-msg-header {
-  user-select: none;
+  user-select: text !important;
 }
 
 
