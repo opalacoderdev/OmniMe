@@ -1,33 +1,30 @@
 # OpalaCoder
 
-**OpalaCoder** is an autonomous coding agent with interactive planning, modular execution, and persistent project memory. It is designed to work well with small local models while maintaining the feel of a fully autonomous agent. Built on the **[AgenticBlocks.IO](https://github.com/gilzamir/agenticblocks)** framework.
+**OpalaCoder** is an autonomous coding agent built on the **[AgenticBlocks.IO](https://github.com/gilzamir/agenticblocks)** framework. It features a project-centric context model and a modular, skills-oriented architecture optimized to run efficiently with local LLMs.
 
 ---
 
-## Features
+## Core Architecture & Features
 
-### Project-Centric Context Management
-OpalaCoder centers around **projects** rather than transient chat sessions. Every interaction happens within a named project with a fixed filesystem path. This anchors the LLM context, loads only project-relevant skills, scopes all file and terminal operations, and persists history — keeping prompts small and focused even for constrained local models.
+### 1. Project-Centric Context
+All operations happen within a named project mapped to a fixed directory. This grounds the agent's workspace, scopes file/terminal access, maintains SQLite-based project memory, and keeps LLM context windows small and focused.
 
-### Plan → Execute → Verify Loop
-The agent generates a structured plan (decomposed into typed `Task` objects), executes each task command with a focused `LLMAgentBlock` worker, and verifies the result against actual file contents. If verification fails, corrective tasks are injected and the loop continues.
+### 2. MemGPT Chat Orchestrator
+The main entry point is a persistent **MemGPT Chat Orchestrator** (`MemGPTAgentBlock`). Rather than running a static intent classifier, the orchestrator converses with the user, manages long-term memory, and dynamically routes complex tasks by invoking active skills via tool-calling (`run_skill`).
 
-### Interactive Planning
-After generating a high-level plan, OpalaCoder enters a refinement loop with the user. The approved plan is then automatically decomposed into atomic executable steps. Each worker receives a self-contained context block (goal, related files, operational context, command) so it never needs to infer cross-file contracts.
+### 3. Skills-Oriented Design (Anthropic Standard)
+Capabilities are defined as modular **skills** (defined via `SKILL.md` declarations and optional Level 3 python/bash scripts).
+- **Opt-in Activation**: Projects declare active skills in a local `skills.yaml` file.
+- **Ephemeral Sub-Agents**: When a skill is invoked, the orchestrator spawns a focused sub-agent (`LLMAgentBlock`) dedicated to executing that skill's workflow.
+- **Dialogue Interceptor**: The sub-agent communicates directly with the user, and an interceptor synchronizes the exchange back to the orchestrator's memory.
 
-### Auto-lint Self-Correction
-`edit_file` and `write_file` run `node --check` (JS/TS) or `py_compile` (Python) after every write. Syntax errors are returned as tool output so the worker can self-correct within the same execution loop — no human intervention needed.
+### 4. Code Generation (`implement-feature` Skill)
+Software development and bug-fixing tasks are handled by the default `implement-feature` skill, running a structured Plan → Execute → Verify loop:
+- **Interactive Planning**: Generates high-level task plans and refines them based on user feedback.
+- **Shadow Git Checkout**: Automatically checkpoints code to an isolated repository (`.opalacoder/.git`) before plan execution, allowing instant rollback via `/undo`.
+- **Auto-Linting**: Validates changes using syntax checkers (`node --check`, `py_compile`) after each file edit, letting the worker self-correct syntax errors autonomously.
 
-### Shadow Git (`/undo`)
-Every project has an isolated shadow git (`.opalacoder/.git`) that checkpoints the codebase automatically before plan execution. `/undo` restores the previous state without touching the user's main git repository.
-
-### Semantic Intent Router
-Uses an LLM classifier to route user messages to the correct handler: `plan`, `question`, `chat`, `greetings`, `resume`, or `command_hint`. Correctly handles multilingual input and status/history questions without misclassifying them as development tasks.
-
-### Dynamic Model Selection
-Evaluates task complexity and automatically uses the `alternative` model (configurable in `agents.yaml`) for tasks that require deeper reasoning.
-
-### Web-Based IDE GUI (Cross-Platform)
+### 5. Web-Based IDE GUI (Cross-Platform)
 OpalaCoder features an integrated desktop GUI built using React, Vite, and `pywebview`:
 - **Cross-Platform Support**: Works seamlessly on Linux and Windows. If `pywebview` is not available, it automatically falls back to hosting a local web server and launching the interface in your default browser.
 - **Integrated Terminal**: Includes a real-time xterm.js terminal with shell/PTY integration for running and inspecting commands natively.
@@ -35,7 +32,7 @@ OpalaCoder features an integrated desktop GUI built using React, Vite, and `pywe
 - **Global Settings Panel**: Customize the editor font size, tab size, and word wrapping, with dynamic toggle support for Light and Dark themes.
 - **About Tab**: Version tracking (currently `0.1.4 alfa`), licensing, and developer details in the settings panel.
 
-### Persistent Projects and CLI Commands
+### 6. Persistent Projects and CLI Commands
 
 | Command | Description |
 |---|---|
@@ -51,24 +48,22 @@ OpalaCoder features an integrated desktop GUI built using React, Vite, and `pywe
 | `/commit <msg>` | Manually commit to the shadow git |
 | `/exit` / `/quit` | Exit the application |
 
-### Modular Architecture
+### 7. Modular Architecture
 
 ```text
 opalacoder/
-├── config.py              Global settings (model, retries, git strategy)
-├── terminal.py            Rich output (banners, spinners, panels, tables)
-├── project.py             SQLite project management and state
-├── vcs.py                 Shadow git strategies (auto, hybrid, agent-driven, none)
-├── agents.py              LLM agent factories
-├── planner.py             Panorama → refinement → plan decomposition
-├── orchestrator.py        Strategy registry and base class
-├── workflow_orchestrator.py  WorkflowOrchestratorStrategy (default)
-├── workflow_tools.py      Worker tools: edit_file, read_file, find_symbol, send_message
-├── tools.py               Base tools: write_file, run_command, search_code
-├── code_index.py          Multi-language symbol index (SQLite-backed, incremental)
-├── skills.py              Skill loading, selection, and routing
-├── embeddings.py          Sentence-transformer embeddings for intent fallback
-└── cli.py                 Argparse + project bootstrap + REPL
+├── cli.py                  Entrypoint, project loading, REPL loop
+├── memgpt_runtime.py       MemGPT chat orchestrator and run_skill tool integration
+├── agents.py               Agent creation helper functions
+├── config.py               Global settings loader and CLI parser
+├── skills.py               Skill loading, selection, and routing
+├── project.py              SQLite project management and state
+├── vcs.py                  Shadow git strategies (auto, hybrid, agent-driven, none)
+├── ide_server.py           Asynchronous HTTP and REST server hosting the IDE GUI
+├── agent_stdin.py          JSON stdin/stdout protocol server for remote control
+├── code_index.py           Multi-language symbol index (SQLite-backed, incremental)
+├── vector_index.py         Vector index of chunks for semantic code lookup
+└── tools.py                Shared tool definitions (run_command, memory APIs)
 ```
 
 ---
@@ -155,50 +150,64 @@ npm run build
 ```
 This builds the SPA bundle and saves it directly into the Python package distribution at `opalacoder/gui/`.
 
----
-
 ## Project Flow
 
-```
-1. Banner + Mode Selection
-2. Project Configuration
-   ├── New  → Name, Path, Description → LLM selects skills
-   └── Load → restore context and skills
-3. User enters demand
-4. Intent classification (plan / question / chat / ...)
-5. [plan] Generate panorama (high-level plan)
-6. Refinement loop — user approves or requests changes
-7. Plan decomposed into Tasks
-8. Pre-execution VCS checkpoint (shadow git)
-9. For each Task → for each command:
-   ├── LLMAgentBlock worker executes with tools
-   ├── edit_file / write_file → auto-lint → self-correction
-   └── send_message terminates worker immediately
-10. Verification oracle reads files on disk
-    ├── done=True  → finish
-    └── done=False → inject correction tasks → back to step 9
-11. Result displayed + project saved
+```text
+main() or `--gui` (server mode)
+  │
+  ├── startup_menu() ───────── Load/Create project, discover skills (via skills.yaml)
+  │
+  └── repl_loop() ──────────── Instantiate MemGPT chat-orchestrator
+        │
+        ├── User enters command (e.g. `/help`, `/undo`) ── Dispatched to CLI commands
+        │
+        └── User enters demand ────────────────────────── MemGPT.run(user_input)
+              │
+              ├── Direct chat (greetings, project status, general questions)
+              │
+              └── Request matches active skill ───────────── run_skill(name, context)
+                    │
+                    ├── Instantiate ephemeral sub-agent (LLMAgentBlock)
+                    ├── Sub-agent loads SKILL.md and Level 3 scripts (e.g. implement-feature)
+                    ├── Sub-agent executes with tools, talks to user (dialogue interceptor)
+                    └── Return result to MemGPT orchestrator
 ```
 
 ---
 
 ## Configuration (`agents.yaml`)
 
-The main configuration file. Key fields:
+The main configuration file. Key fields and role overrides:
 
 ```yaml
 default: ollama/ministral-3:14b      # default model for all agents
 alternative: ollama/ministral-3:14b  # model for complex tasks
-git_strategy: auto                   # auto | hybrid | agent_driven | none
+
+llm_defaults:
+  temperature: 1.0
+  max_tokens: 8128
+  num_ctx: 8192
 
 agents:
+  # The fixed chat-orchestrator of the skills-oriented architecture.
+  memgpt:
+    temperature: 1.0
+    num_ctx: 16384
+    max_heartbeats: 20
+
+  # drives the plan→execute→review loop inside the implement-feature skill
   orchestrator:
+    temperature: 1.0
     num_ctx: 16384
-    max_heartbeats: 20   # max tasks in the plan
+    max_heartbeats: 20
     strategy: workflow
+
+  # executes each task command with code editing tools
   worker:
+    temperature: 1.0
+    max_tokens: 8128
     num_ctx: 16384
-    reasoning_effort: "none"  # must stay "none" for tool_calls to be populated
+    reasoning_effort: "none"  # Must stay "none" for tool-calling integration
 ```
 
 Full per-agent overrides for `temperature`, `max_tokens`, `num_ctx`, `reasoning_effort`, and `debug` are supported for every agent role.
