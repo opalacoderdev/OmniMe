@@ -114,17 +114,46 @@ OPALA_MODEL=ollama/ministral-3:14b
 
 ## How to Run
 
+OpalaCoder supports three main execution modes:
+
+### 1. Interactive CLI REPL (Default)
+Starts the standard CLI terminal planner/execution loop:
 ```bash
 source .env/bin/activate
-
 python main.py                        # default (plan mode)
-python main.py --mode auto            # no interruptions
+python main.py --mode auto            # run without interruptions
 python main.py --mode edit            # confirm sensitive operations
 python main.py --model ollama/gemma4  # override model
 python main.py --db /path/to/db       # custom database path
 python main.py --version
 python main.py --help
 ```
+
+### 2. Web-Based IDE GUI
+Launches the integrated React desktop application. It opens as a local app window (via `pywebview`) or falls back to your web browser:
+```bash
+source .env/bin/activate
+python main.py --gui
+```
+
+### 3. Stdin/Stdout JSON Protocol Server
+Launches the agent in background headless mode, communicating via single-line JSON messages:
+```bash
+source .env/bin/activate
+python main.py --stdin
+```
+
+---
+
+## Compiling Frontend GUI (Optional)
+
+If you are developing or making changes to the React GUI, you can recompile the assets:
+```bash
+cd gui_src
+npm install
+npm run build
+```
+This builds the SPA bundle and saves it directly into the Python package distribution at `opalacoder/gui/`.
 
 ---
 

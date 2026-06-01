@@ -45,4 +45,3 @@ packages = ["opalacoder"]
 [tool.hatch.build.targets.wheel.force-include]
 "agents.yaml" = "opalacoder/agents.yaml"
 "skills" = "opalacoder/skills"
-"opalacoder/gui" = "opalacoder/gui"
