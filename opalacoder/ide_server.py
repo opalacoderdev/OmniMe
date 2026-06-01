@@ -281,6 +281,10 @@ class AsyncHTTPServer:
                 self.send_response(writer, 400, b'{"error":"project_name is required"}', "application/json")
                 return
                 
+            if not os.path.exists(project_path) or not os.path.isdir(project_path):
+                self.send_response(writer, 400, b'{"error":"Project path does not exist or is not a directory"}', "application/json")
+                return
+                
             db_key = project_name.replace(" ", "_").lower()
             if store.exists(db_key):
                 db_key = db_key + "_1"
@@ -346,7 +350,11 @@ class AsyncHTTPServer:
             if "mode" in data and data["mode"]:
                 project.mode = data["mode"]
             if "project_path" in data and data["project_path"]:
-                project.project_path = os.path.abspath(data["project_path"])
+                new_path = data["project_path"]
+                if not os.path.exists(new_path) or not os.path.isdir(new_path):
+                    self.send_response(writer, 400, b'{"error":"Project path does not exist or is not a directory"}', "application/json")
+                    return
+                project.project_path = os.path.abspath(new_path)
             store.save(project)
             res_data = {
                 "name": project.name,
@@ -453,7 +461,6 @@ class AsyncHTTPServer:
             headers = (
                 "HTTP/1.1 200 OK\r\n"
                 "Content-Type: text/event-stream\r\n"
-                "Transfer-Encoding: chunked\r\n"
                 "Access-Control-Allow-Origin: *\r\n"
                 "Cache-Control: no-cache\r\n"
                 "Connection: keep-alive\r\n\r\n"
@@ -464,20 +471,17 @@ class AsyncHTTPServer:
             term_queue = asyncio.Queue()
             self.active_terminal.queues.append(term_queue)
 
-            def send_chunk(data_bytes: bytes):
+            def send_data(data_bytes: bytes):
                 import base64
                 payload = f"data: {base64.b64encode(data_bytes).decode('utf-8')}\n\n"
-                chunk = payload.encode('utf-8')
-                writer.write(f"{len(chunk):X}\r\n".encode('utf-8'))
-                writer.write(chunk)
-                writer.write(b"\r\n")
+                writer.write(payload.encode('utf-8'))
 
             try:
                 while True:
                     data = await term_queue.get()
                     if data is None:
                         break
-                    send_chunk(data)
+                    send_data(data)
                     await writer.drain()
             except Exception as e:
                 print(f"Terminal stream exception: {e}")
@@ -485,8 +489,6 @@ class AsyncHTTPServer:
                 if self.active_terminal and term_queue in self.active_terminal.queues:
                     self.active_terminal.queues.remove(term_queue)
                 try:
-                    writer.write(b"0\r\n\r\n")
-                    await writer.drain()
                     writer.close()
                 except:
                     pass
@@ -617,6 +619,14 @@ class AsyncHTTPServer:
                 writer.write(b"0\r\n\r\n")
                 await writer.drain()
                 writer.close()
+        # 7h. Check Optional Dependencies Status
+        elif path == '/api/settings/check-dependencies' and method == 'GET':
+            try:
+                from sentence_transformers import SentenceTransformer
+                installed = True
+            except ImportError:
+                installed = False
+            self.send_response(writer, 200, json.dumps({"installed": installed}).encode('utf-8'), "application/json")
         else:
             self.send_response(writer, 404, b'{"error":"Not Found"}', "application/json")
 

@@ -81,6 +81,7 @@ export default function App() {
   const [isInstallingDeps, setIsInstallingDeps] = useState(false);
   const [installDepsStatus, setInstallDepsStatus] = useState('');
   const [installDepsLog, setInstallDepsLog] = useState('');
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
 
   const terminalRef = useRef(null);
@@ -154,6 +155,20 @@ export default function App() {
   // Initial load
   useEffect(() => {
     fetchProjects();
+    const checkOptionalDeps = async () => {
+      try {
+        const res = await fetch('/api/settings/check-dependencies');
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.installed) {
+            setShowInstallPrompt(true);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to check optional dependencies", e);
+      }
+    };
+    checkOptionalDeps();
   }, []);
 
   // Sync files and greetings when project changes
@@ -1404,6 +1419,52 @@ export default function App() {
         </div>
       </footer>
 
+      {/* Prompt for optional dependencies on startup */}
+      {showInstallPrompt && (
+        <div className="vscode-modal-overlay">
+          <div className="vscode-modal" style={{ maxWidth: '440px', width: '90%' }}>
+            <div className="vscode-sidebar-header" style={{ padding: '10px 16px' }}>
+              <span className="vscode-sidebar-title" style={{ color: '#ffffff' }}>MÓDULOS OPCIONAIS REQUERIDOS</span>
+              <button 
+                onClick={() => setShowInstallPrompt(false)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div style={{ padding: '16px', color: '#cccccc', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <p style={{ fontSize: '13px', lineHeight: '1.5' }}>
+                Os módulos opcionais para embeddings offline (<code>sentence-transformers</code>) não foram encontrados no ambiente.
+              </p>
+              <p style={{ fontSize: '12px', color: '#888888', lineHeight: '1.4' }}>
+                Recomendamos a instalação para habilitar o processamento local de vetores e a indexação de código sem depender de APIs externas.
+              </p>
+              
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px', borderTop: '1px solid #3c3c3c', paddingTop: '12px' }}>
+                <button 
+                  onClick={() => setShowInstallPrompt(false)}
+                  className="vscode-button"
+                  style={{ backgroundColor: '#3c3c3c', color: '#ffffff' }}
+                >
+                  Ignorar
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowInstallPrompt(false);
+                    setIsSettingsOpen(true);
+                    setSettingsTab('preferences');
+                    handleInstallOptionalDeps();
+                  }}
+                  className="vscode-button"
+                >
+                  Instalar Agora
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* VSCode Style New Project Modal */}
       {showNewProjectModal && (
         <div className="vscode-modal-overlay">
@@ -1914,7 +1975,7 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#cccccc' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Versão</span>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.17 alfa</span>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.18 alfa</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Autor</span>
