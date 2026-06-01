@@ -27,6 +27,14 @@ Uses an LLM classifier to route user messages to the correct handler: `plan`, `q
 ### Dynamic Model Selection
 Evaluates task complexity and automatically uses the `alternative` model (configurable in `agents.yaml`) for tasks that require deeper reasoning.
 
+### Web-Based IDE GUI (Cross-Platform)
+OpalaCoder features an integrated desktop GUI built using React, Vite, and `pywebview`:
+- **Cross-Platform Support**: Works seamlessly on Linux and Windows. If `pywebview` is not available, it automatically falls back to hosting a local web server and launching the interface in your default browser.
+- **Integrated Terminal**: Includes a real-time xterm.js terminal with shell/PTY integration for running and inspecting commands natively.
+- **Git Source Control Sidebar**: A dedicated panel that tracks file modifications (color-coded as Modified/Untracked/Deleted) and provides a commit interface.
+- **Global Settings Panel**: Customize the editor font size, tab size, and word wrapping, with dynamic toggle support for Light and Dark themes.
+- **About Tab**: Version tracking (currently `0.1.4 alfa`), licensing, and developer details in the settings panel.
+
 ### Persistent Projects and CLI Commands
 
 | Command | Description |

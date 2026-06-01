@@ -18,7 +18,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "agenticblocks.io",
+    "agenticblocks.io>=0.8.37",
     "pyyaml>=6.0",
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
@@ -29,6 +29,7 @@ dependencies = [
     "tree-sitter-language-pack>=1.8.0",
     "sentence-transformers>=3.0.0",
     "chromadb>=0.4.0",
+    "pywebview>=4.0",
 ]
 
 [project.urls]
@@ -44,3 +45,4 @@ packages = ["opalacoder"]
 [tool.hatch.build.targets.wheel.force-include]
 "agents.yaml" = "opalacoder/agents.yaml"
 "skills" = "opalacoder/skills"
+"opalacoder/gui" = "opalacoder/gui"
