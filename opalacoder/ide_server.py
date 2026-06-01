@@ -231,6 +231,23 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
+        # 3.2. Create Directory
+        elif path == '/api/file/mkdir' and method == 'POST':
+            project_path = data.get('projectPath')
+            dir_path = data.get('dirPath')
+            if not project_path or not dir_path:
+                self.send_response(writer, 400, b'{"error":"projectPath and dirPath are required"}', "application/json")
+                return
+            full_path = os.path.abspath(os.path.join(project_path, dir_path))
+            if not full_path.startswith(os.path.abspath(project_path)):
+                self.send_response(writer, 403, b'{"error":"Forbidden: Path traversal detected"}', "application/json")
+                return
+            try:
+                os.makedirs(full_path, exist_ok=True)
+                self.send_response(writer, 200, b'{"success":true}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
         # 3.5. Delete File
         elif path == '/api/file/delete' and method == 'POST':
             project_path = data.get('projectPath')
@@ -858,8 +875,12 @@ def start_gui_server(host="127.0.0.1", port=3000):
 
         print(f"[OpalaCoder] Launching desktop window → {url}")
 
+        icon_path = os.path.join(os.path.dirname(__file__), "icon.png")
+        if not os.path.exists(icon_path):
+            icon_path = None
+
         # webview.start() blocks the main thread until the window is closed.
-        webview.start(debug=False)
+        webview.start(debug=False, icon=icon_path)
 
     except (ImportError, Exception) as e:
         # Graceful fallback: open in the default web browser

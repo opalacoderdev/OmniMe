@@ -488,9 +488,11 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid var(--vscode-border);
   width: 100%;
   max-w: 400px;
+  max-height: 85vh;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* Layout Utilities (No-Tailwind equivalents) */
