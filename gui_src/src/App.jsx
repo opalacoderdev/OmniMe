@@ -85,6 +85,8 @@ export default function App() {
   const [gitChanges, setGitChanges] = useState([]);
   const [commitMessage, setCommitMessage] = useState('');
   const [isCommitting, setIsCommitting] = useState(false);
+  const [draggedNode, setDraggedNode] = useState(null);
+  const [dragOverPath, setDragOverPath] = useState(null);
 
   // Optional Dependencies States
   const [isInstallingDeps, setIsInstallingDeps] = useState(false);
@@ -730,6 +732,73 @@ export default function App() {
     }
   };
 
+  const handleMoveNode = async (oldPath, targetDirPath, isDirectory) => {
+    if (!activeProject) return;
+    const nodeName = oldPath.split('/').pop();
+    const newPath = targetDirPath ? `${targetDirPath}/${nodeName}` : nodeName;
+    if (oldPath === newPath) return;
+
+    if (isDirectory) {
+      if (newPath === oldPath || newPath.startsWith(`${oldPath}/`)) {
+        addLog('error', 'Não é possível mover um diretório para dentro dele mesmo.');
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch('/api/file/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectPath: activeProject.project_path,
+          oldPath: oldPath,
+          newPath: newPath
+        })
+      });
+
+      if (res.ok) {
+        addLog('info', `${isDirectory ? 'Diretório' : 'Arquivo'} movido de ${oldPath} para ${newPath}`);
+
+        if (!isDirectory) {
+          setOpenFiles(prev => prev.map(f => f === oldPath ? newPath : f));
+          setFileContents(prev => {
+            const next = { ...prev };
+            const content = next[oldPath];
+            delete next[oldPath];
+            next[newPath] = content;
+            return next;
+          });
+          if (selectedFile === oldPath) {
+            setSelectedFile(newPath);
+          }
+        } else {
+          const prefix = `${oldPath}/`;
+          setOpenFiles(prev => prev.map(f => f.startsWith(prefix) ? f.replace(oldPath, newPath) : f));
+          setFileContents(prev => {
+            const next = {};
+            for (const [k, v] of Object.entries(prev)) {
+              if (k.startsWith(prefix)) {
+                next[k.replace(oldPath, newPath)] = v;
+              } else {
+                next[k] = v;
+              }
+            }
+            return next;
+          });
+          if (selectedFile && selectedFile.startsWith(prefix)) {
+            setSelectedFile(prev => prev.replace(oldPath, newPath));
+          }
+        }
+        await fetchFiles();
+      } else {
+        const errData = await res.json();
+        addLog('error', `Falha ao mover: ${errData.error}`);
+      }
+    } catch (err) {
+      addLog('error', `Erro ao mover: ${err.message}`);
+    }
+  };
+
   const handleDeleteNode = async (node) => {
     if (!activeProject || !node) return;
     const confirmMsg = `Tem certeza que deseja deletar o ${node.isDirectory ? 'diretório' : 'arquivo'} "${node.path}"?${node.isDirectory ? ' Todos os arquivos internos serão removidos!' : ''}`;
@@ -1282,7 +1351,7 @@ export default function App() {
             <button
               onClick={() => setIsChatVisible(!isChatVisible)}
               className={`vscode-activitybar-btn ${isChatVisible ? 'active' : ''}`}
-              title="Copilot Chat"
+              title="Opala Chat"
             >
               <MessageSquare size={22} />
             </button>
@@ -1354,7 +1423,30 @@ export default function App() {
               </div>
 
               {/* Files list tree */}
-              <div className="vscode-sidebar-content" onContextMenu={handleWorkspaceContextMenu}>
+              <div
+                className="vscode-sidebar-content"
+                onContextMenu={handleWorkspaceContextMenu}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (draggedNode) {
+                    setDragOverPath('__root__');
+                  }
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  if (dragOverPath === '__root__') {
+                    setDragOverPath(null);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverPath(null);
+                  if (draggedNode) {
+                    handleMoveNode(draggedNode.path, '', draggedNode.isDirectory);
+                  }
+                }}
+                style={dragOverPath === '__root__' ? { border: '2px dashed #007acc', backgroundColor: 'rgba(0, 122, 204, 0.05)' } : {}}
+              >
                 <div className="vscode-sidebar-section-title">Workspace Files</div>
                 {files.length === 0 ? (
                   <div style={{ fontSize: '12px', color: '#808080', padding: '0 4px', fontStyle: 'italic' }}>
@@ -1369,6 +1461,11 @@ export default function App() {
                         selectedFile={selectedFile}
                         handleFileSelect={handleFileSelect}
                         handleNodeContextMenu={handleNodeContextMenu}
+                        draggedNode={draggedNode}
+                        setDraggedNode={setDraggedNode}
+                        dragOverPath={dragOverPath}
+                        setDragOverPath={setDragOverPath}
+                        handleMoveNode={handleMoveNode}
                       />
                     ))}
                   </div>
@@ -1707,13 +1804,13 @@ export default function App() {
           />
         )}
 
-        {/* VSCode Copilot Chat (Right Panel) */}
+        {/* Opala Chat (Right Panel) */}
         {isChatVisible && (
           <aside className="vscode-chat" style={{ width: `${chatWidth}px` }}>
             <div className="vscode-chat-header">
               <span className="vscode-sidebar-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <MessageSquare size={12} style={{ color: '#007acc' }} />
-                <span>COPILOT CHAT</span>
+                <span>OPALA CHAT</span>
               </span>
               <button
                 onClick={() => setIsChatVisible(false)}
@@ -2614,17 +2711,72 @@ export default function App() {
   );
 }
 
-// Subcomponente de nó de arquivo para respeitar as Regras de Hooks
-function FileNode({ node, selectedFile, handleFileSelect, handleNodeContextMenu }) {
+function FileNode({
+  node,
+  selectedFile,
+  handleFileSelect,
+  handleNodeContextMenu,
+  draggedNode,
+  setDraggedNode,
+  dragOverPath,
+  setDragOverPath,
+  handleMoveNode
+}) {
   const isDir = node.isDirectory;
   const [isOpen, setIsOpen] = useState(false);
 
+  const handleDragStart = (e) => {
+    e.stopPropagation();
+    setDraggedNode({ path: node.path, isDirectory: node.isDirectory });
+    e.dataTransfer.setData('text/plain', node.path);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDir) return;
+    if (draggedNode && draggedNode.path !== node.path) {
+      setDragOverPath(node.path);
+      e.dataTransfer.dropEffect = 'move';
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dragOverPath === node.path) {
+      setDragOverPath(null);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverPath(null);
+    if (!isDir) return;
+    if (draggedNode && draggedNode.path !== node.path) {
+      handleMoveNode(draggedNode.path, node.path, draggedNode.isDirectory);
+    }
+  };
+
+  const isDragOver = dragOverPath === node.path;
+  const style = isDragOver ? { backgroundColor: '#2d2d2d', border: '1px dashed #007acc' } : {};
+
   if (isDir) {
     return (
-      <div className="select-none">
+      <div
+        className="select-none"
+        draggable="true"
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <div
           onClick={() => setIsOpen(!isOpen)}
           className="vscode-tree-node"
+          style={style}
           onContextMenu={(e) => handleNodeContextMenu(e, node)}
         >
           {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -2640,6 +2792,11 @@ function FileNode({ node, selectedFile, handleFileSelect, handleNodeContextMenu 
                 selectedFile={selectedFile}
                 handleFileSelect={handleFileSelect}
                 handleNodeContextMenu={handleNodeContextMenu}
+                draggedNode={draggedNode}
+                setDraggedNode={setDraggedNode}
+                dragOverPath={dragOverPath}
+                setDragOverPath={setDragOverPath}
+                handleMoveNode={handleMoveNode}
               />
             ))}
           </div>
@@ -2653,6 +2810,8 @@ function FileNode({ node, selectedFile, handleFileSelect, handleNodeContextMenu 
     <div
       onClick={() => handleFileSelect(node.path)}
       className={`vscode-tree-node ${isSelected ? 'active' : ''}`}
+      draggable="true"
+      onDragStart={handleDragStart}
       onContextMenu={(e) => handleNodeContextMenu(e, node)}
     >
       <File size={13} style={{ color: '#a0a0a0' }} />
