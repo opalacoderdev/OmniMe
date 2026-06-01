@@ -1,46 +1,32 @@
 ---
 name: implement-feature
-description: Cria, adiciona, altera ou corrige código em arquivos do projeto. Use quando o usuário pede para implementar uma funcionalidade nova ou consertar um bug.
+description: Creates, adds, modifies, or fixes code in project files. Use when the user asks to implement a new feature or fix a bug.
 model: alternative
 ---
 
 # Implement Feature
 
-Esta skill executa o loop completo **Planejar → Executar → Verificar** sobre os
-arquivos do projeto. O motor é um script determinístico em Python.
+This skill runs the complete **Plan → Execute → Verify** loop over the project files. The engine is a deterministic Python script.
 
-## REGRA OBRIGATÓRIA
+## MANDATORY RULE
 
-Para **qualquer** criação, alteração ou correção de código você **DEVE** executar o
-script `run_workflow.py` chamando a ferramenta `run_command`. **NÃO** use
-`write_file`, `edit_file` ou `replace_lines` diretamente nesta skill — esses
-atalhos pulam o planejamento e a verificação e produzem resultados não confiáveis.
-Sua única ação de execução deve ser **rodar o script** e, ao final, chamar
-`send_message` com o resumo do que o script reportou.
+For **any** code creation, modification, or bugfix, you **MUST** run the `run_workflow.py` script by calling the `run_command` tool. **DO NOT** use `write_file`, `edit_file`, or `replace_lines` directly inside this skill — these shortcuts skip planning and verification, producing unreliable results. Your sole execution action must be to **run the script** and, at the end, call `send_message` with a summary of what the script reported.
 
-## Como executar
+## How to execute
 
-Chame `run_command` com **exatamente** este formato (use o caminho ABSOLUTO do
-script e o caminho ABSOLUTO do arquivo de request, ambos fornecidos no seu prompt):
+Call `run_command` with **exactly** this format (use the ABSOLUTE path of the script and the ABSOLUTE path of the request file, both provided in your prompt):
 
 ```
-python <CAMINHO-ABSOLUTO>/run_workflow.py --request-file <CAMINHO-DO-REQUEST> --intent <newfeat|bugfix>
+python <ABSOLUTE-PATH>/run_workflow.py --request-file <REQUEST-FILE-PATH> --intent <newfeat|bugfix>
 ```
 
-Regras importantes:
-- **NÃO** digite o texto do pedido no comando. O pedido já está salvo no arquivo
-  indicado no seu prompto (`--request-file`). Isso evita erros de shell com
-  parênteses e aspas.
-- Use o `--intent` indicado no seu prompt.
-- Seu diretório de trabalho é o do projeto, não o da skill — sempre caminhos
-  absolutos.
+Important rules:
+- **DO NOT** type the request text directly into the command. The request is already saved in the file indicated in your prompt (`--request-file`). This prevents shell parsing errors with parentheses and quotes.
+- Use the `--intent` indicated in your prompt.
+- Your working directory is the project directory, not the skill directory — always use absolute paths.
 
-- `--intent newfeat` → criar algo novo / adicionar funcionalidade.
-- `--intent bugfix` → corrigir algo que existe e está quebrado (ativa o índice
-  vetorial para localizar o defeito).
-- `--model <valor>` (opcional) é repassado automaticamente pelo runner a partir do
-  campo `model` desta SKILL.md; você não precisa informá-lo manualmente.
+- `--intent newfeat` → create something new / add functionality.
+- `--intent bugfix` → fix something that exists and is broken (activates the vector index to locate the issue).
+- `--model <value>` (optional) is automatically passed by the runner based on the `model` field of this SKILL.md; you do not need to specify it manually.
 
-O script conduz planejamento (com aprovação do usuário), execução por workers com
-auto-lint, e verificação em camadas, imprimindo o resultado final na saída padrão.
-Relate ao usuário o que o script reportou.
+The script manages planning (with user approval), execution by workers with auto-linting, and layered verification, printing the final summary to standard output. Report what the script output to the user.
