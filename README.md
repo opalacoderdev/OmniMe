@@ -83,6 +83,12 @@ opalacoder/
 
 ## Installation
 
+Try:
+
+```bash
+pip install opalacoder
+```
+
 ```bash
 git clone https://github.com/gilzamir/OpalaCoder
 cd OpalaCoder

@@ -269,6 +269,9 @@ def main() -> None:
     except KeyboardInterrupt:
         T.warning(_("repl_interrupted"))
         sys.exit(0)
+    except T.AppExit:
+        T.info(_("exiting"))
+        sys.exit(0)
 
 
 if __name__ == "__main__":

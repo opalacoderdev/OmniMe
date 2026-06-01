@@ -631,10 +631,10 @@ def start_gui_server(host="127.0.0.1", port=3000):
         # webview.start() blocks the main thread until the window is closed.
         webview.start(debug=False)
 
-    except ImportError:
+    except (ImportError, Exception) as e:
         # Graceful fallback: open in the default web browser
         import webbrowser
-        print(f"[OpalaCoder] pywebview not available — opening browser at {url}")
+        print(f"[OpalaCoder] pywebview failed to launch ({type(e).__name__}: {e}) — opening browser at {url}")
         webbrowser.open(url)
         # Keep the server alive
         try:
