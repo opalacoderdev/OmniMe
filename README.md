@@ -70,14 +70,26 @@ opalacoder/
 
 ## Requirements
 
-- Python 3.11+
-- [agenticblocks](https://github.com/gilzamir/agenticblocks) (install from source)
-- An Ollama instance with the default model available:
-  - **Default model**: `ministral-3:14b`
-  - **Alternative model** (complex tasks): also `ministral-3:14b` by default; change in `agents.yaml`
-  - Other tested models: `gemma4:latest`, `mistral-nemo:latest`
-  - Any model supported by [litellm](https://docs.litellm.ai) works
-- **Recommended Ollama version**: `0.24.0+`
+### 1. Core & CLI Requirements
+- **Python 3.11+**
+- **[agenticblocks](https://github.com/gilzamir/agenticblocks)** (install from source)
+- **Local SQLite support** (standard in python)
+- **Local LLM Engine (Recommended: Ollama 0.24.0+)** with models available:
+  - **Default & Alternative models**: `ministral-3:14b` (or `gemma4:latest`, `mistral-nemo:latest`)
+  - Any model supported by [litellm](https://docs.litellm.ai) works.
+
+> [!TIP]
+> **Hardware Acceleration & GPU Drivers:**
+> To run large models (like `gemma4` or `ministral-3:14b`) efficiently on local backends (such as Ollama), it is highly recommended to use GPU hardware acceleration.
+> - **NVIDIA GPUs**: Ensure you have official **NVIDIA Drivers** and the **CUDA Toolkit** installed so that Ollama can offload model layers to GPU VRAM.
+> - **AMD & Apple Silicon**: Ollama also supports ROCm (AMD) and Metal (Apple Silicon) natively. Make sure your local setup is utilizing GPU acceleration to avoid slow CPU execution times.
+
+### 2. Web IDE / GUI Requirements
+- **Desktop Window Mode (Optional)**: Launches a native app window using `pywebview`.
+  - **Windows**: Works out of the box using Windows Webview2 (Edge).
+  - **Linux**: Requires **WebKit2GTK** python bindings (specifically `python3-gi` and `gir1.2-webkit2-4.1`) or **Qt5/Qt6** (PyQt/PySide) installed on the system.
+  - **Browser Fallback**: If desktop window dependencies are missing, OpalaCoder automatically starts the IDE server and opens it in your default web browser (`http://127.0.0.1:3000`).
+- **Frontend Development (Optional)**: If you intend to compile the React/Vite frontend source code under `gui_src/`, you will need **Node.js 18+** and **npm**. (Compiled assets are already bundled in default packages).
 
 ---
 
