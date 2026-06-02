@@ -17,91 +17,51 @@ event_hook = None
 _gui_input_pending: dict = {}
 
 import litellm
-import re
 
-active_on_thinking = None
-if not hasattr(litellm, "active_on_thinking"):
-    litellm.active_on_thinking = None
+def _friendly_llm_error(exc: Exception, project=None) -> str:
+    """Convert a LiteLLM/agent exception into a user-friendly message."""
+    msg = str(exc)
+    low = msg.lower()
+    model = getattr(project, "model", None) or "the configured model"
 
-_orig_acompletion = litellm.acompletion
-_orig_router_acompletion = litellm.Router.acompletion
+    if "unexpected keyword argument" in low or "got an unexpected" in low:
+        # Extract the parameter name from messages like: "got an unexpected keyword argument 'reasoning_effort'"
+        import re
+        m = re.search(r"unexpected keyword argument ['\"]([^'\"]+)['\"]", msg)
+        param = m.group(1) if m else "unknown"
+        return (
+            f"Parameter '{param}' is not supported by {model}. "
+            f"Remove it with: /set-model-param {param} (leave value empty) or check the model's documentation."
+        )
 
-def _propagate_thinking_from_response(resp):
-    try:
-        if not (resp and getattr(resp, "choices", None) and len(resp.choices) > 0):
-            return
-        msg = resp.choices[0].message
-        reasoning = getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None)
-        if not reasoning:
-            content = getattr(msg, "content", None) or ""
-            tags = [
-                ("<think>", "</think>"),
-                ("<thought>", "</thought>"),
-                ("<thinking>", "</thinking>"),
-                ("<|thought|>", "<|/thought|>"),
-                ("<|thinking|>", "<|/thinking|>"),
-                ("[thought]", "[/thought]"),
-                ("[thinking]", "[/thinking]"),
-            ]
-            for start_tag, end_tag in tags:
-                if start_tag in content:
-                    parts = content.split(start_tag, 1)
-                    if len(parts) > 1:
-                        body = parts[1]
-                        if end_tag in body:
-                            reasoning = body.split(end_tag, 1)[0].strip()
-                        else:
-                            reasoning = body.strip()
-                        break
-        if reasoning:
-            import sys
-            sys.stderr.write(f"[DEBUG] Found reasoning: {reasoning[:200]}...\n")
-            cb = getattr(litellm, "active_on_thinking", None)
-            if not cb:
-                if "opalacoder.agent_stdin" in sys.modules:
-                    cb = sys.modules["opalacoder.agent_stdin"].active_on_thinking
-            if not cb:
-                cb = active_on_thinking
-            if cb:
-                import inspect
-                sys.stderr.write(f"[DEBUG] Propagating thinking to callback {cb.__name__ if hasattr(cb, '__name__') else str(cb)}\n")
-                try:
-                    if inspect.iscoroutinefunction(cb):
-                        asyncio.create_task(cb(reasoning))
-                    else:
-                        cb(reasoning)
-                except Exception as ex:
-                    sys.stderr.write(f"[DEBUG] Error invoking thinking callback: {ex}\n")
-            else:
-                sys.stderr.write(f"[DEBUG] No active_on_thinking callback set\n")
-    except Exception as e:
-        import sys
-        sys.stderr.write(f"[DEBUG] Error propagating thinking: {e}\n")
+    if "invalid value for" in low or "invalid_request_error" in low or "badrequest" in low:
+        return f"The model rejected a parameter value: {msg}"
 
-async def patched_acompletion(*args, **kwargs):
-    resp = await _orig_acompletion(*args, **kwargs)
-    _propagate_thinking_from_response(resp)
-    return resp
+    if "connection" in low or "connect" in low:
+        return f"Could not connect to {model}. Check that Ollama/the API server is running."
 
-async def patched_router_acompletion(self, *args, **kwargs):
-    resp = await _orig_router_acompletion(self, *args, **kwargs)
-    _propagate_thinking_from_response(resp)
-    return resp
+    if "authentication" in low or "api key" in low or "unauthorized" in low:
+        return f"Authentication failed for {model}. Check the API key in project settings."
 
-litellm.acompletion = patched_acompletion
-litellm.Router.acompletion = patched_router_acompletion
+    if "context" in low and ("length" in low or "window" in low or "exceed" in low):
+        return f"The conversation exceeded the context window of {model}. Try increasing num_ctx or starting a new session."
+
+    return msg
+
 
 def print_event(event: str, data: dict):
     payload = {"event": event, **data}
-    try:
-        if _real_stdout and not getattr(_real_stdout, 'closed', False):
-            _real_stdout.write(json.dumps(payload) + "\n")
-            _real_stdout.flush()
-    except (ValueError, OSError, AttributeError):
-        pass
     hook = event_hook
     if not hook:
         hook = getattr(litellm, "event_hook", None)
+    # Write to stdout only in CLI/stdin mode (no server hook active)
+    if not hook:
+        try:
+            if _real_stdout and not getattr(_real_stdout, 'closed', False):
+                _real_stdout.write(json.dumps(payload) + "\n")
+                _real_stdout.flush()
+        except (ValueError, OSError, AttributeError):
+            pass
     if hook:
         try:
             hook(payload)
@@ -543,34 +503,28 @@ async def handle_run(data: dict):
         agent.agent.on_thinking = _on_thinking
 
     print_event("agent_started", {"agent": agent_type, "model": agent.model})
-    
-    global active_on_thinking
-    active_on_thinking = _on_thinking
-    import litellm
-    litellm.active_on_thinking = _on_thinking
+
     try:
         try:
             resp_obj = await agent.run(AgentInput(prompt=prompt))
             response = resp_obj.response.strip() if resp_obj.response else ""
-            
+
             # Save to store if using chat_orchestrator
             if agent_type == "chat_orchestrator" and current_store and current_project:
                 current_store.append_message(current_project, "user", prompt)
                 if response:
                     current_store.append_message(current_project, "assistant", response)
                 current_store.save(current_project)
-                
+
             print_event("agent_response", {"response": response})
         except Exception as e:
             import traceback
             err_msg = traceback.format_exc()
-            print_event("error", {"message": str(e), "trace": err_msg})
+            user_msg = _friendly_llm_error(e, current_project)
+            print_event("error", {"message": user_msg, "trace": err_msg})
     finally:
-        # Give any pending async completion callbacks a moment to finish logging thoughts
-        await asyncio.sleep(0.5)
-        active_on_thinking = None
-        litellm.active_on_thinking = None
-        
+        pass
+
     print_event("agent_finished", {})
 
 async def handle_list_projects(data: dict):

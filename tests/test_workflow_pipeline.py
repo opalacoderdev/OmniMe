@@ -23,6 +23,13 @@ import anyio
 from opalacoder.orchestrator import WorkflowOrchestratorStrategy
 
 
+def _make_mock_router(acompletion_side_effect):
+    """Return a mock router whose .acompletion delegates to the given async callable."""
+    mock = MagicMock()
+    mock.acompletion = acompletion_side_effect
+    return mock
+
+
 # ---------------------------------------------------------------------------
 # Helpers: fake LLM responses
 # ---------------------------------------------------------------------------
@@ -149,7 +156,7 @@ async def test_workflow_creates_files(tmp_path, capsys):
     strategy = WorkflowOrchestratorStrategy(model="ollama/test-model")
 
     with (
-        patch("opalacoder.workflow_orchestrator.litellm.acompletion", side_effect=fake_acompletion),
+        patch("opalacoder.workflow_orchestrator._llm_router", return_value=_make_mock_router(fake_acompletion)),
         patch("agenticblocks.blocks.llm.agent.LLMAgentBlock.run", new=fake_agent_run),
         patch("opalacoder.workflow_orchestrator.WorkflowOrchestratorStrategy._plan_and_refine",
               new=AsyncMock(return_value="")),
@@ -227,7 +234,7 @@ async def test_planner_oracle_receives_snapshot_and_request(tmp_path):
     session = FakeSession(project_path)
 
     with (
-        patch("opalacoder.workflow_orchestrator.litellm.acompletion", side_effect=fake_acompletion_seq),
+        patch("opalacoder.workflow_orchestrator._llm_router", return_value=_make_mock_router(fake_acompletion_seq)),
         patch("agenticblocks.blocks.llm.agent.LLMAgentBlock.run", new=fake_agent_run),
         patch("opalacoder.workflow_orchestrator.WorkflowOrchestratorStrategy._plan_and_refine",
               new=AsyncMock(return_value="")),
@@ -278,7 +285,7 @@ async def test_verifier_oracle_receives_worker_reports(tmp_path):
     strategy = WorkflowOrchestratorStrategy(model="ollama/test-model")
 
     with (
-        patch("opalacoder.workflow_orchestrator.litellm.acompletion", side_effect=fake_acompletion_seq),
+        patch("opalacoder.workflow_orchestrator._llm_router", return_value=_make_mock_router(fake_acompletion_seq)),
         patch("agenticblocks.blocks.llm.agent.LLMAgentBlock.run", new=fake_agent_run),
         patch("opalacoder.workflow_orchestrator.WorkflowOrchestratorStrategy._plan_and_refine",
               new=AsyncMock(return_value="")),
@@ -430,7 +437,7 @@ async def test_worker_task_contains_html_context_for_css(tmp_path, capsys):
     session = FakeSession(project_path)
 
     with (
-        patch("opalacoder.workflow_orchestrator.litellm.acompletion", side_effect=fake_acompletion_seq),
+        patch("opalacoder.workflow_orchestrator._llm_router", return_value=_make_mock_router(fake_acompletion_seq)),
         patch("agenticblocks.blocks.llm.agent.LLMAgentBlock.run", new=fake_agent_run),
         patch("opalacoder.workflow_orchestrator.WorkflowOrchestratorStrategy._plan_and_refine",
               new=AsyncMock(return_value="")),
@@ -615,7 +622,7 @@ async def test_planner_reflection_triggered_on_incomplete_task(tmp_path):
                 context=".calculator (flex wrapper), .btn (base button), .btn-clear (red), .btn-equals (red).",
             )]})
 
-    with patch("opalacoder.workflow_orchestrator.litellm.acompletion", side_effect=fake_acompletion):
+    with patch("opalacoder.workflow_orchestrator._llm_router", return_value=_make_mock_router(fake_acompletion)):
         result = await _oracle(
             PlanOutput,
             system="You are a planner.",
@@ -691,7 +698,7 @@ async def test_reviewer_oracle_failure_does_not_abort_plan(tmp_path):
     strategy = WorkflowOrchestratorStrategy(model="ollama/test-model")
 
     with (
-        patch("opalacoder.workflow_orchestrator.litellm.acompletion", side_effect=fake_acompletion),
+        patch("opalacoder.workflow_orchestrator._llm_router", return_value=_make_mock_router(fake_acompletion)),
         patch("agenticblocks.blocks.llm.agent.LLMAgentBlock.run", new=fake_agent_run),
         patch("opalacoder.workflow_orchestrator.WorkflowOrchestratorStrategy._plan_and_refine",
               new=AsyncMock(return_value="")),
@@ -766,7 +773,7 @@ async def test_semantic_retry_does_not_consume_format_retry_budget(tmp_path):
             context=".calculator flex wrapper, .btn base button.",
         )]})
 
-    with patch("opalacoder.workflow_orchestrator.litellm.acompletion", side_effect=fake_acompletion):
+    with patch("opalacoder.workflow_orchestrator._llm_router", return_value=_make_mock_router(fake_acompletion)):
         result = await _oracle(
             PlanOutput,
             system="You are a planner.",

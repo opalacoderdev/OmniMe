@@ -19,6 +19,15 @@ export default defineConfig({
   },
   build: {
     outDir: path.resolve(__dirname, '../opalacoder/gui'),
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-monaco': ['@monaco-editor/react', '@monaco-editor/loader'],
+          'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit'],
+        }
+      }
+    }
   }
 });

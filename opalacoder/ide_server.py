@@ -295,6 +295,28 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
+        # 3.7. List subdirectories of a filesystem path
+        elif path == '/api/fs/dirs':
+            req_path = data.get('path', os.path.expanduser('~'))
+            req_path = os.path.abspath(os.path.expanduser(req_path or os.path.expanduser('~')))
+            try:
+                entries = []
+                # Parent directory entry (except filesystem root)
+                parent = os.path.dirname(req_path)
+                if parent != req_path:
+                    entries.append({"name": "..", "path": parent})
+                for name in sorted(os.listdir(req_path)):
+                    if name.startswith('.'):
+                        continue
+                    full = os.path.join(req_path, name)
+                    if os.path.isdir(full):
+                        entries.append({"name": name, "path": full})
+                self.send_response(writer, 200, json.dumps({"current": req_path, "dirs": entries}).encode('utf-8'), "application/json")
+            except PermissionError:
+                self.send_response(writer, 403, json.dumps({"error": "Permission denied", "current": req_path, "dirs": []}).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e), "current": req_path, "dirs": []}).encode('utf-8'), "application/json")
+
         # 4. List Projects
         elif path == '/api/opalacoder/list-projects':
             from opalacoder.config import DEFAULT_DB_PATH
@@ -416,67 +438,17 @@ class AsyncHTTPServer:
                 if not isinstance(params, dict):
                     self.send_response(writer, 400, b'{"error":"model_params must be a JSON object"}', "application/json")
                     return
+                # Accept any key/value pair; values already typed by JSON decode.
+                # Reject keys with invalid characters (not letters/digits/underscores/hyphens).
+                import re as _re
                 validated = {}
                 for k, v in params.items():
-                    if k in {"max_tokens", "num_ctx"}:
-                        try:
-                            val = int(v) if v is not None and v != "" else None
-                            if val is not None:
-                                if val <= 0:
-                                    raise ValueError()
-                                validated[k] = val
-                        except (ValueError, TypeError):
-                            self.send_response(writer, 400, f'{{"error":"{k} must be a positive integer"}}'.encode('utf-8'), "application/json")
-                            return
-                    elif k == "temperature":
-                        try:
-                            val = float(v) if v is not None and v != "" else None
-                            if val is not None:
-                                if not (0.0 <= val <= 2.0):
-                                    raise ValueError()
-                                validated[k] = val
-                        except (ValueError, TypeError):
-                            self.send_response(writer, 400, b'{"error":"temperature must be a float between 0.0 and 2.0"}', "application/json")
-                            return
-                    elif k == "top_p":
-                        try:
-                            val = float(v) if v is not None and v != "" else None
-                            if val is not None:
-                                if not (0.0 <= val <= 1.0):
-                                    raise ValueError()
-                                validated[k] = val
-                        except (ValueError, TypeError):
-                            self.send_response(writer, 400, b'{"error":"top_p must be a float between 0.0 and 1.0"}', "application/json")
-                            return
-                    elif k in {"frequency_penalty", "presence_penalty"}:
-                        try:
-                            val = float(v) if v is not None and v != "" else None
-                            if val is not None:
-                                if not (-2.0 <= val <= 2.0):
-                                    raise ValueError()
-                                validated[k] = val
-                        except (ValueError, TypeError):
-                            self.send_response(writer, 400, f'{{"error":"{k} must be a float between -2.0 and 2.0"}}'.encode('utf-8'), "application/json")
-                            return
-                    elif k == "think":
-                        if v is not None and v != "":
-                            if isinstance(v, bool):
-                                validated[k] = v
-                            elif isinstance(v, str) and v.lower() in {"true", "on", "yes"}:
-                                validated[k] = True
-                            elif isinstance(v, str) and v.lower() in {"false", "off", "no"}:
-                                validated[k] = False
-                            elif isinstance(v, str) and v.lower() == "auto":
-                                validated[k] = "auto"
-                            else:
-                                try:
-                                    val = int(v)
-                                    if val < -1:
-                                        raise ValueError()
-                                    validated[k] = val
-                                except (ValueError, TypeError):
-                                    self.send_response(writer, 400, b'{"error":"think must be a boolean, auto, or integer budget >= -1"}', "application/json")
-                                    return
+                    if not k or not _re.fullmatch(r'[A-Za-z0-9_-]+', k):
+                        self.send_response(writer, 400, f'{{"error":"invalid parameter name: {k}"}}'.encode('utf-8'), "application/json")
+                        return
+                    if v is None or v == "":
+                        continue
+                    validated[k] = v
                 project.model_params = validated
 
             if "api_key" in data:
@@ -671,8 +643,10 @@ class AsyncHTTPServer:
                         break
                     send_data(data)
                     await writer.drain()
+            except (ConnectionResetError, BrokenPipeError):
+                pass  # normal client disconnect
             except Exception as e:
-                print(f"Terminal stream exception: {e}")
+                print(f"Terminal stream error: {e}")
             finally:
                 if self.active_terminal and term_queue in self.active_terminal.queues:
                     self.active_terminal.queues.remove(term_queue)

@@ -1,6 +1,4 @@
-import os
 import numpy as np
-from typing import Optional
 
 # Singleton pattern for the embedding model to avoid reloading it
 _model = None

@@ -36,6 +36,8 @@ from .config import (
     get_agent_llm_kwargs,
     get_agent_max_heartbeats,
     get_agent_model,
+    get_project_agent_params,
+    resolve_model_for_thinking,
 )
 from .skills import (
     active_skills,
@@ -212,7 +214,7 @@ def build_run_skill_tool(
             system_prompt=system,
             model=model,
             tools=tools,
-            litellm_kwargs=worker_kwargs,
+            model_kwargs=worker_kwargs,
             max_iterations=None,
             max_tool_calls=40,
             termination_tools=["send_message"],
@@ -318,14 +320,22 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
     )
 
     model = get_agent_model("memgpt", get_agent_model("chat_agent", project_model))
+    _llm_kwargs = get_agent_llm_kwargs("memgpt")
+    _agent_params = get_project_agent_params()
+    model = resolve_model_for_thinking(model, _llm_kwargs)
     memgpt = MemGPTAgentBlock(
         name="chat_orchestrator",
         system_prompt=system_prompt,
         model=model,
         tools=[read_core_memory, append_core_memory, search_conversation_history],
-        litellm_kwargs=get_agent_llm_kwargs("memgpt"),
-        max_heartbeats=get_agent_max_heartbeats("memgpt", 20),
-        max_context_tokens=get_agent_llm_kwargs("memgpt").get("num_ctx", 8192),
+        model_kwargs=_llm_kwargs,
+        max_heartbeats=_agent_params.get("max_heartbeats", get_agent_max_heartbeats("memgpt", 20)),
+        max_context_tokens=_agent_params.get("max_context_tokens", _llm_kwargs.get("num_ctx", 8192)),
+        eviction_threshold=_agent_params.get("eviction_threshold", 1.0),
+        memory_pressure_threshold=_agent_params.get("memory_pressure_threshold", 0.7),
+        debug=_agent_params.get("debug", False),
+        use_shared_router=_agent_params.get("use_shared_router", True),
+        response_mode=_agent_params.get("response_mode", "all"),
     )
 
     # Seed the working context from persisted history so the conversation restores

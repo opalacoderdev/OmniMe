@@ -278,64 +278,71 @@ async def cmd_set_alternative_model(state: REPLState, args: list[str]) -> str | 
     T.success(f"Alternative model set to '{model_id}' for this project.")
 
 
+def _parse_model_param_value(val_str: str):
+    """Infer the Python type of a model parameter value from its string representation.
+
+    Priority: bool literals → int → float → string.
+    Returns the typed value or raises ValueError with a descriptive message.
+    """
+    low = val_str.lower()
+    if low in {"true", "on", "yes"}:
+        return True
+    if low in {"false", "off", "no"}:
+        return False
+    if low == "null" or low == "none":
+        return None
+    try:
+        return int(val_str)
+    except ValueError:
+        pass
+    try:
+        return float(val_str)
+    except ValueError:
+        pass
+    # Validate: reject values that look like typos (contain spaces, control chars)
+    if not val_str.isprintable():
+        raise ValueError("Value contains non-printable characters")
+    return val_str
+
+
 @_registry.register("/set-model-param", usage="<param_name> <value>",
-                    description="Set advanced model parameter (temperature, max_tokens, num_ctx, top_p, frequency_penalty, presence_penalty, think)")
+                    description="Set any LiteLLM/model parameter (e.g. temperature, reasoning_effort, seed, stop, num_ctx, think, ...)")
 async def cmd_set_model_param(state: REPLState, args: list[str]) -> str | None:
     if len(args) < 2:
         T.error("Usage: /set-model-param <param_name> <value>\n"
-                "Allowed params: temperature, max_tokens, num_ctx, top_p, frequency_penalty, presence_penalty, think")
+                "Accepts any parameter supported by LiteLLM/Ollama.\n"
+                "Values are auto-typed: integers, floats, booleans (true/false/on/off/yes/no), or strings.")
         return "continue"
-    
-    param = args[0].strip().lower()
-    val_str = args[1].strip()
-    
-    allowed_params = {"temperature", "max_tokens", "num_ctx", "top_p", "frequency_penalty", "presence_penalty", "think"}
-    if param not in allowed_params:
-        T.error(f"Unknown parameter '{param}'. Allowed parameters: {', '.join(allowed_params)}")
+
+    param = args[0].strip()
+    val_str = " ".join(args[1:]).strip()
+
+    if not param or not param.replace("_", "").replace("-", "").isalnum():
+        T.error(f"Invalid parameter name '{param}'. Use only letters, digits, underscores and hyphens.")
         return "continue"
-        
+
     try:
-        if param in {"max_tokens", "num_ctx"}:
-            val = int(val_str)
-            if val <= 0:
-                raise ValueError("Must be a positive integer")
-        elif param == "temperature":
-            val = float(val_str)
-            if not (0.0 <= val <= 2.0):
-                raise ValueError("Must be between 0.0 and 2.0")
-        elif param == "top_p":
-            val = float(val_str)
-            if not (0.0 <= val <= 1.0):
-                raise ValueError("Must be between 0.0 and 1.0")
-        elif param in {"frequency_penalty", "presence_penalty"}:
-            val = float(val_str)
-            if not (-2.0 <= val <= 2.0):
-                raise ValueError("Must be between -2.0 and 2.0")
-        elif param == "think":
-            if val_str.lower() in {"true", "on", "yes"}:
-                val = True
-            elif val_str.lower() in {"false", "off", "no"}:
-                val = False
-            elif val_str.lower() == "auto":
-                val = "auto"
-            else:
-                try:
-                    val = int(val_str)
-                    if val < -1:
-                        raise ValueError("Must be -1 or greater")
-                except ValueError:
-                    raise ValueError("Must be a boolean (true/false), option (on/off/auto), or integer budget (>= -1)")
+        val = _parse_model_param_value(val_str)
     except ValueError as e:
         T.error(f"Invalid value for '{param}': {e}")
         return "continue"
 
     if not hasattr(state.project, "model_params") or state.project.model_params is None:
         state.project.model_params = {}
-    
+
     state.project.model_params[param] = val
-    state.store.save(state.project)
-    _rebuild_memgpt(state)
-    T.success(f"Model parameter '{param}' set to {val} for this project.")
+    try:
+        state.store.save(state.project)
+        _rebuild_memgpt(state)
+    except Exception as e:
+        # Roll back the in-memory change so the project stays consistent
+        state.project.model_params.pop(param, None)
+        T.error(
+            f"Failed to apply parameter '{param}': {e}\n"
+            "The parameter was not saved. Check the value and try again."
+        )
+        return "continue"
+    T.success(f"Model parameter '{param}' set to {repr(val)} for this project.")
 
 
 @_registry.register("/undo", description=_("undo_desc"))

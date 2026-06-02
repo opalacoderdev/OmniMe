@@ -24,11 +24,11 @@ import re
 import time
 from pathlib import Path
 
-import litellm
 from pydantic import BaseModel, ValidationError, field_validator
 from rich.live import Live
 
-from agenticblocks.blocks.llm.agent import AgentInput, LLMAgentBlock
+from agenticblocks.blocks.llm.agent import AgentInput, LLMAgentBlock, _get_shared_router as _llm_router
+from .config import resolve_model_for_thinking
 
 from .config import (
     get_agent_debug,
@@ -174,48 +174,6 @@ def _project_snapshot() -> str:
     return "\n".join(files[:120]) or "(no files found)"
 
 
-def _read_project_files_for_verify(max_bytes_per_file: int = 3000) -> str:
-    """Read actual content of all non-binary project files for the verifier oracle.
-
-    Returns a block with each file's content so the verifier can check the real
-    output — not just the worker's self-reported summary.
-    """
-    SKIP = {".git", "node_modules", "__pycache__", ".venv", "venv",
-            ".mypy_cache", "dist", "build", ".env"}
-    BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff",
-                  ".woff2", ".ttf", ".eot", ".pdf", ".zip", ".gz", ".bin"}
-    root = Path(get_project_path())
-    if not root.exists():
-        return "(project path not found)"
-
-    parts: list[str] = []
-    total = 0
-    MAX_TOTAL = 12_000
-
-    for p in sorted(root.rglob("*")):
-        if not p.is_file():
-            continue
-        if any(part in SKIP or part.startswith(".") for part in p.parts):
-            continue
-        if p.suffix.lower() in BINARY_EXT:
-            continue
-        if total >= MAX_TOTAL:
-            parts.append("...(remaining files omitted — budget reached)")
-            break
-        try:
-            content = p.read_text(encoding="utf-8", errors="replace")
-        except Exception:
-            continue
-        rel = str(p.relative_to(root))
-        snippet = content[:max_bytes_per_file]
-        if len(content) > max_bytes_per_file:
-            snippet += f"\n...(truncated, {len(content)} bytes total)"
-        block = f"### {rel}\n```\n{snippet}\n```"
-        parts.append(block)
-        total += len(snippet)
-
-    return "\n\n".join(parts) if parts else "(no readable files in project)"
-
 
 # ---------------------------------------------------------------------------
 # Oracle: single litellm call with JSON mode + reflection
@@ -264,7 +222,7 @@ async def _oracle(
             )})
 
         try:
-            resp = await litellm.acompletion(
+            resp = await _llm_router(model).acompletion(
                 model=model, messages=messages, **kwargs
             )
             msg = resp.choices[0].message
@@ -293,7 +251,7 @@ async def _oracle(
                     )})
                     # Retry the LLM call without consuming the format-retry budget
                     try:
-                        resp2 = await litellm.acompletion(
+                        resp2 = await _llm_router(model).acompletion(
                             model=model, messages=messages, **kwargs
                         )
                         content2 = (resp2.choices[0].message.content or "").strip()
@@ -731,9 +689,9 @@ Correction task schema:
             agent = LLMAgentBlock(
                 name=f"worker_{task.id}_c{cmd_index}",
                 system_prompt=system,
-                model=model,
+                model=resolve_model_for_thinking(model, worker_kwargs),
                 tools=tools,
-                litellm_kwargs=worker_kwargs,
+                model_kwargs=worker_kwargs,
                 max_iterations=None,
                 max_tool_calls=sub_hb * 3,
                 debug=debug,
