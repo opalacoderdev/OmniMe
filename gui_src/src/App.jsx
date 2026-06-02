@@ -1157,7 +1157,6 @@ export default function App() {
     setChatMessages(prev => [...prev, { role: 'user', content: userText }]);
     setIsAgentRunning(true);
     setProblems([]);
-    setThinkingLogs([]);
     addLog('info', `Iniciando: "${userText}"`);
 
     // ── Slash commands: use a dedicated non-streaming endpoint so WebKit
@@ -1289,7 +1288,11 @@ export default function App() {
         break;
       case 'thought':
         addLog('thought', data.content);
-        setThinkingLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), content: data.content }]);
+        setThinkingLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'THINKING', content: data.content }]);
+        break;
+      case 'reflection':
+        addLog('thought', data.content);
+        setThinkingLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'REFLECTION', content: data.content }]);
         break;
       case 'cancelled':
         addLog('warning', data.message || 'Execução cancelada.');
@@ -1868,13 +1871,20 @@ export default function App() {
                     {thinkingLogs.length === 0 ? (
                       <div style={{ color: '#808080', fontStyle: 'italic' }}>Nenhum pensamento gerado ainda. Execute uma instrução para ver o raciocínio do agente...</div>
                     ) : (
-                      thinkingLogs.map((log, i) => (
-                        <div key={i} className="text-[#da70d6]" style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '4px' }}>
-                          <span style={{ color: '#5a5a5a' }}>[{log.timestamp}]</span>
-                          <span style={{ fontWeight: 'bold' }}>[THOUGHT]</span>
-                          <span style={{ whiteSpace: 'pre-wrap', flex: 1, fontFamily: 'Consolas, monospace' }}>{log.content}</span>
-                        </div>
-                      ))
+                      thinkingLogs.map((log, i) => {
+                        const isReflection = log.type === 'REFLECTION';
+                        return (
+                          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '4px' }}>
+                            <span style={{ color: '#5a5a5a', flexShrink: 0 }}>[{log.timestamp}]</span>
+                            <span style={{ fontWeight: 'bold', flexShrink: 0, color: isReflection ? '#4ec9b0' : '#da70d6' }}>
+                              [{log.type || 'THINKING'}]
+                            </span>
+                            <span style={{ whiteSpace: 'pre-wrap', flex: 1, fontFamily: 'Consolas, monospace', color: isReflection ? '#4ec9b0' : '#da70d6' }}>
+                              {log.content}
+                            </span>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 )}
@@ -2496,32 +2506,21 @@ export default function App() {
                           </select>
                         </div>
 
-                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                        <div className="flex flex-col" style={{ gap: '4px', justifyContent: 'flex-end' }}>
                           <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Thinking (think)</label>
-                          <input type="text" placeholder="padrão: true"
-                            value={editingProject.model_params?.think !== undefined ? String(editingProject.model_params.think) : ''}
-                            onChange={e => {
-                              const s = e.target.value;
-                              setEditingProject(p => {
-                                const n = { ...p.model_params };
-                                if (s === '') { delete n.think; }
-                                else {
-                                  const i = parseInt(s, 10);
-                                  if (!isNaN(i) && String(i) === s.trim()) n.think = i;
-                                  else if (s.toLowerCase() === 'true') n.think = true;
-                                  else if (s.toLowerCase() === 'false') n.think = false;
-                                  else n.think = s;
-                                }
-                                return { ...p, model_params: n };
-                              });
-                            }} />
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                            <input type="checkbox"
+                              checked={!!editingProject.model_params?.think}
+                              onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, think: e.target.checked } }))} />
+                            <span style={{ fontSize: '12px', color: '#cccccc' }}>Habilitado</span>
+                          </label>
                         </div>
 
                         <div className="flex flex-col" style={{ gap: '4px', justifyContent: 'flex-end' }}>
                           <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Stream</label>
                           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
                             <input type="checkbox"
-                              checked={editingProject.model_params?.stream !== false}
+                              checked={!!editingProject.model_params?.stream}
                               onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, stream: e.target.checked } }))} />
                             <span style={{ fontSize: '12px', color: '#cccccc' }}>Habilitado</span>
                           </label>

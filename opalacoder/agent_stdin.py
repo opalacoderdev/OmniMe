@@ -491,16 +491,24 @@ async def handle_run(data: dict):
                 "content": msg.get("content", "")
             })
             
-    # Wire on_thinking: the lib handles LiteLLM internally — OpalaCoder just
-    # provides the callback. Fires once per LLM call with reasoning_content
-    # (or extracted <think> block) before agent_response is emitted.
     def _on_thinking(chunk: str) -> None:
         print_event("thought", {"content": chunk})
+
+    def _on_iteration(_step: int, messages: list) -> None:
+        last = messages[-1] if messages else {}
+        content = last.get("content") or ""
+        if content:
+            print_event("reflection", {"content": str(content)})
 
     if hasattr(agent, "on_thinking"):
         agent.on_thinking = _on_thinking
     elif hasattr(agent, "agent") and hasattr(agent.agent, "on_thinking"):
         agent.agent.on_thinking = _on_thinking
+
+    if hasattr(agent, "on_iteration"):
+        agent.on_iteration = _on_iteration
+    elif hasattr(agent, "agent") and hasattr(agent.agent, "on_iteration"):
+        agent.agent.on_iteration = _on_iteration
 
     print_event("agent_started", {"agent": agent_type, "model": agent.model})
 

@@ -9,7 +9,6 @@
 # Project Guide
 
 ## Language
-
 All code, comments, and documentation must be written in **English**.
 
 ## Architecture

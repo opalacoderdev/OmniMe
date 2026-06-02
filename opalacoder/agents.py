@@ -2,7 +2,7 @@
 
 from agenticblocks.blocks.llm.agent import LLMAgentBlock
 
-from .config import DEFAULT_MODEL, get_agent_llm_kwargs, get_agent_model, get_project_agent_params, resolve_model_for_thinking
+from .config import DEFAULT_MODEL, get_agent_llm_kwargs, get_agent_model, get_project_agent_params
 from . import i18n
 
 def _make_llm(name: str, system_prompt: str, model: str | None, disable_lang_rule: bool = False, **kwargs) -> LLMAgentBlock:
@@ -16,7 +16,6 @@ def _make_llm(name: str, system_prompt: str, model: str | None, disable_lang_rul
     # Start from per-agent config, then apply any explicit caller overrides (caller wins)
     merged_kwargs = {**get_agent_llm_kwargs(name), **kwargs.get("model_kwargs", {})}
     kwargs["model_kwargs"] = merged_kwargs
-    resolved_model = resolve_model_for_thinking(resolved_model, merged_kwargs)
 
     # Apply project-level agent constructor overrides (e.g. max_iterations, debug)
     agent_params = get_project_agent_params()

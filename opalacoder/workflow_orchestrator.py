@@ -28,7 +28,6 @@ from pydantic import BaseModel, ValidationError, field_validator
 from rich.live import Live
 
 from agenticblocks.blocks.llm.agent import AgentInput, LLMAgentBlock, _get_shared_router as _llm_router
-from .config import resolve_model_for_thinking
 
 from .config import (
     get_agent_debug,
@@ -689,7 +688,7 @@ Correction task schema:
             agent = LLMAgentBlock(
                 name=f"worker_{task.id}_c{cmd_index}",
                 system_prompt=system,
-                model=resolve_model_for_thinking(model, worker_kwargs),
+                model=model,
                 tools=tools,
                 model_kwargs=worker_kwargs,
                 max_iterations=None,

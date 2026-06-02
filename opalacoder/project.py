@@ -87,7 +87,7 @@ class ProjectData:
     subplans: list = field(default_factory=list)
     results: dict = field(default_factory=dict)
     core_memory: str = ""
-    model_params: dict = field(default_factory=lambda: {"think": True, "stream": True})
+    model_params: dict = field(default_factory=lambda: {"think": False, "stream": False})
     api_key: str = ""
     api_base: str = ""
     history: list = field(default_factory=list)   # [{role, content}]
@@ -137,8 +137,8 @@ class ProjectStore:
                 else:
                     d["model_params"] = {}
                 # Apply defaults for params added after project creation
-                d["model_params"].setdefault("think", True)
-                d["model_params"].setdefault("stream", True)
+                d["model_params"].setdefault("think", False)
+                d["model_params"].setdefault("stream", False)
                 
                 # Load api_key and api_base from local .env if it exists
                 d["api_key"] = ""
@@ -310,7 +310,7 @@ class ProjectStore:
                 results=json.loads(row["results"]),
                 core_memory=row["core_memory"] if "core_memory" in row.keys() else "",
                 model_params={
-                    "think": True, "stream": True,
+                    "think": False, "stream": False,
                     **(json.loads(row["model_params"]) if "model_params" in row.keys() else {}),
                 },
                 api_key=api_key,

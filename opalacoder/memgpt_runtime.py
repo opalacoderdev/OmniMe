@@ -37,7 +37,6 @@ from .config import (
     get_agent_max_heartbeats,
     get_agent_model,
     get_project_agent_params,
-    resolve_model_for_thinking,
 )
 from .skills import (
     active_skills,
@@ -322,7 +321,6 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
     model = get_agent_model("memgpt", get_agent_model("chat_agent", project_model))
     _llm_kwargs = get_agent_llm_kwargs("memgpt")
     _agent_params = get_project_agent_params()
-    model = resolve_model_for_thinking(model, _llm_kwargs)
     memgpt = MemGPTAgentBlock(
         name="chat_orchestrator",
         system_prompt=system_prompt,
