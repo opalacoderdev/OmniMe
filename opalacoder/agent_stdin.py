@@ -482,6 +482,8 @@ async def handle_create_project(data: dict):
     model = data.get("model") or DEFAULT_MODEL
     mode = data.get("mode") or "auto"
     skills = data.get("skills", [])
+    api_key = data.get("api_key")
+    api_base = data.get("api_base")
     
     db_key = project_name.replace(" ", "_").lower()
     if store.exists(db_key):
@@ -495,11 +497,62 @@ async def handle_create_project(data: dict):
         project_path=os.path.abspath(project_path),
         skills=skills,
         description=description,
+        api_key=api_key,
+        api_base=api_base,
     )
     print_event("project_created", {
         "project_name": project.project_name,
         "project_path": project.project_path,
-        "skills": project.skills
+        "skills": project.skills,
+        "api_key": project.api_key,
+        "api_base": project.api_base,
+    })
+
+async def handle_update_project(data: dict):
+    db_path = data.get("db") or DEFAULT_DB_PATH
+    store = ProjectStore(db_path=db_path)
+    
+    project_name = data.get("project_name")
+    if not project_name:
+        print_event("error", {"message": "project_name is required"})
+        return
+    
+    if not store.exists(project_name):
+        print_event("error", {"message": f"Project '{project_name}' not found"})
+        return
+        
+    project = store.load(project_name)
+    if "display_name" in data:
+        project.project_name = data["display_name"]
+    if "model" in data and data["model"]:
+        project.model = data["model"]
+    if "alternative_model" in data:
+        project.alternative_model = data["alternative_model"]
+    if "description" in data:
+        project.description = data["description"]
+    if "mode" in data and data["mode"]:
+        project.mode = data["mode"]
+    if "project_path" in data and data["project_path"]:
+        project.project_path = os.path.abspath(data["project_path"])
+    if "api_key" in data:
+        project.api_key = data["api_key"]
+    if "api_base" in data:
+        project.api_base = data["api_base"]
+    if "model_params" in data:
+        project.model_params = data["model_params"]
+        
+    store.save(project)
+    print_event("project_updated", {
+        "name": project.name,
+        "project_name": project.project_name,
+        "project_path": project.project_path,
+        "model": project.model,
+        "alternative_model": project.alternative_model,
+        "mode": project.mode,
+        "description": project.description,
+        "api_key": project.api_key,
+        "api_base": project.api_base,
+        "model_params": project.model_params,
     })
 
 async def handle_delete_project(data: dict):
@@ -552,6 +605,8 @@ async def stdin_server_loop():
                 await handle_list_projects(data)
             elif cmd == "create_project":
                 await handle_create_project(data)
+            elif cmd == "update_project":
+                await handle_update_project(data)
             elif cmd == "delete_project":
                 await handle_delete_project(data)
             else:

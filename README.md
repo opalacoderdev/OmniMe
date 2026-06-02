@@ -30,7 +30,7 @@ OpalaCoder features an integrated desktop GUI built using React, Vite, and `pywe
 - **Integrated Terminal**: Includes a real-time xterm.js terminal with shell/PTY integration for running and inspecting commands natively.
 - **Git Source Control Sidebar**: A dedicated panel that tracks file modifications (color-coded as Modified/Untracked/Deleted) and provides a commit interface.
 - **Global Settings Panel**: Customize the editor font size, tab size, and word wrapping, with dynamic toggle support for Light and Dark themes.
-- **About Tab**: Version tracking (currently `0.1.19 alfa`), licensing, and developer details in the settings panel.
+- **About Tab**: Version tracking (currently `0.1.25 alfa`), licensing, and developer details in the settings panel.
 
 ### 6. Persistent Projects and CLI Commands
 

@@ -460,6 +460,11 @@ class AsyncHTTPServer:
                             return
                 project.model_params = validated
 
+            if "api_key" in data:
+                project.api_key = data["api_key"]
+            if "api_base" in data:
+                project.api_base = data["api_base"]
+
             store.save(project)
             res_data = {
                 "name": project.name,
@@ -470,6 +475,8 @@ class AsyncHTTPServer:
                 "mode": project.mode,
                 "description": project.description,
                 "model_params": project.model_params,
+                "api_key": getattr(project, "api_key", ""),
+                "api_base": getattr(project, "api_base", ""),
             }
             self.send_response(writer, 200, json.dumps(res_data).encode(), "application/json")
 

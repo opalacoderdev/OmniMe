@@ -1041,6 +1041,8 @@ export default function App() {
       mode: proj.mode || 'auto',
       description: proj.description || '',
       model_params: proj.model_params || {},
+      api_key: proj.api_key || '',
+      api_base: proj.api_base || '',
     });
   };
 
@@ -1060,6 +1062,8 @@ export default function App() {
           mode: editingProject.mode,
           description: editingProject.description,
           model_params: editingProject.model_params,
+          api_key: editingProject.api_key,
+          api_base: editingProject.api_base,
         })
       });
       if (res.ok) {
@@ -2257,6 +2261,28 @@ export default function App() {
                 </datalist>
               </div>
 
+              {/* API Key and API Base */}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
+                  <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Chave de API (Opcional)</label>
+                  <input
+                    type="password"
+                    value={editingProject.api_key}
+                    onChange={e => setEditingProject(p => ({ ...p, api_key: e.target.value }))}
+                    placeholder="Ex: sk-..."
+                  />
+                </div>
+                <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
+                  <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>URL Base da API (Opcional)</label>
+                  <input
+                    type="text"
+                    value={editingProject.api_base}
+                    onChange={e => setEditingProject(p => ({ ...p, api_base: e.target.value }))}
+                    placeholder="Ex: http://localhost:11434/v1"
+                  />
+                </div>
+              </div>
+
               {/* Description */}
               <div className="flex flex-col" style={{ gap: '4px' }}>
                 <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Descrição</label>
@@ -2681,7 +2707,7 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#cccccc' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Versão</span>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.24 alfa</span>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.25 alfa</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Autor</span>

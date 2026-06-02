@@ -88,6 +88,8 @@ class ProjectData:
     results: dict = field(default_factory=dict)
     core_memory: str = ""
     model_params: dict = field(default_factory=dict)
+    api_key: str = ""
+    api_base: str = ""
     history: list = field(default_factory=list)   # [{role, content}]
 
     def clear_state(self) -> None:
@@ -134,6 +136,25 @@ class ProjectStore:
                         d["model_params"] = {}
                 else:
                     d["model_params"] = {}
+                
+                # Load api_key and api_base from local .env if it exists
+                d["api_key"] = ""
+                d["api_base"] = ""
+                proj_path = d.get("project_path")
+                if proj_path and os.path.isdir(proj_path):
+                    env_path = os.path.join(proj_path, ".env")
+                    if os.path.isfile(env_path):
+                        try:
+                            with open(env_path, "r", encoding="utf-8") as f:
+                                for line in f:
+                                    line = line.strip()
+                                    if line.startswith("OPENAI_API_KEY="):
+                                        d["api_key"] = line.split("=", 1)[1].strip()
+                                    elif line.startswith("OPENAI_API_BASE="):
+                                        d["api_base"] = line.split("=", 1)[1].strip()
+                        except Exception:
+                            pass
+                
                 res.append(d)
             return res
 
@@ -253,6 +274,24 @@ class ProjectStore:
                 "SELECT role, content FROM project_history WHERE project = ? ORDER BY id",
                 (name,),
             ).fetchall()
+            # Read api_key and api_base from local .env if it exists
+            api_key = ""
+            api_base = ""
+            proj_path = row["project_path"]
+            if proj_path and os.path.isdir(proj_path):
+                env_path = os.path.join(proj_path, ".env")
+                if os.path.isfile(env_path):
+                    try:
+                        with open(env_path, "r", encoding="utf-8") as f:
+                            for line in f:
+                                line = line.strip()
+                                if line.startswith("OPENAI_API_KEY="):
+                                    api_key = line.split("=", 1)[1].strip()
+                                elif line.startswith("OPENAI_API_BASE="):
+                                    api_base = line.split("=", 1)[1].strip()
+                    except Exception:
+                        pass
+
             return ProjectData(
                 name=name,
                 mode=row["mode"],
@@ -268,6 +307,8 @@ class ProjectStore:
                 results=json.loads(row["results"]),
                 core_memory=row["core_memory"] if "core_memory" in row.keys() else "",
                 model_params=json.loads(row["model_params"]) if "model_params" in row.keys() else {},
+                api_key=api_key,
+                api_base=api_base,
                 history=[dict(r) for r in hist_rows],
             )
 
@@ -277,6 +318,37 @@ class ProjectStore:
         if "opalacoder" not in _skills:
             _skills = ["opalacoder"] + _skills
         _model_params = project.model_params if hasattr(project, "model_params") else {}
+        
+        # Save api_key and api_base to project's local .env
+        if hasattr(project, "api_key") or hasattr(project, "api_base"):
+            env_path = os.path.join(project.project_path, ".env")
+            env_lines = []
+            if os.path.isfile(env_path):
+                try:
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        env_lines = f.readlines()
+                except Exception:
+                    pass
+
+            def upsert_env(var_name, val):
+                if val is None:
+                    return
+                for i, line in enumerate(env_lines):
+                    if line.strip().startswith(f"{var_name}="):
+                        env_lines[i] = f"{var_name}={val}\n"
+                        return
+                env_lines.append(f"{var_name}={val}\n")
+
+            upsert_env("OPENAI_API_KEY", getattr(project, "api_key", ""))
+            upsert_env("OPENAI_API_BASE", getattr(project, "api_base", ""))
+
+            try:
+                os.makedirs(project.project_path, exist_ok=True)
+                with open(env_path, "w", encoding="utf-8") as f:
+                    f.writelines(env_lines)
+            except Exception:
+                pass
+
         with _conn(self.db_path) as conn:
             conn.execute(
                 """UPDATE projects SET updated_at=?, mode=?, model=?, alternative_model=?, project_name=?, project_path=?,
