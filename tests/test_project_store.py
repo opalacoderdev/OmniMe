@@ -205,3 +205,37 @@ def test_create_initializes_shadow_git(store, tmp_path):
     assert git_dir.exists()
     assert git_dir.is_dir()
 
+
+def test_set_project_context_loads_env_and_propagates_keys(tmp_path):
+    import os
+    from opalacoder.tools import set_project_context
+    from opalacoder.project import ProjectData
+    
+    proj_dir = tmp_path / "my_env_project"
+    proj_dir.mkdir()
+    env_file = proj_dir / ".env"
+    env_file.write_text("CUSTOM_VAR=my_value\nOPENAI_API_KEY=file_key\nOPENAI_API_BASE=file_base\n")
+    
+    # 1. Test loading from file
+    p = ProjectData(name="test", project_path=str(proj_dir))
+    set_project_context(p)
+    
+    assert os.environ.get("CUSTOM_VAR") == "my_value"
+    assert os.environ.get("OPENAI_API_KEY") == "file_key"
+    assert os.environ.get("OPENAI_API_BASE") == "file_base"
+    
+    # Clean up custom var
+    os.environ.pop("CUSTOM_VAR", None)
+    
+    # 2. Test session properties overriding env
+    p_with_keys = ProjectData(
+        name="test",
+        project_path=str(proj_dir),
+        api_key="session_key",
+        api_base="session_base"
+    )
+    set_project_context(p_with_keys)
+    assert os.environ.get("OPENAI_API_KEY") == "session_key"
+    assert os.environ.get("OPENAI_API_BASE") == "session_base"
+
+

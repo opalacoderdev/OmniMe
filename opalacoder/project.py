@@ -149,9 +149,9 @@ class ProjectStore:
                                 for line in f:
                                     line = line.strip()
                                     if line.startswith("OPENAI_API_KEY="):
-                                        d["api_key"] = line.split("=", 1)[1].strip()
+                                        d["api_key"] = line.split("=", 1)[1].strip().strip('"').strip("'")
                                     elif line.startswith("OPENAI_API_BASE="):
-                                        d["api_base"] = line.split("=", 1)[1].strip()
+                                        d["api_base"] = line.split("=", 1)[1].strip().strip('"').strip("'")
                         except Exception:
                             pass
                 
@@ -286,9 +286,9 @@ class ProjectStore:
                             for line in f:
                                 line = line.strip()
                                 if line.startswith("OPENAI_API_KEY="):
-                                    api_key = line.split("=", 1)[1].strip()
+                                    api_key = line.split("=", 1)[1].strip().strip('"').strip("'")
                                 elif line.startswith("OPENAI_API_BASE="):
-                                    api_base = line.split("=", 1)[1].strip()
+                                    api_base = line.split("=", 1)[1].strip().strip('"').strip("'")
                     except Exception:
                         pass
 

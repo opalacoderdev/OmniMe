@@ -81,7 +81,26 @@ def set_project_context(session, store=None) -> None:
     global _PROJECT_PATH, _PROJECT_SESSION, _PROJECT_STORE
     _PROJECT_SESSION = session
     _PROJECT_STORE = store
-    _PROJECT_PATH = os.path.abspath(session.project_path) if getattr(session, "project_path", "") else os.getcwd()
+    if session:
+        _PROJECT_PATH = os.path.abspath(session.project_path) if getattr(session, "project_path", "") else os.getcwd()
+        
+        # Load project-specific .env file if it exists
+        env_path = os.path.join(_PROJECT_PATH, ".env")
+        if os.path.isfile(env_path):
+            from dotenv import load_dotenv
+            try:
+                load_dotenv(dotenv_path=env_path, override=True)
+            except Exception:
+                pass
+                
+        # Also explicitly propagate api_key and api_base from session if present
+        if getattr(session, "api_key", None):
+            os.environ["OPENAI_API_KEY"] = session.api_key
+        if getattr(session, "api_base", None):
+            os.environ["OPENAI_API_BASE"] = session.api_base
+    else:
+        _PROJECT_PATH = os.getcwd()
+
 
 def get_project_path() -> str:
     return _PROJECT_PATH or os.getcwd()
