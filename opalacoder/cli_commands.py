@@ -345,6 +345,84 @@ async def cmd_set_model_param(state: REPLState, args: list[str]) -> str | None:
     T.success(f"Model parameter '{param}' set to {repr(val)} for this project.")
 
 
+@_registry.register(
+    "/load_asset",
+    usage="<type> <desc|id|*>",
+    description="Install an asset from the AssetStore into the active project. type=skill|modelconfig, desc=id/description or * for all.",
+)
+async def cmd_load_asset(state: REPLState, args: list[str]) -> str | None:
+    from .assetstore import find_assets, install_asset, VALID_TYPES
+
+    if len(args) < 2:
+        T.error(
+            "Usage: /load_asset <type> <desc|id|*>\n"
+            f"  type: {', '.join(sorted(VALID_TYPES))}\n"
+            "  desc: asset id, description, or * to install all of the type"
+        )
+        return "continue"
+
+    asset_type = args[0].strip().lower()
+    desc = " ".join(args[1:]).strip()
+
+    if asset_type not in VALID_TYPES:
+        T.error(f"Unknown type '{asset_type}'. Must be one of: {', '.join(sorted(VALID_TYPES))}")
+        return "continue"
+
+    matches = find_assets(asset_type, desc)
+    if not matches:
+        if desc == "*":
+            T.warning(f"No {asset_type} assets found in the AssetStore.")
+        else:
+            T.warning(f"No {asset_type} asset matching '{desc}' found in the AssetStore.")
+        return "continue"
+
+    project_path = state.project.project_path
+    installed = []
+    errors = []
+    for meta in matches:
+        try:
+            msg = install_asset(meta, project_path)
+            installed.append(msg)
+        except Exception as e:
+            errors.append(f"{meta.get('id', '?')}: {e}")
+
+    for msg in installed:
+        T.success(f"Installed: {msg}")
+    for err in errors:
+        T.error(f"Failed: {err}")
+
+    if installed and asset_type == "skill":
+        T.console.print(
+            "[dim]Tip: use /addskill <name> to activate the skill in this project.[/dim]"
+        )
+
+    return "continue"
+
+
+@_registry.register("/list_assets",
+    usage="[type]",
+    description="List available assets in the AssetStore. type=skill|modelconfig (optional).")
+async def cmd_list_assets(_state: REPLState, args: list[str]) -> str | None:
+    from .assetstore import list_assets, VALID_TYPES
+
+    asset_type = args[0].strip().lower() if args else None
+    if asset_type and asset_type not in VALID_TYPES:
+        T.error(f"Unknown type '{asset_type}'. Must be one of: {', '.join(sorted(VALID_TYPES))}")
+        return "continue"
+
+    assets = list_assets(asset_type)
+    if not assets:
+        T.warning("No assets found in the AssetStore.")
+        return "continue"
+
+    T.console.print(f"\n[cyan]{_('available_commands')}[/cyan]".replace("commands", "assets"))
+    for a in sorted(assets, key=lambda x: (x.get("type", ""), x.get("id", ""))):
+        label = f"{a.get('id', '?')} [{a.get('type', '')}]"
+        T.console.print(f"  [green]{label:<40}[/green] {a.get('desc', '')}")
+    T.console.print()
+    return "continue"
+
+
 @_registry.register("/undo", description=_("undo_desc"))
 async def cmd_undo(state: REPLState, _args: list[str]) -> str | None:
     from .vcs import get_vcs_strategy

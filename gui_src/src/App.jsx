@@ -75,6 +75,7 @@ export default function App() {
   const [thinkingLogs, setThinkingLogs] = useState([]);
   const [showAdvancedParams, setShowAdvancedParams] = useState(false);
   const [newProjError, setNewProjError] = useState('');
+  const [modelConfigMsg, setModelConfigMsg] = useState('');
 
   // Directory picker state: { target: 'new'|'edit', current: '/path', dirs: [{name,path}] } | null
   const [dirPicker, setDirPicker] = useState(null);
@@ -182,6 +183,7 @@ export default function App() {
   const [newProjDesc, setNewProjDesc] = useState('');
   const [newProjModel, setNewProjModel] = useState('gemini/gemini-2.5-flash');
   const [newProjMode, setNewProjMode] = useState('auto');
+  const [newProjModelParams, setNewProjModelParams] = useState({});
   const [newProjApiKey, setNewProjApiKey] = useState('');
   const [newProjApiBase, setNewProjApiBase] = useState('http://localhost:11434/v1');
 
@@ -980,7 +982,8 @@ export default function App() {
           model: newProjModel,
           mode: newProjMode,
           api_key: newProjApiKey,
-          api_base: newProjApiBase
+          api_base: newProjApiBase,
+          model_params: Object.keys(newProjModelParams).length ? newProjModelParams : undefined
         })
       });
       if (res.ok) {
@@ -1035,6 +1038,7 @@ export default function App() {
         if (found) fresh = found;
       }
     } catch (_) { }
+    setModelConfigMsg('');
     setEditingProject({
       name: fresh.name,
       project_name: fresh.project_name || fresh.name,
@@ -1084,6 +1088,30 @@ export default function App() {
       }
     } catch (err) {
       addLog('error', `Erro ao atualizar projeto: ${err.message}`);
+    }
+  };
+
+  const loadModelConfig = async (projectPath, model, applyFn) => {
+    setModelConfigMsg('');
+    if (!projectPath || !model) {
+      setModelConfigMsg('⚠️ Defina o caminho do projeto e o modelo antes de carregar.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/opalacoder/model-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath, model }),
+      });
+      const data = await res.json();
+      if (!data.found) {
+        setModelConfigMsg(data.message);
+        return;
+      }
+      applyFn(data);
+      setModelConfigMsg('✅ Configuração refinada carregada.');
+    } catch (e) {
+      setModelConfigMsg(`⚠️ Erro ao carregar: ${e.message}`);
     }
   };
 
@@ -1194,6 +1222,7 @@ export default function App() {
         setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Falha: ${err.message}` }]);
       } finally {
         setIsAgentRunning(false);
+        fetchFiles();
       }
       return;
     }
@@ -1474,7 +1503,7 @@ export default function App() {
               <div className="vscode-sidebar-header">
                 <span className="vscode-sidebar-title">EXPLORER: PROJECTS</span>
                 <button
-                  onClick={() => setShowNewProjectModal(true)}
+                  onClick={() => { setShowNewProjectModal(true); setModelConfigMsg(''); setNewProjModelParams({}); }}
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#c5c5c5' }}
                   title="Novo Projeto..."
                 >
@@ -2194,6 +2223,22 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Load refined model config */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }}
+                  onClick={() => loadModelConfig(newProjPath, newProjModel, (cfg) => {
+                    if (cfg.model_params) setNewProjModelParams(cfg.model_params);
+                    if (cfg.model) setNewProjModel(cfg.model);
+                  })}>
+                  Load Refined Config
+                </button>
+                {modelConfigMsg && (
+                  <span style={{ fontSize: '11px', color: modelConfigMsg.startsWith('✅') ? '#4ec9b0' : '#f48771' }}>
+                    {modelConfigMsg}
+                  </span>
+                )}
+              </div>
+
               {newProjError && (
                 <div style={{ color: '#f48771', fontSize: '11px', marginTop: '4px', whiteSpace: 'pre-wrap' }}>
                   ⚠️ {newProjError}
@@ -2357,6 +2402,25 @@ export default function App() {
                     <option value="edit">Edit (Editar)</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Load refined model config */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }}
+                  onClick={() => loadModelConfig(editingProject.project_path, editingProject.model, (cfg) => {
+                    setEditingProject(p => ({
+                      ...p,
+                      model_params: cfg.model_params || p.model_params,
+                      model: cfg.model || p.model,
+                    }));
+                  })}>
+                  Load Refined Config
+                </button>
+                {modelConfigMsg && (
+                  <span style={{ fontSize: '11px', color: modelConfigMsg.startsWith('✅') ? '#4ec9b0' : '#f48771' }}>
+                    {modelConfigMsg}
+                  </span>
+                )}
               </div>
 
               {/* Alternative model */}

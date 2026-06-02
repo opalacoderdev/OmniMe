@@ -36,6 +36,7 @@ from .config import (
     get_agent_llm_kwargs,
     get_agent_max_heartbeats,
     get_agent_model,
+    get_agent_response_mode,
     get_project_agent_params,
 )
 from .skills import (
@@ -333,7 +334,7 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         memory_pressure_threshold=_agent_params.get("memory_pressure_threshold", 0.7),
         debug=_agent_params.get("debug", False),
         use_shared_router=_agent_params.get("use_shared_router", True),
-        response_mode=_agent_params.get("response_mode", "all"),
+        response_mode=_agent_params.get("response_mode", get_agent_response_mode("memgpt")),
     )
 
     # Seed the working context from persisted history so the conversation restores

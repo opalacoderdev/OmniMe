@@ -286,11 +286,22 @@ async def handle_slash_command(data: dict) -> dict:
     T.confirm = lambda p, default=True: default   # sync fallback never used in GUI
     T.ask     = lambda p: ""
 
+    def _render_rich(obj) -> str:
+        from rich.console import Console as _Console
+        from rich.table import Table as _Table
+        from io import StringIO
+        if isinstance(obj, _Table):
+            buf = StringIO()
+            c = _Console(file=buf, highlight=False, no_color=True)
+            c.print(obj)
+            return buf.getvalue()
+        return str(obj)
+
     def _console_print(*args_c, **kwargs_c):
         if not args_c:
             messages.append("")
             return
-        raw = " ".join(str(x) for x in args_c)
+        raw = " ".join(_render_rich(x) for x in args_c)
         for line in raw.split("\n"):
             stripped = line.strip()
             if not stripped:
@@ -302,6 +313,9 @@ async def handle_slash_command(data: dict) -> dict:
                 messages.append("### 🧠 Active skills for this project\n"); continue
             if "Available skills" in stripped:
                 messages.append("### 📚 Available skills\n"); continue
+            clean = re.sub(r'\[/?[\w\s]+\]', '', stripped)
+            if clean and clean == clean.upper() and clean.replace(" ", "").isalpha():
+                messages.append(f"### {clean}\n"); continue
             m = re.match(r'\s*(?:\*\s*)?\[(green|cyan)\]\s*(.*?)\s*\[/\1\]\s*(.*)', line)
             if m:
                 name = m.group(2).strip()
@@ -316,7 +330,7 @@ async def handle_slash_command(data: dict) -> dict:
             if sm:
                 star = "⭐ " if has_star else "🔹 "
                 messages.append(f"{star}**`{sm.group(1).strip()}`** — {sm.group(2).strip()}"); continue
-            messages.append(re.sub(r'\[/?\w+\]', '', line))
+            messages.append(re.sub(r'\[/?[\w\s]+\]', '', line))
 
     T.console.print = _console_print
 

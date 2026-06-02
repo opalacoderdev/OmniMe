@@ -317,6 +317,55 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e), "current": req_path, "dirs": []}).encode('utf-8'), "application/json")
 
+        # 3.8. Load refined model config from .opalacoder/modelsconfig/<provider>/<model>.yaml
+        elif path == '/api/opalacoder/model-config':
+            project_path = data.get('projectPath') or query.get('projectPath', [None])[0]
+            model_id = data.get('model') or query.get('model', [None])[0]
+            if not project_path or not model_id:
+                self.send_response(writer, 400, b'{"error":"projectPath and model are required"}', "application/json")
+                return
+
+            # Normalise provider: ollama_chat/ and ollama/ both → "ollama"
+            _PROVIDER_ALIASES = {"ollama_chat": "ollama"}
+            if '/' in model_id:
+                raw_provider, model_name = model_id.split('/', 1)
+            else:
+                raw_provider, model_name = "", model_id
+            provider_dir = _PROVIDER_ALIASES.get(raw_provider, raw_provider)
+
+            # Normalise model name: ':' → '__'
+            yaml_name = model_name.replace(':', '__') + '.yaml'
+            config_path = os.path.join(
+                os.path.abspath(project_path),
+                '.opalacoder', 'modelsconfig', provider_dir, yaml_name
+            )
+
+            if not os.path.isfile(config_path):
+                self.send_response(writer, 404, json.dumps({
+                    "found": False,
+                    "message": f"--- ainda não temos parâmetros refinados para este modelo"
+                }).encode('utf-8'), "application/json")
+                return
+
+            try:
+                import yaml as _yaml
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = _yaml.safe_load(f) or {}
+
+                # Extract optional provider override and compute new model identity
+                new_model = None
+                if 'provider' in config:
+                    new_provider = config.pop('provider')
+                    new_model = f"{new_provider}/{model_name}"
+
+                self.send_response(writer, 200, json.dumps({
+                    "found": True,
+                    "model_params": config,
+                    "model": new_model,   # None if no provider override
+                }).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
         # 4. List Projects
         elif path == '/api/opalacoder/list-projects':
             from opalacoder.config import DEFAULT_DB_PATH
@@ -362,10 +411,13 @@ class AsyncHTTPServer:
                     self.send_response(writer, 400, json.dumps({"error": f"Failed to create directory: {str(e)}"}).encode('utf-8'), "application/json")
                     return
                 
+            model_params_raw = data.get("model_params")
+            model_params = model_params_raw if isinstance(model_params_raw, dict) else None
+
             db_key = project_name.replace(" ", "_").lower()
             if store.exists(db_key):
                 db_key = db_key + "_1"
-                
+
             try:
                 project = store.create(
                     name=db_key,
@@ -377,6 +429,7 @@ class AsyncHTTPServer:
                     description=description,
                     api_key=api_key,
                     api_base=api_base,
+                    model_params=model_params,
                 )
                 res_data = {
                     "project_name": project.project_name,
@@ -912,6 +965,10 @@ def start_gui_server(host="127.0.0.1", port=3000):
         print(f"[OpalaCoder] Launching desktop window → {url}")
 
         icon_path = os.path.join(os.path.dirname(__file__), "icon.png")
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(os.getcwd(), "icon.png")
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icon.png")
         if not os.path.exists(icon_path):
             icon_path = None
 
