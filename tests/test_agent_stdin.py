@@ -131,3 +131,81 @@ async def test_project_handlers(tmp_path, monkeypatch):
     })
     assert len(events) == 1
     assert len(events[0][1]["projects"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_litellm_acompletion_monkeypatch_reasoning_propagation(monkeypatch):
+    """Verify that monkey-patched litellm.acompletion extracts and propagates reasoning to active_on_thinking."""
+    import litellm
+    from unittest.mock import AsyncMock
+    import opalacoder.agent_stdin as agent_stdin
+    
+    # Mock return value of acompletion
+    mock_msg = MagicMock()
+    mock_msg.content = "<think>Here is some deep thought.</think> Hello!"
+    mock_msg.reasoning_content = None
+    mock_msg.reasoning = None
+    
+    mock_choice = MagicMock()
+    mock_choice.message = mock_msg
+    
+    mock_resp = MagicMock()
+    mock_resp.choices = [mock_choice]
+    
+    # Temporarily override the original non-patched function that the patch calls
+    async def dummy_orig_acompletion(*args, **kwargs):
+        return mock_resp
+        
+    monkeypatch.setattr(agent_stdin, "_orig_acompletion", dummy_orig_acompletion)
+    
+    # Track reasoning callback calls
+    callback_calls = []
+    def dummy_callback(reasoning_text):
+        callback_calls.append(reasoning_text)
+        
+    monkeypatch.setattr(agent_stdin, "active_on_thinking", dummy_callback)
+    
+    # Call the patched completion
+    res = await litellm.acompletion(model="test-model", messages=[])
+    
+    # Ensure it returned the correct message response
+    assert res == mock_resp
+    # Give any scheduled tasks on the event loop a split second to execute
+    await asyncio.sleep(0.01)
+    
+    # Verify the callback was triggered with the extracted reasoning
+    assert len(callback_calls) == 1
+    assert callback_calls[0] == "Here is some deep thought."
+
+
+def test_skip_directories_in_collect_python_files(tmp_path):
+    """Verify that _collect_python_files skips tests, opalacoder, skills, and debug directories."""
+    from opalacoder.tools import _collect_python_files
+    import os
+    
+    # Create structure
+    (tmp_path / "opalacoder").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "skills").mkdir()
+    (tmp_path / "debug").mkdir()
+    
+    # Write python files inside skipped directories
+    (tmp_path / "opalacoder" / "main.py").write_text("print('core')")
+    (tmp_path / "tests" / "test_app.py").write_text("print('test')")
+    (tmp_path / "skills" / "run.py").write_text("print('skill')")
+    (tmp_path / "debug" / "debug.py").write_text("print('debug')")
+    
+    # Write python files in root (should be collected)
+    (tmp_path / "app.py").write_text("print('app')")
+    
+    # Run collector
+    collected = _collect_python_files(str(tmp_path), str(tmp_path))
+    
+    # Assert that only app.py was collected
+    collected_basenames = [os.path.basename(f) for f in collected]
+    assert "app.py" in collected_basenames
+    assert "main.py" not in collected_basenames
+    assert "test_app.py" not in collected_basenames
+    assert "run.py" not in collected_basenames
+    assert "debug.py" not in collected_basenames
+    assert len(collected) == 1

@@ -25,7 +25,9 @@ import {
   Maximize2,
   Minimize2,
   AlertCircle,
-  AlertTriangle
+  AlertTriangle,
+  HelpCircle,
+  Cpu
 } from 'lucide-react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -1121,8 +1123,48 @@ export default function App() {
     setIsAgentRunning(true);
     setProblems([]);
     setThinkingLogs([]);
-    addLog('info', `Iniciando agente para prompt: "${userText}"`);
+    addLog('info', `Iniciando: "${userText}"`);
 
+    // ── Slash commands: use a dedicated non-streaming endpoint so WebKit
+    //    buffering cannot freeze the UI waiting for chunks.
+    if (userText.trim().startsWith('/')) {
+      try {
+        const res = await fetch('/api/opalacoder/slash-command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: userText.trim(),
+            project_name: activeProject.name,
+            project_path: activeProject.project_path,
+          }),
+        });
+        const result = await res.json();
+        if (result.status === 'confirm') {
+          // Command is paused waiting for Yes/No — show modal
+          setConfirmRequest({
+            id: result.id,
+            prompt: result.prompt,
+            options: result.options || ['yes', 'no'],
+            default: result.default || 'yes',
+            isSlashCommand: true,   // flag so sendConfirmResponse uses /continue
+          });
+          addLog('info', `🔔 Aguardando confirmação: ${result.prompt}`);
+        } else if (result.status === 'done') {
+          const msg = (result.messages || []).join('\n') || `Comando executado.`;
+          setChatMessages(prev => [...prev, { role: 'assistant', content: msg }]);
+        } else {
+          setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Erro: ${result.error || 'desconhecido'}` }]);
+        }
+      } catch (err) {
+        addLog('error', `Falha no comando: ${err.message}`);
+        setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Falha: ${err.message}` }]);
+      } finally {
+        setIsAgentRunning(false);
+      }
+      return;
+    }
+
+    // ── Regular chat: streaming via /api/opalacoder/run
     let selectedText = '';
     if (editorRef.current) {
       try {
@@ -1272,15 +1314,29 @@ export default function App() {
 
   const sendConfirmResponse = async (value) => {
     if (!confirmRequest) return;
-    const { id, prompt } = confirmRequest;
+    const { id, prompt, isSlashCommand } = confirmRequest;
     setConfirmRequest(null);
     addLog('info', `✅ Confirmação: "${prompt}" → ${value}`);
     try {
-      await fetch('/api/opalacoder/input_response', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, value }),
-      });
+      if (isSlashCommand) {
+        // Resume the slash-command that paused for confirmation
+        const res = await fetch('/api/opalacoder/slash-command/continue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, value }),
+        });
+        const result = await res.json();
+        if (result.status === 'done') {
+          const msg = (result.messages || []).join('\n') || 'Comando executado.';
+          setChatMessages(prev => [...prev, { role: 'assistant', content: msg }]);
+        }
+      } else {
+        await fetch('/api/opalacoder/input_response', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, value }),
+        });
+      }
     } catch (err) {
       addLog('error', `Erro ao enviar confirmação: ${err.message}`);
     }
@@ -1826,13 +1882,13 @@ export default function App() {
 
             {/* Quick Actions toolbar */}
             <div className="vscode-chat-toolbar">
-              <button onClick={() => setChatInput('/undo')} className="vscode-chat-tool-btn">
-                <Undo size={11} />
-                <span>/undo</span>
+              <button onClick={() => setChatInput('/skills')} className="vscode-chat-tool-btn">
+                <Cpu size={11} />
+                <span>/skills</span>
               </button>
-              <button onClick={() => setChatInput('/clear')} className="vscode-chat-tool-btn">
-                <RefreshCw size={11} />
-                <span>/clear</span>
+              <button onClick={() => setChatInput('/help')} className="vscode-chat-tool-btn">
+                <HelpCircle size={11} />
+                <span>/help</span>
               </button>
               <button onClick={() => setChatInput('/commit')} className="vscode-chat-tool-btn">
                 <Check size={11} />
@@ -2447,6 +2503,36 @@ export default function App() {
                             const nextParams = { ...p.model_params };
                             if (val === undefined) delete nextParams.presence_penalty;
                             else nextParams.presence_penalty = val;
+                            return { ...p, model_params: nextParams };
+                          });
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex flex-col" style={{ gap: '4px' }}>
+                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Thinking (think)</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: 1024, auto, true"
+                        value={editingProject.model_params?.think !== undefined ? editingProject.model_params.think : ''}
+                        onChange={e => {
+                          const val_str = e.target.value;
+                          setEditingProject(p => {
+                            const nextParams = { ...p.model_params };
+                            if (val_str === '') {
+                              delete nextParams.think;
+                            } else {
+                              const parsedInt = parseInt(val_str, 10);
+                              if (!isNaN(parsedInt) && String(parsedInt) === val_str.trim()) {
+                                nextParams.think = parsedInt;
+                              } else if (val_str.toLowerCase() === 'true') {
+                                nextParams.think = true;
+                              } else if (val_str.toLowerCase() === 'false') {
+                                nextParams.think = false;
+                              } else {
+                                nextParams.think = val_str;
+                              }
+                            }
                             return { ...p, model_params: nextParams };
                           });
                         }}

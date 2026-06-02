@@ -279,17 +279,17 @@ async def cmd_set_alternative_model(state: REPLState, args: list[str]) -> str | 
 
 
 @_registry.register("/set-model-param", usage="<param_name> <value>",
-                    description="Set advanced model parameter (temperature, max_tokens, num_ctx, top_p, frequency_penalty, presence_penalty)")
+                    description="Set advanced model parameter (temperature, max_tokens, num_ctx, top_p, frequency_penalty, presence_penalty, think)")
 async def cmd_set_model_param(state: REPLState, args: list[str]) -> str | None:
     if len(args) < 2:
         T.error("Usage: /set-model-param <param_name> <value>\n"
-                "Allowed params: temperature, max_tokens, num_ctx, top_p, frequency_penalty, presence_penalty")
+                "Allowed params: temperature, max_tokens, num_ctx, top_p, frequency_penalty, presence_penalty, think")
         return "continue"
     
     param = args[0].strip().lower()
     val_str = args[1].strip()
     
-    allowed_params = {"temperature", "max_tokens", "num_ctx", "top_p", "frequency_penalty", "presence_penalty"}
+    allowed_params = {"temperature", "max_tokens", "num_ctx", "top_p", "frequency_penalty", "presence_penalty", "think"}
     if param not in allowed_params:
         T.error(f"Unknown parameter '{param}'. Allowed parameters: {', '.join(allowed_params)}")
         return "continue"
@@ -311,6 +311,20 @@ async def cmd_set_model_param(state: REPLState, args: list[str]) -> str | None:
             val = float(val_str)
             if not (-2.0 <= val <= 2.0):
                 raise ValueError("Must be between -2.0 and 2.0")
+        elif param == "think":
+            if val_str.lower() in {"true", "on", "yes"}:
+                val = True
+            elif val_str.lower() in {"false", "off", "no"}:
+                val = False
+            elif val_str.lower() == "auto":
+                val = "auto"
+            else:
+                try:
+                    val = int(val_str)
+                    if val < -1:
+                        raise ValueError("Must be -1 or greater")
+                except ValueError:
+                    raise ValueError("Must be a boolean (true/false), option (on/off/auto), or integer budget (>= -1)")
     except ValueError as e:
         T.error(f"Invalid value for '{param}': {e}")
         return "continue"

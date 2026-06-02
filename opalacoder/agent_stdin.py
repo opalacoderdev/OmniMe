@@ -4,7 +4,6 @@ import sys
 import json
 import asyncio
 import os
-import inspect
 
 # Save real stdout and redirect sys.stdout to sys.stderr to prevent pollution
 _real_stdout = sys.stdout
@@ -17,12 +16,114 @@ event_hook = None
 # /api/opalacoder/input_response endpoint can resolve them.
 _gui_input_pending: dict = {}
 
+import litellm
+import re
+
+active_on_thinking = None
+if not hasattr(litellm, "active_on_thinking"):
+    litellm.active_on_thinking = None
+
+_orig_acompletion = litellm.acompletion
+_orig_router_acompletion = litellm.Router.acompletion
+
+def _propagate_thinking_from_response(resp):
+    try:
+        if not (resp and getattr(resp, "choices", None) and len(resp.choices) > 0):
+            return
+        msg = resp.choices[0].message
+        reasoning = getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None)
+        if not reasoning:
+            content = getattr(msg, "content", None) or ""
+            tags = [
+                ("<think>", "</think>"),
+                ("<thought>", "</thought>"),
+                ("<thinking>", "</thinking>"),
+                ("<|thought|>", "<|/thought|>"),
+                ("<|thinking|>", "<|/thinking|>"),
+                ("[thought]", "[/thought]"),
+                ("[thinking]", "[/thinking]"),
+            ]
+            for start_tag, end_tag in tags:
+                if start_tag in content:
+                    parts = content.split(start_tag, 1)
+                    if len(parts) > 1:
+                        body = parts[1]
+                        if end_tag in body:
+                            reasoning = body.split(end_tag, 1)[0].strip()
+                        else:
+                            reasoning = body.strip()
+                        break
+        if reasoning:
+            import sys
+            sys.stderr.write(f"[DEBUG] Found reasoning: {reasoning[:200]}...\n")
+            cb = getattr(litellm, "active_on_thinking", None)
+            if not cb:
+                if "opalacoder.agent_stdin" in sys.modules:
+                    cb = sys.modules["opalacoder.agent_stdin"].active_on_thinking
+            if not cb:
+                cb = active_on_thinking
+            if cb:
+                import inspect
+                sys.stderr.write(f"[DEBUG] Propagating thinking to callback {cb.__name__ if hasattr(cb, '__name__') else str(cb)}\n")
+                try:
+                    if inspect.iscoroutinefunction(cb):
+                        asyncio.create_task(cb(reasoning))
+                    else:
+                        cb(reasoning)
+                except Exception as ex:
+                    sys.stderr.write(f"[DEBUG] Error invoking thinking callback: {ex}\n")
+            else:
+                sys.stderr.write(f"[DEBUG] No active_on_thinking callback set\n")
+    except Exception as e:
+        import sys
+        sys.stderr.write(f"[DEBUG] Error propagating thinking: {e}\n")
+
+async def patched_acompletion(*args, **kwargs):
+    resp = await _orig_acompletion(*args, **kwargs)
+    _propagate_thinking_from_response(resp)
+    return resp
+
+async def patched_router_acompletion(self, *args, **kwargs):
+    resp = await _orig_router_acompletion(self, *args, **kwargs)
+    _propagate_thinking_from_response(resp)
+    return resp
+
+litellm.acompletion = patched_acompletion
+litellm.Router.acompletion = patched_router_acompletion
+
 def print_event(event: str, data: dict):
     payload = {"event": event, **data}
-    _real_stdout.write(json.dumps(payload) + "\n")
-    _real_stdout.flush()
-    if event_hook:
-        event_hook(payload)
+    try:
+        if _real_stdout and not getattr(_real_stdout, 'closed', False):
+            _real_stdout.write(json.dumps(payload) + "\n")
+            _real_stdout.flush()
+    except (ValueError, OSError, AttributeError):
+        pass
+    hook = event_hook
+    if not hook:
+        hook = getattr(litellm, "event_hook", None)
+    if hook:
+        try:
+            hook(payload)
+            
+            # Emit auxiliary thoughts to keep the Thinking tab active and alive
+            thought_content = None
+            if event == "agent_started":
+                thought_content = f"Iniciando a execução do agente '{data.get('agent', '')}' usando o modelo '{data.get('model', '')}'..."
+            elif event == "tool_call":
+                thought_content = f"Decidi executar a ferramenta '{data.get('tool', '')}' com os parâmetros: {json.dumps(data.get('arguments', {}))}"
+            elif event == "tool_result":
+                thought_content = f"Recebi o retorno da ferramenta '{data.get('tool', '')}' com sucesso. Analisando o resultado obtido..."
+            elif event == "agent_response":
+                thought_content = "Resposta gerada com sucesso pelo modelo. Finalizando turno do agente."
+            elif event == "error":
+                thought_content = f"Alerta: Ocorreu um erro durante a execução: {data.get('message', '')}"
+                
+            if thought_content:
+                hook({"event": "thought", "content": thought_content})
+        except Exception as ex:
+            import sys
+            sys.stderr.write(f"[DEBUG] Error invoking event hook: {ex}\n")
 
 # Import project components safely
 try:
@@ -178,6 +279,178 @@ async def handle_load_project(data: dict):
         "skills": current_project.skills
     })
 
+async def handle_slash_command(data: dict) -> dict:
+    """Execute a slash command and return a plain JSON result (no streaming).
+
+    Returns:
+        {"status": "done", "messages": [...]}  when the command completes.
+        {"status": "confirm", "id": ..., "prompt": ..., "options": [...], "default": ...}
+            when the command needs user confirmation before continuing.
+    """
+    import re
+    import uuid
+
+    prompt = data.get("prompt", "")
+    cmd, *args = prompt.split(maxsplit=1)
+
+    # Load project state needed by commands
+    global current_project, current_store, current_memgpt
+    if "project_name" in data or "project_path" in data:
+        await handle_load_project(data)
+
+    from opalacoder.cli_commands import REPLState, _registry
+    import opalacoder.terminal as T
+
+    if cmd not in _registry:
+        return {"status": "done", "messages": [f"🔴 Comando desconhecido: {cmd}. Digite /help para ajuda."]}
+
+    messages = []
+
+    # ---- Capture terminal output helpers ----
+    orig_success         = T.success
+    orig_error           = T.error
+    orig_info            = T.info
+    orig_warning         = T.warning
+    orig_confirm         = T.confirm
+    orig_ask             = T.ask
+    orig_async_confirm_hook = T._async_confirm_hook
+    orig_console_print   = T.console.print
+
+    def _capture(*a, prefix=""):
+        messages.append(f"{prefix}{' '.join(str(x) for x in a)}")
+
+    T.success = lambda *a, **k: _capture(*a, prefix="🟢 ")
+    T.error   = lambda *a, **k: _capture(*a, prefix="🔴 ")
+    T.info    = lambda *a, **k: _capture(*a, prefix="ℹ️ ")
+    T.warning = lambda *a, **k: _capture(*a, prefix="⚠️ ")
+    T.confirm = lambda p, default=True: default   # sync fallback never used in GUI
+    T.ask     = lambda p: ""
+
+    def _console_print(*args_c, **kwargs_c):
+        if not args_c:
+            messages.append("")
+            return
+        raw = " ".join(str(x) for x in args_c)
+        for line in raw.split("\n"):
+            stripped = line.strip()
+            if not stripped:
+                messages.append("")
+                continue
+            if "Comandos Disponíveis" in stripped or "Available commands" in stripped:
+                messages.append("### 🛠️ Comandos Disponíveis\n"); continue
+            if "Active skills for this project" in stripped:
+                messages.append("### 🧠 Active skills for this project\n"); continue
+            if "Available skills" in stripped:
+                messages.append("### 📚 Available skills\n"); continue
+            m = re.match(r'\s*(?:\*\s*)?\[(green|cyan)\]\s*(.*?)\s*\[/\1\]\s*(.*)', line)
+            if m:
+                name = m.group(2).strip()
+                desc = re.sub(r'\[/?\w+\]', '', m.group(3).strip())
+                star = "⭐ " if "*" in line.split("[cyan]")[0] and "[cyan]" in line else "🔹 "
+                messages.append(f"{star}**`{name}`** — {desc}"); continue
+            cm = re.match(r'^\s*(/[a-zA-Z0-9_<> \-\[\]]+?)\s{2,}(.*)$', line)
+            if cm:
+                messages.append(f"🔹 **`{cm.group(1).strip()}`** — {cm.group(2).strip()}"); continue
+            has_star = bool(re.match(r'^\s*\*\s*', line))
+            sm = re.match(r'^\s*(?:\*\s*)?([a-zA-Z0-9_\-]+)\s{2,}(.*)$', line)
+            if sm:
+                star = "⭐ " if has_star else "🔹 "
+                messages.append(f"{star}**`{sm.group(1).strip()}`** — {sm.group(2).strip()}"); continue
+            messages.append(re.sub(r'\[/?\w+\]', '', line))
+
+    T.console.print = _console_print
+
+    # Future that gets resolved either when command finishes OR when it needs confirm
+    loop = asyncio.get_event_loop()
+    confirm_future: asyncio.Future = loop.create_future()
+    confirm_info: dict = {}
+
+    async def _gui_confirm_hook(prompt_text: str, default: bool = True) -> bool:
+        req_id = str(uuid.uuid4())
+        fut = loop.create_future()
+        _gui_input_pending[req_id] = fut
+        confirm_info.update({"id": req_id, "prompt": prompt_text,
+                             "options": ["yes", "no"],
+                             "default": "yes" if default else "no"})
+        if not confirm_future.done():
+            confirm_future.set_result({"needs_confirm": True})
+        try:
+            raw = await asyncio.wait_for(asyncio.shield(fut), timeout=120.0)
+            return raw.strip().lower() in ("yes", "y", "s", "sim", "true", "1")
+        except asyncio.TimeoutError:
+            return default
+        finally:
+            _gui_input_pending.pop(req_id, None)
+
+    T._async_confirm_hook = _gui_confirm_hook
+
+    def _restore():
+        T.success            = orig_success
+        T.error              = orig_error
+        T.info               = orig_info
+        T.warning            = orig_warning
+        T.confirm            = orig_confirm
+        T.ask                = orig_ask
+        T._async_confirm_hook = orig_async_confirm_hook
+        T.console.print      = orig_console_print
+
+    state    = REPLState(current_project, current_store)
+    cmd_args = args[0].split() if args else []
+
+    async def _run_cmd():
+        try:
+            await _registry.dispatch(state, cmd, cmd_args)
+        except Exception as e:
+            messages.append(f"🔴 Erro ao executar comando: {e}")
+        finally:
+            _restore()
+            if not confirm_future.done():
+                confirm_future.set_result({"needs_confirm": False})
+
+    cmd_task = asyncio.create_task(_run_cmd())
+
+    # Wait until command finishes OR pauses for confirmation
+    signal = await confirm_future
+
+    if signal.get("needs_confirm"):
+        # Store the running task so /slash-command/continue can resume it
+        _pending_slash_tasks[confirm_info["id"]] = (cmd_task, messages)
+        return {"status": "confirm", **confirm_info}
+
+    await cmd_task
+    response_text = "\n".join(m for m in messages if m is not None) or f"Comando {cmd} executado com sucesso."
+    return {"status": "done", "messages": [response_text]}
+
+
+# Pending slash-command tasks awaiting user confirmation
+_pending_slash_tasks: dict = {}
+
+
+async def handle_slash_command_continue(data: dict) -> dict:
+    """Resume a slash command after the user responded to a confirm dialog."""
+    req_id = data.get("id", "")
+    value  = data.get("value", "")
+
+    fut = _gui_input_pending.get(req_id)
+    if not fut or fut.done():
+        return {"status": "error", "message": "No pending request with that id"}
+
+    loop = asyncio.get_event_loop()
+    loop.call_soon_threadsafe(fut.set_result, value)
+
+    entry = _pending_slash_tasks.pop(req_id, None)
+    if entry:
+        cmd_task, messages = entry
+        try:
+            await cmd_task
+        except Exception:
+            pass
+        response_text = "\n".join(m for m in messages if m is not None) or "Comando executado com sucesso."
+        return {"status": "done", "messages": [response_text]}
+
+    return {"status": "done", "messages": []}
+
+
 async def handle_run(data: dict):
     global current_project, current_store, current_memgpt
     agent_type = data.get("agent") or "chat_orchestrator"
@@ -206,172 +479,7 @@ async def handle_run(data: dict):
         except Exception as e:
             print(f"Warning: Failed to save editor state: {e}", file=sys.stderr)
     
-    # Intercept and process slash commands (like /help, /undo, /commit)
-    if prompt.startswith("/"):
-        from opalacoder.cli_commands import REPLState, _registry
-        cmd, *args = prompt.split(maxsplit=1)
-        if cmd in _registry:
-            messages = []
-            import opalacoder.terminal as T
-            
-            # Mock print functions
-            orig_success = T.success
-            orig_error = T.error
-            orig_info = T.info
-            orig_warning = T.warning
-            orig_confirm = T.confirm
-            orig_ask = T.ask
-            orig_async_confirm_hook = T._async_confirm_hook
-            
-            def mock_success(*args_m, **kwargs_m):
-                msg = " ".join(str(x) for x in args_m)
-                messages.append(f"🟢 {msg}")
-            def mock_error(*args_m, **kwargs_m):
-                msg = " ".join(str(x) for x in args_m)
-                messages.append(f"🔴 {msg}")
-            def mock_info(*args_m, **kwargs_m):
-                msg = " ".join(str(x) for x in args_m)
-                messages.append(f"ℹ️ {msg}")
-            def mock_warning(*args_m, **kwargs_m):
-                msg = " ".join(str(x) for x in args_m)
-                messages.append(f"⚠️ {msg}")
-            def mock_confirm(prompt: str, default: bool = True) -> bool:
-                # Sync fallback — kept for safety, but commands now use await T.aconfirm()
-                # which will delegate to _gui_confirm_hook below.
-                messages.append(f"🔔 {prompt} → {'yes' if default else 'no'} (auto-confirmed)")
-                return default
-            def mock_ask(prompt: str) -> str:
-                messages.append(f"🔔 {prompt} → (no input in GUI mode)")
-                return ""
 
-            async def _gui_confirm_hook(prompt: str, default: bool = True) -> bool:
-                """Emit input_request event and wait for the frontend Yes/No response."""
-                import uuid
-                req_id = str(uuid.uuid4())
-                print_event("input_request", {
-                    "id": req_id,
-                    "prompt": prompt,
-                    "options": ["yes", "no"],
-                    "default": "yes" if default else "no",
-                })
-                loop = asyncio.get_event_loop()
-                fut = loop.create_future()
-                _gui_input_pending[req_id] = fut
-                try:
-                    raw = await asyncio.wait_for(asyncio.shield(fut), timeout=120.0)
-                    return raw.strip().lower() in ("yes", "y", "s", "sim", "true", "1")
-                except asyncio.TimeoutError:
-                    messages.append(f"⚠️ Confirm timed out — using default ({'yes' if default else 'no'}).")
-                    return default
-                finally:
-                    _gui_input_pending.pop(req_id, None)
-
-            T.success = mock_success
-            T.error = mock_error
-            T.info = mock_info
-            T.warning = mock_warning
-            T.confirm = mock_confirm
-            T.ask = mock_ask
-            T._async_confirm_hook = _gui_confirm_hook
-
-            print_event("agent_started", {"agent": "cli_command", "model": ""})
-            try:
-                state = REPLState(current_project, current_store)
-                cmd_args = args[0].split() if args else []
-                # Also mock T.console.print to capture lines
-                orig_console_print = T.console.print
-                import re
-                def mock_console_print(*args_c, **kwargs_c):
-                    if not args_c:
-                        messages.append("")
-                        return
-                    raw_msg = " ".join(str(x) for x in args_c)
-                    
-                    # Split by newlines so we format each line individually
-                    lines = raw_msg.split('\n')
-                    for line in lines:
-                        stripped = line.strip()
-                        if not stripped:
-                            messages.append("")
-                            continue
-                        
-                        # 1. Header mapping
-                        if "Comandos Disponíveis" in stripped or "Available commands" in stripped:
-                            messages.append("### 🛠️ Comandos Disponíveis\n")
-                            continue
-                        if "Active skills for this project" in stripped:
-                            messages.append("### 🧠 Active skills for this project\n")
-                            continue
-                        if "Available skills" in stripped:
-                            messages.append("### 📚 Available skills\n")
-                            continue
-                        if "active in this project" in stripped:
-                            messages.append(f"\n_({stripped.replace('* = ', '')})_")
-                            continue
-                            
-                        # 2. Match standard menu item with formatting: [color]name[/color] description
-                        # fallback matching if Rich formatting tags are present:
-                        match_rich = re.match(r'\s*(?:\*\s*)?\[(green|cyan)\]\s*(.*?)\s*\[/\1\]\s*(.*)', line)
-                        if match_rich:
-                            name = match_rich.group(2).strip()
-                            desc = match_rich.group(3).strip()
-                            desc = re.sub(r'\[/?\w+\]', '', desc)
-                            has_active_star = "*" in line.split("[cyan]")[0] if "[cyan]" in line else False
-                            prefix = "⭐ " if has_active_star else "🔹 "
-                            messages.append(f"{prefix}**`{name}`** — {desc}")
-                            continue
-                            
-                        # 3. Match raw slash commands without Rich tags: e.g. "  /help     Show help"
-                        cmd_match = re.match(r'^\s*(/[a-zA-Z0-9_<> \-\[\]]+?)\s{2,}(.*)$', line)
-                        if cmd_match:
-                            cmd_name = cmd_match.group(1).strip()
-                            cmd_desc = cmd_match.group(2).strip()
-                            messages.append(f"🔹 **`{cmd_name}`** — {cmd_desc}")
-                            continue
-                            
-                        # 4. Match raw skills without Rich tags: e.g. "  * chat-orchestrator   Skill description"
-                        has_active_star = bool(re.match(r'^\s*\*\s*', line))
-                        skill_match = re.match(r'^\s*(?:\*\s*)?([a-zA-Z0-9_\-]+)\s{2,}(.*)$', line)
-                        if skill_match:
-                            skill_name = skill_match.group(1).strip()
-                            skill_desc = skill_match.group(2).strip()
-                            prefix = "⭐ " if has_active_star else "🔹 "
-                            messages.append(f"{prefix}**`{skill_name}`** — {skill_desc}")
-                            continue
-                            
-                        # Fallback: clean tags and append
-                        clean_line = re.sub(r'\[/?\w+\]', '', line)
-                        messages.append(clean_line)
-                T.console.print = mock_console_print
-                
-                try:
-                    await _registry.dispatch(state, cmd, cmd_args)
-                finally:
-                    T.console.print = orig_console_print
-            except Exception as e:
-                messages.append(f"🔴 Erro ao executar comando: {e}")
-            finally:
-                T.success = orig_success
-                T.error = orig_error
-                T.info = orig_info
-                T.warning = orig_warning
-                T.confirm = orig_confirm
-                T.ask = orig_ask
-                T._async_confirm_hook = orig_async_confirm_hook
-                
-            response = "\n".join(messages)
-            if not response:
-                response = f"Comando {cmd} executado com sucesso."
-            print_event("agent_response", {"response": response})
-            print_event("agent_finished", {})
-            return
-        else:
-            print_event("agent_started", {"agent": "cli_command", "model": ""})
-            print_event("agent_response", {"response": f"🔴 Comando desconhecido: {cmd}. Digite /help para ajuda."})
-            print_event("agent_finished", {})
-            return
-
-    
     # Build agent
     agent = None
     if agent_type == "landscape_planner":
@@ -423,42 +531,45 @@ async def handle_run(data: dict):
                 "content": msg.get("content", "")
             })
             
-    # Setup callback to stream thoughts
-    seen_messages = len(agent.internal_history) if hasattr(agent, "internal_history") else 0
-    
-    def on_iteration_callback(iteration: int, messages: list):
-        nonlocal seen_messages
-        new_msgs = messages[seen_messages:]
-        seen_messages = len(messages)
-        for msg in new_msgs:
-            role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
-            content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", "")
-            if role == "assistant" and content:
-                print_event("thought", {"content": content})
-                
-    if hasattr(agent, "on_iteration"):
-        agent.on_iteration = on_iteration_callback
-    elif hasattr(agent, "agent") and hasattr(agent.agent, "on_iteration"):
-        agent.agent.on_iteration = on_iteration_callback
+    # Wire on_thinking: the lib handles LiteLLM internally — OpalaCoder just
+    # provides the callback. Fires once per LLM call with reasoning_content
+    # (or extracted <think> block) before agent_response is emitted.
+    def _on_thinking(chunk: str) -> None:
+        print_event("thought", {"content": chunk})
+
+    if hasattr(agent, "on_thinking"):
+        agent.on_thinking = _on_thinking
+    elif hasattr(agent, "agent") and hasattr(agent.agent, "on_thinking"):
+        agent.agent.on_thinking = _on_thinking
 
     print_event("agent_started", {"agent": agent_type, "model": agent.model})
     
+    global active_on_thinking
+    active_on_thinking = _on_thinking
+    import litellm
+    litellm.active_on_thinking = _on_thinking
     try:
-        resp_obj = await agent.run(AgentInput(prompt=prompt))
-        response = resp_obj.response.strip() if resp_obj.response else ""
-        
-        # Save to store if using chat_orchestrator
-        if agent_type == "chat_orchestrator" and current_store and current_project:
-            current_store.append_message(current_project, "user", prompt)
-            if response:
-                current_store.append_message(current_project, "assistant", response)
-            current_store.save(current_project)
+        try:
+            resp_obj = await agent.run(AgentInput(prompt=prompt))
+            response = resp_obj.response.strip() if resp_obj.response else ""
             
-        print_event("agent_response", {"response": response})
-    except Exception as e:
-        import traceback
-        err_msg = traceback.format_exc()
-        print_event("error", {"message": str(e), "trace": err_msg})
+            # Save to store if using chat_orchestrator
+            if agent_type == "chat_orchestrator" and current_store and current_project:
+                current_store.append_message(current_project, "user", prompt)
+                if response:
+                    current_store.append_message(current_project, "assistant", response)
+                current_store.save(current_project)
+                
+            print_event("agent_response", {"response": response})
+        except Exception as e:
+            import traceback
+            err_msg = traceback.format_exc()
+            print_event("error", {"message": str(e), "trace": err_msg})
+    finally:
+        # Give any pending async completion callbacks a moment to finish logging thoughts
+        await asyncio.sleep(0.5)
+        active_on_thinking = None
+        litellm.active_on_thinking = None
         
     print_event("agent_finished", {})
 

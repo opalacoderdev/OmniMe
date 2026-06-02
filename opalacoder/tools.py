@@ -98,6 +98,29 @@ def set_project_context(session, store=None) -> None:
             os.environ["OPENAI_API_KEY"] = session.api_key
         if getattr(session, "api_base", None):
             os.environ["OPENAI_API_BASE"] = session.api_base
+
+        # Dynamically inject/register the configured context window (num_ctx) in LiteLLM's model mapping
+        # so it doesn't fail with a BadRequestError (request exceeds available context window).
+        try:
+            import litellm
+            model_name = getattr(session, "model", None)
+            model_params = getattr(session, "model_params", None) or {}
+            num_ctx = model_params.get("num_ctx")
+            if model_name and num_ctx:
+                # Direct registration for model in litellm's dynamic model database
+                if model_name not in litellm.model_prices_and_context_window:
+                    litellm.model_prices_and_context_window[model_name] = {
+                        "max_tokens": num_ctx,
+                        "max_input_tokens": num_ctx,
+                        "max_output_tokens": num_ctx,
+                        "context_window": num_ctx,
+                    }
+                else:
+                    litellm.model_prices_and_context_window[model_name]["context_window"] = num_ctx
+                    litellm.model_prices_and_context_window[model_name]["max_tokens"] = num_ctx
+                    litellm.model_prices_and_context_window[model_name]["max_input_tokens"] = num_ctx
+        except Exception:
+            pass
     else:
         _PROJECT_PATH = os.getcwd()
 
@@ -504,7 +527,7 @@ def _collect_python_files(root: str, target: str) -> list[str]:
     if os.path.isfile(resolved):
         return [resolved] if resolved.endswith(".py") else []
     py_files = []
-    skip = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", "dist", "build", ".env"}
+    skip = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", "dist", "build", ".env", "tests", "opalacoder", "skills", "debug"}
     for dirpath, dirnames, filenames in os.walk(resolved):
         dirnames[:] = [d for d in dirnames if d not in skip and not d.startswith(".")]
         for fname in filenames:

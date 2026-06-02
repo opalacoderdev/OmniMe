@@ -218,6 +218,9 @@ def build_run_skill_tool(
             termination_tools=["send_message"],
         )
 
+        if hasattr(memgpt, "on_thinking") and memgpt.on_thinking:
+            sub_agent.on_thinking = memgpt.on_thinking
+
         os.environ.setdefault(
             "OPALACODER_ROOT",
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),

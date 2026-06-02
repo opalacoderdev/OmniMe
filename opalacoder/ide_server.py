@@ -458,6 +458,25 @@ class AsyncHTTPServer:
                         except (ValueError, TypeError):
                             self.send_response(writer, 400, f'{{"error":"{k} must be a float between -2.0 and 2.0"}}'.encode('utf-8'), "application/json")
                             return
+                    elif k == "think":
+                        if v is not None and v != "":
+                            if isinstance(v, bool):
+                                validated[k] = v
+                            elif isinstance(v, str) and v.lower() in {"true", "on", "yes"}:
+                                validated[k] = True
+                            elif isinstance(v, str) and v.lower() in {"false", "off", "no"}:
+                                validated[k] = False
+                            elif isinstance(v, str) and v.lower() == "auto":
+                                validated[k] = "auto"
+                            else:
+                                try:
+                                    val = int(v)
+                                    if val < -1:
+                                        raise ValueError()
+                                    validated[k] = val
+                                except (ValueError, TypeError):
+                                    self.send_response(writer, 400, b'{"error":"think must be a boolean, auto, or integer budget >= -1"}', "application/json")
+                                    return
                 project.model_params = validated
 
             if "api_key" in data:
@@ -466,6 +485,16 @@ class AsyncHTTPServer:
                 project.api_base = data["api_base"]
 
             store.save(project)
+            
+            # Propagate updated project settings to in-memory state and rebuild orchestrator
+            import opalacoder.agent_stdin as agent_stdin
+            if agent_stdin.current_project and agent_stdin.current_project.name == project.name:
+                agent_stdin.current_project = project
+                from .tools import set_project_context
+                set_project_context(project, store)
+                from .memgpt_runtime import build_chat_orchestrator
+                agent_stdin.current_memgpt = build_chat_orchestrator(project, store)
+
             res_data = {
                 "name": project.name,
                 "project_name": project.project_name,
@@ -479,6 +508,24 @@ class AsyncHTTPServer:
                 "api_base": getattr(project, "api_base", ""),
             }
             self.send_response(writer, 200, json.dumps(res_data).encode(), "application/json")
+
+        # 6c. Slash Command
+        elif path == '/api/opalacoder/slash-command' and method == 'POST':
+            from opalacoder.agent_stdin import handle_slash_command
+            try:
+                result = await handle_slash_command(data)
+                self.send_response(writer, 200, json.dumps(result).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
+        # 6d. Slash Command Continue (after confirm)
+        elif path == '/api/opalacoder/slash-command/continue' and method == 'POST':
+            from opalacoder.agent_stdin import handle_slash_command_continue
+            try:
+                result = await handle_slash_command_continue(data)
+                self.send_response(writer, 200, json.dumps(result).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
         # 7a. Input Response (resolves a pending GUI confirm/ask request)
 
@@ -499,7 +546,8 @@ class AsyncHTTPServer:
 
             headers = (
                 "HTTP/1.1 200 OK\r\n"
-                "Content-Type: text/plain\r\n"
+                "Content-Type: text/event-stream\r\n"
+                "X-Content-Type-Options: nosniff\r\n"
                 "Transfer-Encoding: chunked\r\n"
                 "Access-Control-Allow-Origin: *\r\n"
                 "Cache-Control: no-cache\r\n"
@@ -512,6 +560,8 @@ class AsyncHTTPServer:
             self.active_queues.append(event_queue)
 
             def send_chunk(text: str):
+                if len(text) < 4096:
+                    text = text.rstrip('\n') + (" " * (4096 - len(text))) + "\n"
                 chunk = text.encode('utf-8')
                 if not chunk:
                     return
@@ -706,7 +756,8 @@ class AsyncHTTPServer:
         elif path == '/api/settings/install-dependencies' and method == 'POST':
             headers = (
                 "HTTP/1.1 200 OK\r\n"
-                "Content-Type: text/plain\r\n"
+                "Content-Type: text/event-stream\r\n"
+                "X-Content-Type-Options: nosniff\r\n"
                 "Transfer-Encoding: chunked\r\n"
                 "Access-Control-Allow-Origin: *\r\n"
                 "Cache-Control: no-cache\r\n"
@@ -716,6 +767,8 @@ class AsyncHTTPServer:
             await writer.drain()
 
             def send_chunk(text: str):
+                if len(text) < 4096:
+                    text = text.rstrip('\n') + (" " * (4096 - len(text))) + "\n"
                 chunk = text.encode('utf-8')
                 if not chunk:
                     return
@@ -825,6 +878,8 @@ def start_gui_server(host="127.0.0.1", port=3000):
             q.put_nowait(payload)
 
     agent_stdin.event_hook = web_event_hook
+    import litellm
+    litellm.event_hook = web_event_hook
 
     # --- Run asyncio server in a background daemon thread so the main thread
     # is free for the desktop window toolkit (GTK/pywebview requires main thread).
