@@ -315,8 +315,10 @@ async def test_planner_prompt_contains_indexed_symbols(tmp_path):
     CODE_INDEX.set_project(project_path)
     CODE_INDEX.build()
 
+    mock_router = MagicMock()
+    mock_router.acompletion = fake_acompletion
     with (
-        patch("opalacoder.workflow_orchestrator.litellm.acompletion", side_effect=fake_acompletion),
+        patch("opalacoder.workflow_orchestrator._llm_router", return_value=mock_router),
         patch("agenticblocks.blocks.llm.agent.LLMAgentBlock.run", new=fake_agent_run),
         patch("opalacoder.workflow_orchestrator.WorkflowOrchestratorStrategy._plan_and_refine",
               new=AsyncMock(return_value="")),
@@ -417,8 +419,10 @@ async def test_worker_prompt_contains_symbols_from_task_context(tmp_path):
 
     strategy = WorkflowOrchestratorStrategy(model="ollama/test-model")
 
+    mock_router2 = MagicMock()
+    mock_router2.acompletion = fake_acompletion
     with (
-        patch("opalacoder.workflow_orchestrator.litellm.acompletion", side_effect=fake_acompletion),
+        patch("opalacoder.workflow_orchestrator._llm_router", return_value=mock_router2),
         patch("agenticblocks.blocks.llm.agent.LLMAgentBlock.run", new=fake_agent_run),
         patch("opalacoder.workflow_orchestrator.WorkflowOrchestratorStrategy._plan_and_refine",
               new=AsyncMock(return_value="")),

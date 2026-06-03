@@ -4,7 +4,6 @@ import sys
 import json
 import asyncio
 import os
-import inspect
 
 # Save real stdout and redirect sys.stdout to sys.stderr to prevent pollution
 _real_stdout = sys.stdout
@@ -17,12 +16,74 @@ event_hook = None
 # /api/opalacoder/input_response endpoint can resolve them.
 _gui_input_pending: dict = {}
 
+import litellm
+
+def _friendly_llm_error(exc: Exception, project=None) -> str:
+    """Convert a LiteLLM/agent exception into a user-friendly message."""
+    msg = str(exc)
+    low = msg.lower()
+    model = getattr(project, "model", None) or "the configured model"
+
+    if "unexpected keyword argument" in low or "got an unexpected" in low:
+        # Extract the parameter name from messages like: "got an unexpected keyword argument 'reasoning_effort'"
+        import re
+        m = re.search(r"unexpected keyword argument ['\"]([^'\"]+)['\"]", msg)
+        param = m.group(1) if m else "unknown"
+        return (
+            f"Parameter '{param}' is not supported by {model}. "
+            f"Remove it with: /set-model-param {param} (leave value empty) or check the model's documentation."
+        )
+
+    if "invalid value for" in low or "invalid_request_error" in low or "badrequest" in low:
+        return f"The model rejected a parameter value: {msg}"
+
+    if "connection" in low or "connect" in low:
+        return f"Could not connect to {model}. Check that Ollama/the API server is running."
+
+    if "authentication" in low or "api key" in low or "unauthorized" in low:
+        return f"Authentication failed for {model}. Check the API key in project settings."
+
+    if "context" in low and ("length" in low or "window" in low or "exceed" in low):
+        return f"The conversation exceeded the context window of {model}. Try increasing num_ctx or starting a new session."
+
+    return msg
+
+
 def print_event(event: str, data: dict):
     payload = {"event": event, **data}
-    _real_stdout.write(json.dumps(payload) + "\n")
-    _real_stdout.flush()
-    if event_hook:
-        event_hook(payload)
+    hook = event_hook
+    if not hook:
+        hook = getattr(litellm, "event_hook", None)
+    # Write to stdout only in CLI/stdin mode (no server hook active)
+    if not hook:
+        try:
+            if _real_stdout and not getattr(_real_stdout, 'closed', False):
+                _real_stdout.write(json.dumps(payload) + "\n")
+                _real_stdout.flush()
+        except (ValueError, OSError, AttributeError):
+            pass
+    if hook:
+        try:
+            hook(payload)
+            
+            # Emit auxiliary thoughts to keep the Thinking tab active and alive
+            thought_content = None
+            if event == "agent_started":
+                thought_content = f"Iniciando a execução do agente '{data.get('agent', '')}' usando o modelo '{data.get('model', '')}'..."
+            elif event == "tool_call":
+                thought_content = f"Decidi executar a ferramenta '{data.get('tool', '')}' com os parâmetros: {json.dumps(data.get('arguments', {}))}"
+            elif event == "tool_result":
+                thought_content = f"Recebi o retorno da ferramenta '{data.get('tool', '')}' com sucesso. Analisando o resultado obtido..."
+            elif event == "agent_response":
+                thought_content = "Resposta gerada com sucesso pelo modelo. Finalizando turno do agente."
+            elif event == "error":
+                thought_content = f"Alerta: Ocorreu um erro durante a execução: {data.get('message', '')}"
+                
+            if thought_content:
+                hook({"event": "thought", "content": thought_content})
+        except Exception as ex:
+            import sys
+            sys.stderr.write(f"[DEBUG] Error invoking event hook: {ex}\n")
 
 # Import project components safely
 try:
@@ -178,6 +239,192 @@ async def handle_load_project(data: dict):
         "skills": current_project.skills
     })
 
+async def handle_slash_command(data: dict) -> dict:
+    """Execute a slash command and return a plain JSON result (no streaming).
+
+    Returns:
+        {"status": "done", "messages": [...]}  when the command completes.
+        {"status": "confirm", "id": ..., "prompt": ..., "options": [...], "default": ...}
+            when the command needs user confirmation before continuing.
+    """
+    import re
+    import uuid
+
+    prompt = data.get("prompt", "")
+    cmd, *args = prompt.split(maxsplit=1)
+
+    # Load project state needed by commands
+    global current_project, current_store, current_memgpt
+    if "project_name" in data or "project_path" in data:
+        await handle_load_project(data)
+
+    from opalacoder.cli_commands import REPLState, _registry
+    import opalacoder.terminal as T
+
+    if cmd not in _registry:
+        return {"status": "done", "messages": [f"🔴 Comando desconhecido: {cmd}. Digite /help para ajuda."]}
+
+    messages = []
+
+    # ---- Capture terminal output helpers ----
+    orig_success         = T.success
+    orig_error           = T.error
+    orig_info            = T.info
+    orig_warning         = T.warning
+    orig_confirm         = T.confirm
+    orig_ask             = T.ask
+    orig_async_confirm_hook = T._async_confirm_hook
+    orig_console_print   = T.console.print
+
+    def _capture(*a, prefix=""):
+        messages.append(f"{prefix}{' '.join(str(x) for x in a)}")
+
+    T.success = lambda *a, **k: _capture(*a, prefix="🟢 ")
+    T.error   = lambda *a, **k: _capture(*a, prefix="🔴 ")
+    T.info    = lambda *a, **k: _capture(*a, prefix="ℹ️ ")
+    T.warning = lambda *a, **k: _capture(*a, prefix="⚠️ ")
+    T.confirm = lambda p, default=True: default   # sync fallback never used in GUI
+    T.ask     = lambda p: ""
+
+    def _render_rich(obj) -> str:
+        from rich.console import Console as _Console
+        from rich.table import Table as _Table
+        from io import StringIO
+        if isinstance(obj, _Table):
+            buf = StringIO()
+            c = _Console(file=buf, highlight=False, no_color=True)
+            c.print(obj)
+            return buf.getvalue()
+        return str(obj)
+
+    def _console_print(*args_c, **kwargs_c):
+        if not args_c:
+            messages.append("")
+            return
+        raw = " ".join(_render_rich(x) for x in args_c)
+        for line in raw.split("\n"):
+            stripped = line.strip()
+            if not stripped:
+                messages.append("")
+                continue
+            if "Comandos Disponíveis" in stripped or "Available commands" in stripped:
+                messages.append("### 🛠️ Comandos Disponíveis\n"); continue
+            if "Active skills for this project" in stripped:
+                messages.append("### 🧠 Active skills for this project\n"); continue
+            if "Available skills" in stripped:
+                messages.append("### 📚 Available skills\n"); continue
+            clean = re.sub(r'\[/?[\w\s]+\]', '', stripped)
+            if clean and clean == clean.upper() and clean.replace(" ", "").isalpha():
+                messages.append(f"### {clean}\n"); continue
+            m = re.match(r'\s*(?:\*\s*)?\[(green|cyan)\]\s*(.*?)\s*\[/\1\]\s*(.*)', line)
+            if m:
+                name = m.group(2).strip()
+                desc = re.sub(r'\[/?\w+\]', '', m.group(3).strip())
+                star = "⭐ " if "*" in line.split("[cyan]")[0] and "[cyan]" in line else "🔹 "
+                messages.append(f"{star}**`{name}`** — {desc}"); continue
+            cm = re.match(r'^\s*(/[a-zA-Z0-9_<> \-\[\]]+?)\s{2,}(.*)$', line)
+            if cm:
+                messages.append(f"🔹 **`{cm.group(1).strip()}`** — {cm.group(2).strip()}"); continue
+            has_star = bool(re.match(r'^\s*\*\s*', line))
+            sm = re.match(r'^\s*(?:\*\s*)?([a-zA-Z0-9_\-]+)\s{2,}(.*)$', line)
+            if sm:
+                star = "⭐ " if has_star else "🔹 "
+                messages.append(f"{star}**`{sm.group(1).strip()}`** — {sm.group(2).strip()}"); continue
+            messages.append(re.sub(r'\[/?[\w\s]+\]', '', line))
+
+    T.console.print = _console_print
+
+    # Future that gets resolved either when command finishes OR when it needs confirm
+    loop = asyncio.get_event_loop()
+    confirm_future: asyncio.Future = loop.create_future()
+    confirm_info: dict = {}
+
+    async def _gui_confirm_hook(prompt_text: str, default: bool = True) -> bool:
+        req_id = str(uuid.uuid4())
+        fut = loop.create_future()
+        _gui_input_pending[req_id] = fut
+        confirm_info.update({"id": req_id, "prompt": prompt_text,
+                             "options": ["yes", "no"],
+                             "default": "yes" if default else "no"})
+        if not confirm_future.done():
+            confirm_future.set_result({"needs_confirm": True})
+        try:
+            raw = await asyncio.wait_for(asyncio.shield(fut), timeout=120.0)
+            return raw.strip().lower() in ("yes", "y", "s", "sim", "true", "1")
+        except asyncio.TimeoutError:
+            return default
+        finally:
+            _gui_input_pending.pop(req_id, None)
+
+    T._async_confirm_hook = _gui_confirm_hook
+
+    def _restore():
+        T.success            = orig_success
+        T.error              = orig_error
+        T.info               = orig_info
+        T.warning            = orig_warning
+        T.confirm            = orig_confirm
+        T.ask                = orig_ask
+        T._async_confirm_hook = orig_async_confirm_hook
+        T.console.print      = orig_console_print
+
+    state    = REPLState(current_project, current_store)
+    cmd_args = args[0].split() if args else []
+
+    async def _run_cmd():
+        try:
+            await _registry.dispatch(state, cmd, cmd_args)
+        except Exception as e:
+            messages.append(f"🔴 Erro ao executar comando: {e}")
+        finally:
+            _restore()
+            if not confirm_future.done():
+                confirm_future.set_result({"needs_confirm": False})
+
+    cmd_task = asyncio.create_task(_run_cmd())
+
+    # Wait until command finishes OR pauses for confirmation
+    signal = await confirm_future
+
+    if signal.get("needs_confirm"):
+        # Store the running task so /slash-command/continue can resume it
+        _pending_slash_tasks[confirm_info["id"]] = (cmd_task, messages)
+        return {"status": "confirm", **confirm_info}
+
+    await cmd_task
+    response_text = "\n".join(m for m in messages if m is not None) or f"Comando {cmd} executado com sucesso."
+    return {"status": "done", "messages": [response_text]}
+
+
+# Pending slash-command tasks awaiting user confirmation
+_pending_slash_tasks: dict = {}
+
+
+async def handle_slash_command_continue(data: dict) -> dict:
+    """Resume a slash command after the user responded to a confirm dialog."""
+    req_id = data.get("id", "")
+    value  = data.get("value", "")
+
+    fut = _gui_input_pending.get(req_id)
+    if not fut or fut.done():
+        return {"status": "error", "message": "No pending request with that id"}
+
+    loop = asyncio.get_event_loop()
+    loop.call_soon_threadsafe(fut.set_result, value)
+
+    entry = _pending_slash_tasks.pop(req_id, None)
+    if entry:
+        cmd_task, messages = entry
+        try:
+            await cmd_task
+        except Exception:
+            pass
+        response_text = "\n".join(m for m in messages if m is not None) or "Comando executado com sucesso."
+        return {"status": "done", "messages": [response_text]}
+
+    return {"status": "done", "messages": []}
+
+
 async def handle_run(data: dict):
     global current_project, current_store, current_memgpt
     agent_type = data.get("agent") or "chat_orchestrator"
@@ -206,172 +453,7 @@ async def handle_run(data: dict):
         except Exception as e:
             print(f"Warning: Failed to save editor state: {e}", file=sys.stderr)
     
-    # Intercept and process slash commands (like /help, /undo, /commit)
-    if prompt.startswith("/"):
-        from opalacoder.cli_commands import REPLState, _registry
-        cmd, *args = prompt.split(maxsplit=1)
-        if cmd in _registry:
-            messages = []
-            import opalacoder.terminal as T
-            
-            # Mock print functions
-            orig_success = T.success
-            orig_error = T.error
-            orig_info = T.info
-            orig_warning = T.warning
-            orig_confirm = T.confirm
-            orig_ask = T.ask
-            orig_async_confirm_hook = T._async_confirm_hook
-            
-            def mock_success(*args_m, **kwargs_m):
-                msg = " ".join(str(x) for x in args_m)
-                messages.append(f"🟢 {msg}")
-            def mock_error(*args_m, **kwargs_m):
-                msg = " ".join(str(x) for x in args_m)
-                messages.append(f"🔴 {msg}")
-            def mock_info(*args_m, **kwargs_m):
-                msg = " ".join(str(x) for x in args_m)
-                messages.append(f"ℹ️ {msg}")
-            def mock_warning(*args_m, **kwargs_m):
-                msg = " ".join(str(x) for x in args_m)
-                messages.append(f"⚠️ {msg}")
-            def mock_confirm(prompt: str, default: bool = True) -> bool:
-                # Sync fallback — kept for safety, but commands now use await T.aconfirm()
-                # which will delegate to _gui_confirm_hook below.
-                messages.append(f"🔔 {prompt} → {'yes' if default else 'no'} (auto-confirmed)")
-                return default
-            def mock_ask(prompt: str) -> str:
-                messages.append(f"🔔 {prompt} → (no input in GUI mode)")
-                return ""
 
-            async def _gui_confirm_hook(prompt: str, default: bool = True) -> bool:
-                """Emit input_request event and wait for the frontend Yes/No response."""
-                import uuid
-                req_id = str(uuid.uuid4())
-                print_event("input_request", {
-                    "id": req_id,
-                    "prompt": prompt,
-                    "options": ["yes", "no"],
-                    "default": "yes" if default else "no",
-                })
-                loop = asyncio.get_event_loop()
-                fut = loop.create_future()
-                _gui_input_pending[req_id] = fut
-                try:
-                    raw = await asyncio.wait_for(asyncio.shield(fut), timeout=120.0)
-                    return raw.strip().lower() in ("yes", "y", "s", "sim", "true", "1")
-                except asyncio.TimeoutError:
-                    messages.append(f"⚠️ Confirm timed out — using default ({'yes' if default else 'no'}).")
-                    return default
-                finally:
-                    _gui_input_pending.pop(req_id, None)
-
-            T.success = mock_success
-            T.error = mock_error
-            T.info = mock_info
-            T.warning = mock_warning
-            T.confirm = mock_confirm
-            T.ask = mock_ask
-            T._async_confirm_hook = _gui_confirm_hook
-
-            print_event("agent_started", {"agent": "cli_command", "model": ""})
-            try:
-                state = REPLState(current_project, current_store)
-                cmd_args = args[0].split() if args else []
-                # Also mock T.console.print to capture lines
-                orig_console_print = T.console.print
-                import re
-                def mock_console_print(*args_c, **kwargs_c):
-                    if not args_c:
-                        messages.append("")
-                        return
-                    raw_msg = " ".join(str(x) for x in args_c)
-                    
-                    # Split by newlines so we format each line individually
-                    lines = raw_msg.split('\n')
-                    for line in lines:
-                        stripped = line.strip()
-                        if not stripped:
-                            messages.append("")
-                            continue
-                        
-                        # 1. Header mapping
-                        if "Comandos Disponíveis" in stripped or "Available commands" in stripped:
-                            messages.append("### 🛠️ Comandos Disponíveis\n")
-                            continue
-                        if "Active skills for this project" in stripped:
-                            messages.append("### 🧠 Active skills for this project\n")
-                            continue
-                        if "Available skills" in stripped:
-                            messages.append("### 📚 Available skills\n")
-                            continue
-                        if "active in this project" in stripped:
-                            messages.append(f"\n_({stripped.replace('* = ', '')})_")
-                            continue
-                            
-                        # 2. Match standard menu item with formatting: [color]name[/color] description
-                        # fallback matching if Rich formatting tags are present:
-                        match_rich = re.match(r'\s*(?:\*\s*)?\[(green|cyan)\]\s*(.*?)\s*\[/\1\]\s*(.*)', line)
-                        if match_rich:
-                            name = match_rich.group(2).strip()
-                            desc = match_rich.group(3).strip()
-                            desc = re.sub(r'\[/?\w+\]', '', desc)
-                            has_active_star = "*" in line.split("[cyan]")[0] if "[cyan]" in line else False
-                            prefix = "⭐ " if has_active_star else "🔹 "
-                            messages.append(f"{prefix}**`{name}`** — {desc}")
-                            continue
-                            
-                        # 3. Match raw slash commands without Rich tags: e.g. "  /help     Show help"
-                        cmd_match = re.match(r'^\s*(/[a-zA-Z0-9_<> \-\[\]]+?)\s{2,}(.*)$', line)
-                        if cmd_match:
-                            cmd_name = cmd_match.group(1).strip()
-                            cmd_desc = cmd_match.group(2).strip()
-                            messages.append(f"🔹 **`{cmd_name}`** — {cmd_desc}")
-                            continue
-                            
-                        # 4. Match raw skills without Rich tags: e.g. "  * chat-orchestrator   Skill description"
-                        has_active_star = bool(re.match(r'^\s*\*\s*', line))
-                        skill_match = re.match(r'^\s*(?:\*\s*)?([a-zA-Z0-9_\-]+)\s{2,}(.*)$', line)
-                        if skill_match:
-                            skill_name = skill_match.group(1).strip()
-                            skill_desc = skill_match.group(2).strip()
-                            prefix = "⭐ " if has_active_star else "🔹 "
-                            messages.append(f"{prefix}**`{skill_name}`** — {skill_desc}")
-                            continue
-                            
-                        # Fallback: clean tags and append
-                        clean_line = re.sub(r'\[/?\w+\]', '', line)
-                        messages.append(clean_line)
-                T.console.print = mock_console_print
-                
-                try:
-                    await _registry.dispatch(state, cmd, cmd_args)
-                finally:
-                    T.console.print = orig_console_print
-            except Exception as e:
-                messages.append(f"🔴 Erro ao executar comando: {e}")
-            finally:
-                T.success = orig_success
-                T.error = orig_error
-                T.info = orig_info
-                T.warning = orig_warning
-                T.confirm = orig_confirm
-                T.ask = orig_ask
-                T._async_confirm_hook = orig_async_confirm_hook
-                
-            response = "\n".join(messages)
-            if not response:
-                response = f"Comando {cmd} executado com sucesso."
-            print_event("agent_response", {"response": response})
-            print_event("agent_finished", {})
-            return
-        else:
-            print_event("agent_started", {"agent": "cli_command", "model": ""})
-            print_event("agent_response", {"response": f"🔴 Comando desconhecido: {cmd}. Digite /help para ajuda."})
-            print_event("agent_finished", {})
-            return
-
-    
     # Build agent
     agent = None
     if agent_type == "landscape_planner":
@@ -423,43 +505,48 @@ async def handle_run(data: dict):
                 "content": msg.get("content", "")
             })
             
-    # Setup callback to stream thoughts
-    seen_messages = len(agent.internal_history) if hasattr(agent, "internal_history") else 0
-    
-    def on_iteration_callback(iteration: int, messages: list):
-        nonlocal seen_messages
-        new_msgs = messages[seen_messages:]
-        seen_messages = len(messages)
-        for msg in new_msgs:
-            role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
-            content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", "")
-            if role == "assistant" and content:
-                print_event("thought", {"content": content})
-                
+    def _on_thinking(chunk: str) -> None:
+        print_event("thought", {"content": chunk})
+
+    def _on_iteration(_step: int, messages: list) -> None:
+        last = messages[-1] if messages else {}
+        content = last.get("content") or ""
+        if content:
+            print_event("reflection", {"content": str(content)})
+
+    if hasattr(agent, "on_thinking"):
+        agent.on_thinking = _on_thinking
+    elif hasattr(agent, "agent") and hasattr(agent.agent, "on_thinking"):
+        agent.agent.on_thinking = _on_thinking
+
     if hasattr(agent, "on_iteration"):
-        agent.on_iteration = on_iteration_callback
+        agent.on_iteration = _on_iteration
     elif hasattr(agent, "agent") and hasattr(agent.agent, "on_iteration"):
-        agent.agent.on_iteration = on_iteration_callback
+        agent.agent.on_iteration = _on_iteration
 
     print_event("agent_started", {"agent": agent_type, "model": agent.model})
-    
+
     try:
-        resp_obj = await agent.run(AgentInput(prompt=prompt))
-        response = resp_obj.response.strip() if resp_obj.response else ""
-        
-        # Save to store if using chat_orchestrator
-        if agent_type == "chat_orchestrator" and current_store and current_project:
-            current_store.append_message(current_project, "user", prompt)
-            if response:
-                current_store.append_message(current_project, "assistant", response)
-            current_store.save(current_project)
-            
-        print_event("agent_response", {"response": response})
-    except Exception as e:
-        import traceback
-        err_msg = traceback.format_exc()
-        print_event("error", {"message": str(e), "trace": err_msg})
-        
+        try:
+            resp_obj = await agent.run(AgentInput(prompt=prompt))
+            response = resp_obj.response.strip() if resp_obj.response else ""
+
+            # Save to store if using chat_orchestrator
+            if agent_type == "chat_orchestrator" and current_store and current_project:
+                current_store.append_message(current_project, "user", prompt)
+                if response:
+                    current_store.append_message(current_project, "assistant", response)
+                current_store.save(current_project)
+
+            print_event("agent_response", {"response": response})
+        except Exception as e:
+            import traceback
+            err_msg = traceback.format_exc()
+            user_msg = _friendly_llm_error(e, current_project)
+            print_event("error", {"message": user_msg, "trace": err_msg})
+    finally:
+        pass
+
     print_event("agent_finished", {})
 
 async def handle_list_projects(data: dict):
@@ -482,6 +569,8 @@ async def handle_create_project(data: dict):
     model = data.get("model") or DEFAULT_MODEL
     mode = data.get("mode") or "auto"
     skills = data.get("skills", [])
+    api_key = data.get("api_key")
+    api_base = data.get("api_base")
     
     db_key = project_name.replace(" ", "_").lower()
     if store.exists(db_key):
@@ -495,11 +584,62 @@ async def handle_create_project(data: dict):
         project_path=os.path.abspath(project_path),
         skills=skills,
         description=description,
+        api_key=api_key,
+        api_base=api_base,
     )
     print_event("project_created", {
         "project_name": project.project_name,
         "project_path": project.project_path,
-        "skills": project.skills
+        "skills": project.skills,
+        "api_key": project.api_key,
+        "api_base": project.api_base,
+    })
+
+async def handle_update_project(data: dict):
+    db_path = data.get("db") or DEFAULT_DB_PATH
+    store = ProjectStore(db_path=db_path)
+    
+    project_name = data.get("project_name")
+    if not project_name:
+        print_event("error", {"message": "project_name is required"})
+        return
+    
+    if not store.exists(project_name):
+        print_event("error", {"message": f"Project '{project_name}' not found"})
+        return
+        
+    project = store.load(project_name)
+    if "display_name" in data:
+        project.project_name = data["display_name"]
+    if "model" in data and data["model"]:
+        project.model = data["model"]
+    if "alternative_model" in data:
+        project.alternative_model = data["alternative_model"]
+    if "description" in data:
+        project.description = data["description"]
+    if "mode" in data and data["mode"]:
+        project.mode = data["mode"]
+    if "project_path" in data and data["project_path"]:
+        project.project_path = os.path.abspath(data["project_path"])
+    if "api_key" in data:
+        project.api_key = data["api_key"]
+    if "api_base" in data:
+        project.api_base = data["api_base"]
+    if "model_params" in data:
+        project.model_params = data["model_params"]
+        
+    store.save(project)
+    print_event("project_updated", {
+        "name": project.name,
+        "project_name": project.project_name,
+        "project_path": project.project_path,
+        "model": project.model,
+        "alternative_model": project.alternative_model,
+        "mode": project.mode,
+        "description": project.description,
+        "api_key": project.api_key,
+        "api_base": project.api_base,
+        "model_params": project.model_params,
     })
 
 async def handle_delete_project(data: dict):
@@ -552,6 +692,8 @@ async def stdin_server_loop():
                 await handle_list_projects(data)
             elif cmd == "create_project":
                 await handle_create_project(data)
+            elif cmd == "update_project":
+                await handle_update_project(data)
             elif cmd == "delete_project":
                 await handle_delete_project(data)
             else:

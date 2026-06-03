@@ -56,8 +56,20 @@ _LLM_DEFAULTS: dict = {
 _AGENT_OVERRIDES: dict[str, dict] = _AGENTS_CONFIG.get("agents", {})
 
 
-# Fields that are consumed outside of litellm kwargs and must not be forwarded.
-_NON_LITELLM_FIELDS = {"model", "max_heartbeats", "debug", "strategy", "response_mode"}
+# Fields that are agent constructor params, not LiteLLM kwargs — strip before passing to model_kwargs.
+_NON_LITELLM_FIELDS = {
+    "model", "strategy",
+    # MemGPTAgentBlock params
+    "max_heartbeats", "max_context_tokens", "eviction_threshold",
+    "memory_pressure_threshold", "response_mode",
+    # LLMAgentBlock params
+    "max_iterations", "max_tool_calls", "on_max_iterations",
+    # Shared
+    "debug", "use_shared_router",
+}
+
+# Agent constructor params that can be overridden per-project via model_params.
+_AGENT_PARAM_KEYS = _NON_LITELLM_FIELDS - {"model", "strategy"}
 
 
 from typing import Union
@@ -139,6 +151,38 @@ def get_agent_llm_kwargs(agent_name: str) -> dict:
     for field in _NON_LITELLM_FIELDS:
         merged.pop(field, None)
     return merged
+
+
+def resolve_model_for_thinking(model: str, llm_kwargs: dict) -> str:
+    """Remap ollama/ → ollama_chat/ when think=True is requested.
+
+    The ollama_chat/ provider uses Ollama's native /api/chat endpoint which
+    returns reasoning as a dedicated 'thinking' field per streaming chunk.
+    LiteLLM maps this to delta.reasoning_content, enabling real-time thinking
+    display via on_thinking per chunk.
+
+    The ollama/ provider uses the OpenAI-compatible endpoint where reasoning
+    appears as <think> tags inside delta.content — not in reasoning_content —
+    so per-chunk on_thinking never fires.
+    """
+    if llm_kwargs.get("think") and model.startswith("ollama/"):
+        return "ollama_chat/" + model[len("ollama/"):]
+    return model
+
+
+def get_project_agent_params() -> dict:
+    """Return agent constructor overrides stored in the current project's model_params.
+
+    Only keys that belong to _AGENT_PARAM_KEYS are returned; LiteLLM kwargs are excluded.
+    """
+    try:
+        from .tools import _PROJECT_SESSION
+        if _PROJECT_SESSION and hasattr(_PROJECT_SESSION, "model_params") and _PROJECT_SESSION.model_params:
+            return {k: v for k, v in _PROJECT_SESSION.model_params.items() if k in _AGENT_PARAM_KEYS}
+    except Exception:
+        pass
+    return {}
+
 
 # Maximum retry attempts for a failing subplan step
 DEFAULT_MAX_RETRIES = 3

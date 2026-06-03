@@ -97,27 +97,41 @@ def test_old_db_migrates_without_alternative_model_column(tmp_path):
 
 def test_set_model_param_valid(tmp_path):
     state, store = _state(tmp_path)
+    # Known numeric params
     asyncio.run(_registry.dispatch(state, "/set-model-param", ["temperature", "0.8"]))
     asyncio.run(_registry.dispatch(state, "/set-model-param", ["num_ctx", "4096"]))
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["think", "1024"]))
     assert state.project.model_params["temperature"] == 0.8
     assert state.project.model_params["num_ctx"] == 4096
+    assert state.project.model_params["think"] == 1024
     assert store.load("t").model_params["temperature"] == 0.8
     assert store.load("t").model_params["num_ctx"] == 4096
+    assert store.load("t").model_params["think"] == 1024
+
+    # Any arbitrary LiteLLM param is now accepted
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["reasoning_effort", "medium"]))
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["seed", "42"]))
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["top_k", "50"]))
+    assert state.project.model_params["reasoning_effort"] == "medium"
+    assert state.project.model_params["seed"] == 42
+    assert state.project.model_params["top_k"] == 50
+
+    # Boolean coercion
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["think", "true"]))
+    assert state.project.model_params["think"] is True
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["think", "false"]))
+    assert state.project.model_params["think"] is False
 
 
 def test_set_model_param_invalid(tmp_path):
     state, store = _state(tmp_path)
-    # Invalid bounds temperature
-    asyncio.run(_registry.dispatch(state, "/set-model-param", ["temperature", "2.5"]))
+    # Invalid parameter name (contains spaces / special chars)
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["bad name!", "1.0"]))
+    assert "bad name!" not in state.project.model_params
+
+    # Missing value → usage error, param not set
+    asyncio.run(_registry.dispatch(state, "/set-model-param", ["temperature"]))
     assert "temperature" not in state.project.model_params
-
-    # Invalid non-numeric
-    asyncio.run(_registry.dispatch(state, "/set-model-param", ["max_tokens", "abc"]))
-    assert "max_tokens" not in state.project.model_params
-
-    # Unknown parameter name
-    asyncio.run(_registry.dispatch(state, "/set-model-param", ["invalid_param", "1.0"]))
-    assert "invalid_param" not in state.project.model_params
 
 
 def test_commit_and_undo_commands(tmp_path):

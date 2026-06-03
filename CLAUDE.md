@@ -2,10 +2,13 @@
 
 1. Don't make baseless assumptions; before drawing any conclusions, conduct tests and analysis to gather as much information as possible.
 
+2. Dever apply direct patch ou modifications in external lib without user authorization.
+
+3. Dont call directly litellm (always use agenticblocks). If need same feature dont supported by agenticblocks, alert me and ask me about to do.
+
 # Project Guide
 
 ## Language
-
 All code, comments, and documentation must be written in **English**.
 
 ## Architecture

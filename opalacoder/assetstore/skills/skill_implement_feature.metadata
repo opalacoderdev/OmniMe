@@ -1,0 +1,4 @@
+id: skill_implement_feature
+type: skill
+name: implement-feature
+desc: Plan-Execute-Verify loop for implementing features and fixing bugs in project files

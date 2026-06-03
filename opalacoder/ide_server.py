@@ -295,6 +295,77 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
+        # 3.7. List subdirectories of a filesystem path
+        elif path == '/api/fs/dirs':
+            req_path = data.get('path', os.path.expanduser('~'))
+            req_path = os.path.abspath(os.path.expanduser(req_path or os.path.expanduser('~')))
+            try:
+                entries = []
+                # Parent directory entry (except filesystem root)
+                parent = os.path.dirname(req_path)
+                if parent != req_path:
+                    entries.append({"name": "..", "path": parent})
+                for name in sorted(os.listdir(req_path)):
+                    if name.startswith('.'):
+                        continue
+                    full = os.path.join(req_path, name)
+                    if os.path.isdir(full):
+                        entries.append({"name": name, "path": full})
+                self.send_response(writer, 200, json.dumps({"current": req_path, "dirs": entries}).encode('utf-8'), "application/json")
+            except PermissionError:
+                self.send_response(writer, 403, json.dumps({"error": "Permission denied", "current": req_path, "dirs": []}).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e), "current": req_path, "dirs": []}).encode('utf-8'), "application/json")
+
+        # 3.8. Load refined model config from .opalacoder/modelsconfig/<provider>/<model>.yaml
+        elif path == '/api/opalacoder/model-config':
+            project_path = data.get('projectPath') or query.get('projectPath', [None])[0]
+            model_id = data.get('model') or query.get('model', [None])[0]
+            if not project_path or not model_id:
+                self.send_response(writer, 400, b'{"error":"projectPath and model are required"}', "application/json")
+                return
+
+            # Normalise provider: ollama_chat/ and ollama/ both → "ollama"
+            _PROVIDER_ALIASES = {"ollama_chat": "ollama"}
+            if '/' in model_id:
+                raw_provider, model_name = model_id.split('/', 1)
+            else:
+                raw_provider, model_name = "", model_id
+            provider_dir = _PROVIDER_ALIASES.get(raw_provider, raw_provider)
+
+            # Normalise model name: ':' → '__'
+            yaml_name = model_name.replace(':', '__') + '.yaml'
+            config_path = os.path.join(
+                os.path.abspath(project_path),
+                '.opalacoder', 'modelsconfig', provider_dir, yaml_name
+            )
+
+            if not os.path.isfile(config_path):
+                self.send_response(writer, 404, json.dumps({
+                    "found": False,
+                    "message": f"--- ainda não temos parâmetros refinados para este modelo"
+                }).encode('utf-8'), "application/json")
+                return
+
+            try:
+                import yaml as _yaml
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = _yaml.safe_load(f) or {}
+
+                # Extract optional provider override and compute new model identity
+                new_model = None
+                if 'provider' in config:
+                    new_provider = config.pop('provider')
+                    new_model = f"{new_provider}/{model_name}"
+
+                self.send_response(writer, 200, json.dumps({
+                    "found": True,
+                    "model_params": config,
+                    "model": new_model,   # None if no provider override
+                }).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
         # 4. List Projects
         elif path == '/api/opalacoder/list-projects':
             from opalacoder.config import DEFAULT_DB_PATH
@@ -340,10 +411,13 @@ class AsyncHTTPServer:
                     self.send_response(writer, 400, json.dumps({"error": f"Failed to create directory: {str(e)}"}).encode('utf-8'), "application/json")
                     return
                 
+            model_params_raw = data.get("model_params")
+            model_params = model_params_raw if isinstance(model_params_raw, dict) else None
+
             db_key = project_name.replace(" ", "_").lower()
             if store.exists(db_key):
                 db_key = db_key + "_1"
-                
+
             try:
                 project = store.create(
                     name=db_key,
@@ -355,6 +429,7 @@ class AsyncHTTPServer:
                     description=description,
                     api_key=api_key,
                     api_base=api_base,
+                    model_params=model_params,
                 )
                 res_data = {
                     "project_name": project.project_name,
@@ -416,51 +491,35 @@ class AsyncHTTPServer:
                 if not isinstance(params, dict):
                     self.send_response(writer, 400, b'{"error":"model_params must be a JSON object"}', "application/json")
                     return
+                # Accept any key/value pair; values already typed by JSON decode.
+                # Reject keys with invalid characters (not letters/digits/underscores/hyphens).
+                import re as _re
                 validated = {}
                 for k, v in params.items():
-                    if k in {"max_tokens", "num_ctx"}:
-                        try:
-                            val = int(v) if v is not None and v != "" else None
-                            if val is not None:
-                                if val <= 0:
-                                    raise ValueError()
-                                validated[k] = val
-                        except (ValueError, TypeError):
-                            self.send_response(writer, 400, f'{{"error":"{k} must be a positive integer"}}'.encode('utf-8'), "application/json")
-                            return
-                    elif k == "temperature":
-                        try:
-                            val = float(v) if v is not None and v != "" else None
-                            if val is not None:
-                                if not (0.0 <= val <= 2.0):
-                                    raise ValueError()
-                                validated[k] = val
-                        except (ValueError, TypeError):
-                            self.send_response(writer, 400, b'{"error":"temperature must be a float between 0.0 and 2.0"}', "application/json")
-                            return
-                    elif k == "top_p":
-                        try:
-                            val = float(v) if v is not None and v != "" else None
-                            if val is not None:
-                                if not (0.0 <= val <= 1.0):
-                                    raise ValueError()
-                                validated[k] = val
-                        except (ValueError, TypeError):
-                            self.send_response(writer, 400, b'{"error":"top_p must be a float between 0.0 and 1.0"}', "application/json")
-                            return
-                    elif k in {"frequency_penalty", "presence_penalty"}:
-                        try:
-                            val = float(v) if v is not None and v != "" else None
-                            if val is not None:
-                                if not (-2.0 <= val <= 2.0):
-                                    raise ValueError()
-                                validated[k] = val
-                        except (ValueError, TypeError):
-                            self.send_response(writer, 400, f'{{"error":"{k} must be a float between -2.0 and 2.0"}}'.encode('utf-8'), "application/json")
-                            return
+                    if not k or not _re.fullmatch(r'[A-Za-z0-9_-]+', k):
+                        self.send_response(writer, 400, f'{{"error":"invalid parameter name: {k}"}}'.encode('utf-8'), "application/json")
+                        return
+                    if v is None or v == "":
+                        continue
+                    validated[k] = v
                 project.model_params = validated
 
+            if "api_key" in data:
+                project.api_key = data["api_key"]
+            if "api_base" in data:
+                project.api_base = data["api_base"]
+
             store.save(project)
+            
+            # Propagate updated project settings to in-memory state and rebuild orchestrator
+            import opalacoder.agent_stdin as agent_stdin
+            if agent_stdin.current_project and agent_stdin.current_project.name == project.name:
+                agent_stdin.current_project = project
+                from .tools import set_project_context
+                set_project_context(project, store)
+                from .memgpt_runtime import build_chat_orchestrator
+                agent_stdin.current_memgpt = build_chat_orchestrator(project, store)
+
             res_data = {
                 "name": project.name,
                 "project_name": project.project_name,
@@ -470,8 +529,28 @@ class AsyncHTTPServer:
                 "mode": project.mode,
                 "description": project.description,
                 "model_params": project.model_params,
+                "api_key": getattr(project, "api_key", ""),
+                "api_base": getattr(project, "api_base", ""),
             }
             self.send_response(writer, 200, json.dumps(res_data).encode(), "application/json")
+
+        # 6c. Slash Command
+        elif path == '/api/opalacoder/slash-command' and method == 'POST':
+            from opalacoder.agent_stdin import handle_slash_command
+            try:
+                result = await handle_slash_command(data)
+                self.send_response(writer, 200, json.dumps(result).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
+        # 6d. Slash Command Continue (after confirm)
+        elif path == '/api/opalacoder/slash-command/continue' and method == 'POST':
+            from opalacoder.agent_stdin import handle_slash_command_continue
+            try:
+                result = await handle_slash_command_continue(data)
+                self.send_response(writer, 200, json.dumps(result).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
         # 7a. Input Response (resolves a pending GUI confirm/ask request)
 
@@ -492,7 +571,8 @@ class AsyncHTTPServer:
 
             headers = (
                 "HTTP/1.1 200 OK\r\n"
-                "Content-Type: text/plain\r\n"
+                "Content-Type: text/event-stream\r\n"
+                "X-Content-Type-Options: nosniff\r\n"
                 "Transfer-Encoding: chunked\r\n"
                 "Access-Control-Allow-Origin: *\r\n"
                 "Cache-Control: no-cache\r\n"
@@ -505,6 +585,8 @@ class AsyncHTTPServer:
             self.active_queues.append(event_queue)
 
             def send_chunk(text: str):
+                if len(text) < 4096:
+                    text = text.rstrip('\n') + (" " * (4096 - len(text))) + "\n"
                 chunk = text.encode('utf-8')
                 if not chunk:
                     return
@@ -614,8 +696,10 @@ class AsyncHTTPServer:
                         break
                     send_data(data)
                     await writer.drain()
+            except (ConnectionResetError, BrokenPipeError):
+                pass  # normal client disconnect
             except Exception as e:
-                print(f"Terminal stream exception: {e}")
+                print(f"Terminal stream error: {e}")
             finally:
                 if self.active_terminal and term_queue in self.active_terminal.queues:
                     self.active_terminal.queues.remove(term_queue)
@@ -699,7 +783,8 @@ class AsyncHTTPServer:
         elif path == '/api/settings/install-dependencies' and method == 'POST':
             headers = (
                 "HTTP/1.1 200 OK\r\n"
-                "Content-Type: text/plain\r\n"
+                "Content-Type: text/event-stream\r\n"
+                "X-Content-Type-Options: nosniff\r\n"
                 "Transfer-Encoding: chunked\r\n"
                 "Access-Control-Allow-Origin: *\r\n"
                 "Cache-Control: no-cache\r\n"
@@ -709,6 +794,8 @@ class AsyncHTTPServer:
             await writer.drain()
 
             def send_chunk(text: str):
+                if len(text) < 4096:
+                    text = text.rstrip('\n') + (" " * (4096 - len(text))) + "\n"
                 chunk = text.encode('utf-8')
                 if not chunk:
                     return
@@ -818,6 +905,8 @@ def start_gui_server(host="127.0.0.1", port=3000):
             q.put_nowait(payload)
 
     agent_stdin.event_hook = web_event_hook
+    import litellm
+    litellm.event_hook = web_event_hook
 
     # --- Run asyncio server in a background daemon thread so the main thread
     # is free for the desktop window toolkit (GTK/pywebview requires main thread).
@@ -876,6 +965,10 @@ def start_gui_server(host="127.0.0.1", port=3000):
         print(f"[OpalaCoder] Launching desktop window → {url}")
 
         icon_path = os.path.join(os.path.dirname(__file__), "icon.png")
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(os.getcwd(), "icon.png")
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icon.png")
         if not os.path.exists(icon_path):
             icon_path = None
 

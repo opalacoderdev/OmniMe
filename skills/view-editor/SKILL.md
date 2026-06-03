@@ -12,6 +12,6 @@ This skill allows you to inspect what file is currently open in the IDE editor, 
 You must execute the script `scripts/run_view_editor.py` inside the `view-editor` skill directory.
 
 Run the following command using the `run_command` tool:
-`python <run_view_editor.py_path> --project-path <project_path>`
+`python3 <run_view_editor.py_path> --project-path <project_path>`
 
 It will automatically locate the staged editor state inside the project folder at `.opalacoder/_editor_state.json` and output the path, current selection, and full content in markdown.

@@ -81,7 +81,106 @@ def set_project_context(session, store=None) -> None:
     global _PROJECT_PATH, _PROJECT_SESSION, _PROJECT_STORE
     _PROJECT_SESSION = session
     _PROJECT_STORE = store
-    _PROJECT_PATH = os.path.abspath(session.project_path) if getattr(session, "project_path", "") else os.getcwd()
+    if session:
+        _PROJECT_PATH = os.path.abspath(session.project_path) if getattr(session, "project_path", "") else os.getcwd()
+        
+        # Load project-specific .env file if it exists
+        env_path = os.path.join(_PROJECT_PATH, ".env")
+        if os.path.isfile(env_path):
+            from dotenv import load_dotenv
+            try:
+                load_dotenv(dotenv_path=env_path, override=True)
+            except Exception:
+                pass
+                
+        # Also explicitly propagate api_key and api_base from session if present
+        model_name = getattr(session, "model", None)
+        alt_model_name = getattr(session, "alternative_model", None)
+        env_vars = set()
+        from .api_keys import get_env_var_for_model
+        if model_name:
+            v = get_env_var_for_model(model_name)
+            if v:
+                env_vars.add(v)
+        if alt_model_name:
+            v = get_env_var_for_model(alt_model_name)
+            if v:
+                env_vars.add(v)
+
+        if getattr(session, "api_key", None):
+            os.environ["OPENAI_API_KEY"] = session.api_key
+            for v in env_vars:
+                os.environ[v] = session.api_key
+        else:
+            # Only pop if they were not loaded from the current project's .env file
+            # (which has already been processed by load_dotenv above)
+            env_file_has_key = False
+            if os.path.isfile(env_path):
+                try:
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                        if "OPENAI_API_KEY=" in content:
+                            env_file_has_key = True
+                except Exception:
+                    pass
+            if not env_file_has_key:
+                os.environ.pop("OPENAI_API_KEY", None)
+
+            for v in env_vars:
+                env_file_has_v = False
+                if os.path.isfile(env_path):
+                    try:
+                        with open(env_path, "r", encoding="utf-8") as f:
+                            content = f.read()
+                            if f"{v}=" in content:
+                                env_file_has_v = True
+                    except Exception:
+                        pass
+                if not env_file_has_v:
+                    os.environ.pop(v, None)
+
+        if getattr(session, "api_base", None):
+            os.environ["OPENAI_API_BASE"] = session.api_base
+        else:
+            env_file_has_base = False
+            if os.path.isfile(env_path):
+                try:
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                        if "OPENAI_API_BASE=" in content:
+                            env_file_has_base = True
+                except Exception:
+                    pass
+            if not env_file_has_base:
+                os.environ.pop("OPENAI_API_BASE", None)
+
+
+
+        # Dynamically inject/register the configured context window (num_ctx) in LiteLLM's model mapping
+        # so it doesn't fail with a BadRequestError (request exceeds available context window).
+        try:
+            import litellm
+            model_name = getattr(session, "model", None)
+            model_params = getattr(session, "model_params", None) or {}
+            num_ctx = model_params.get("num_ctx")
+            if model_name and num_ctx:
+                # Direct registration for model in litellm's dynamic model database
+                if model_name not in litellm.model_prices_and_context_window:
+                    litellm.model_prices_and_context_window[model_name] = {
+                        "max_tokens": num_ctx,
+                        "max_input_tokens": num_ctx,
+                        "max_output_tokens": num_ctx,
+                        "context_window": num_ctx,
+                    }
+                else:
+                    litellm.model_prices_and_context_window[model_name]["context_window"] = num_ctx
+                    litellm.model_prices_and_context_window[model_name]["max_tokens"] = num_ctx
+                    litellm.model_prices_and_context_window[model_name]["max_input_tokens"] = num_ctx
+        except Exception:
+            pass
+    else:
+        _PROJECT_PATH = os.getcwd()
+
 
 def get_project_path() -> str:
     return _PROJECT_PATH or os.getcwd()
@@ -485,7 +584,7 @@ def _collect_python_files(root: str, target: str) -> list[str]:
     if os.path.isfile(resolved):
         return [resolved] if resolved.endswith(".py") else []
     py_files = []
-    skip = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", "dist", "build", ".env"}
+    skip = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", "dist", "build", ".env", "tests", "opalacoder", "skills", "debug"}
     for dirpath, dirnames, filenames in os.walk(resolved):
         dirnames[:] = [d for d in dirnames if d not in skip and not d.startswith(".")]
         for fname in filenames:
@@ -680,12 +779,12 @@ def _layer_ast(py_files: list[str], root: str) -> list[BugReport]:
     return bugs
 
 
-def _layer_llm(py_files: list[str], root: str, max_files: int = 3) -> list[BugReport]:
+async def _layer_llm(py_files: list[str], root: str, max_files: int = 3) -> list[BugReport]:
     """Layer 3: LLM spot-check on the most recently modified Python files."""
     bugs: list[BugReport] = []
     try:
-        import litellm
         from .config import get_agent_config
+        from agenticblocks.blocks.llm.agent import LLMAgentBlock, AgentInput
         cfg = get_agent_config("orchestrator")
         model = cfg.get("model", "")
         if not model:
@@ -693,7 +792,24 @@ def _layer_llm(py_files: list[str], root: str, max_files: int = 3) -> list[BugRe
     except Exception:
         return bugs
 
-    # Pick the most recently modified files (likely to contain the latest changes)
+    _SYSTEM = (
+        "You are a static analysis tool. Analyze the following Python code and return "
+        "a JSON array of bugs. Each bug must be an object with keys: "
+        "\"line\" (int or null), \"severity\" (\"error\"|\"warning\"), \"message\" (string), "
+        "\"rule\" (string starting with 'llm:'). "
+        "Focus on: logic errors, incorrect control flow, resource leaks, off-by-one errors, "
+        "wrong variable usage, and type mismatches. "
+        "Ignore style issues. If no bugs found, return []. "
+        "Return ONLY the JSON array, no other text."
+    )
+    agent = LLMAgentBlock(
+        name="llm_bug_scanner",
+        system_prompt=_SYSTEM,
+        model=model,
+        max_iterations=1,
+        model_kwargs={"max_tokens": 1024, "temperature": 0},
+    )
+
     candidates = sorted(py_files, key=lambda p: os.path.getmtime(p), reverse=True)[:max_files]
 
     for fpath in candidates:
@@ -702,25 +818,8 @@ def _layer_llm(py_files: list[str], root: str, max_files: int = 3) -> list[BugRe
             if len(source) > 6000:
                 source = source[:6000] + "\n# ... [TRUNCATED]"
 
-            prompt = (
-                "You are a static analysis tool. Analyze the following Python code and return "
-                "a JSON array of bugs. Each bug must be an object with keys: "
-                "\"line\" (int or null), \"severity\" (\"error\"|\"warning\"), \"message\" (string), "
-                "\"rule\" (string starting with 'llm:'). "
-                "Focus on: logic errors, incorrect control flow, resource leaks, off-by-one errors, "
-                "wrong variable usage, and type mismatches. "
-                "Ignore style issues. If no bugs found, return []. "
-                "Return ONLY the JSON array, no other text.\n\n"
-                f"```python\n{source}\n```"
-            )
-            response = litellm.completion(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=1024,
-                temperature=0,
-            )
-            raw = response.choices[0].message.content or "[]"
-            # Extract JSON array even if the model wraps it
+            result = await agent.run(AgentInput(prompt=f"```python\n{source}\n```"))
+            raw = result.response or "[]"
             m = re.search(r"\[.*\]", raw, re.DOTALL)
             if not m:
                 continue
@@ -757,7 +856,7 @@ def _layer_llm(py_files: list[str], root: str, max_files: int = 3) -> list[BugRe
         "Set llm_check=False to skip the LLM layer (faster)."
     ),
 )
-def search_bugs(path: str = ".", llm_check: bool = True) -> str:
+async def search_bugs(path: str = ".", llm_check: bool = True) -> str:
     AGENT_PROGRESS.update("search_bugs", f"path={_preview(path)}")
     root = get_project_path()
     py_files = _collect_python_files(root, path)
@@ -769,7 +868,7 @@ def search_bugs(path: str = ".", llm_check: bool = True) -> str:
     all_bugs.extend(_layer_linters(py_files, root))
     all_bugs.extend(_layer_ast(py_files, root))
     if llm_check:
-        all_bugs.extend(_layer_llm(py_files, root))
+        all_bugs.extend(await _layer_llm(py_files, root))
 
     if not all_bugs:
         return f"No bugs detected in {len(py_files)} Python file(s)."

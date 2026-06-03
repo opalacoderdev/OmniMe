@@ -278,50 +278,149 @@ async def cmd_set_alternative_model(state: REPLState, args: list[str]) -> str | 
     T.success(f"Alternative model set to '{model_id}' for this project.")
 
 
+def _parse_model_param_value(val_str: str):
+    """Infer the Python type of a model parameter value from its string representation.
+
+    Priority: bool literals → int → float → string.
+    Returns the typed value or raises ValueError with a descriptive message.
+    """
+    low = val_str.lower()
+    if low in {"true", "on", "yes"}:
+        return True
+    if low in {"false", "off", "no"}:
+        return False
+    if low == "null" or low == "none":
+        return None
+    try:
+        return int(val_str)
+    except ValueError:
+        pass
+    try:
+        return float(val_str)
+    except ValueError:
+        pass
+    # Validate: reject values that look like typos (contain spaces, control chars)
+    if not val_str.isprintable():
+        raise ValueError("Value contains non-printable characters")
+    return val_str
+
+
 @_registry.register("/set-model-param", usage="<param_name> <value>",
-                    description="Set advanced model parameter (temperature, max_tokens, num_ctx, top_p, frequency_penalty, presence_penalty)")
+                    description="Set any LiteLLM/model parameter (e.g. temperature, reasoning_effort, seed, stop, num_ctx, think, ...)")
 async def cmd_set_model_param(state: REPLState, args: list[str]) -> str | None:
     if len(args) < 2:
         T.error("Usage: /set-model-param <param_name> <value>\n"
-                "Allowed params: temperature, max_tokens, num_ctx, top_p, frequency_penalty, presence_penalty")
+                "Accepts any parameter supported by LiteLLM/Ollama.\n"
+                "Values are auto-typed: integers, floats, booleans (true/false/on/off/yes/no), or strings.")
         return "continue"
-    
-    param = args[0].strip().lower()
-    val_str = args[1].strip()
-    
-    allowed_params = {"temperature", "max_tokens", "num_ctx", "top_p", "frequency_penalty", "presence_penalty"}
-    if param not in allowed_params:
-        T.error(f"Unknown parameter '{param}'. Allowed parameters: {', '.join(allowed_params)}")
+
+    param = args[0].strip()
+    val_str = " ".join(args[1:]).strip()
+
+    if not param or not param.replace("_", "").replace("-", "").isalnum():
+        T.error(f"Invalid parameter name '{param}'. Use only letters, digits, underscores and hyphens.")
         return "continue"
-        
+
     try:
-        if param in {"max_tokens", "num_ctx"}:
-            val = int(val_str)
-            if val <= 0:
-                raise ValueError("Must be a positive integer")
-        elif param == "temperature":
-            val = float(val_str)
-            if not (0.0 <= val <= 2.0):
-                raise ValueError("Must be between 0.0 and 2.0")
-        elif param == "top_p":
-            val = float(val_str)
-            if not (0.0 <= val <= 1.0):
-                raise ValueError("Must be between 0.0 and 1.0")
-        elif param in {"frequency_penalty", "presence_penalty"}:
-            val = float(val_str)
-            if not (-2.0 <= val <= 2.0):
-                raise ValueError("Must be between -2.0 and 2.0")
+        val = _parse_model_param_value(val_str)
     except ValueError as e:
         T.error(f"Invalid value for '{param}': {e}")
         return "continue"
 
     if not hasattr(state.project, "model_params") or state.project.model_params is None:
         state.project.model_params = {}
-    
+
     state.project.model_params[param] = val
-    state.store.save(state.project)
-    _rebuild_memgpt(state)
-    T.success(f"Model parameter '{param}' set to {val} for this project.")
+    try:
+        state.store.save(state.project)
+        _rebuild_memgpt(state)
+    except Exception as e:
+        # Roll back the in-memory change so the project stays consistent
+        state.project.model_params.pop(param, None)
+        T.error(
+            f"Failed to apply parameter '{param}': {e}\n"
+            "The parameter was not saved. Check the value and try again."
+        )
+        return "continue"
+    T.success(f"Model parameter '{param}' set to {repr(val)} for this project.")
+
+
+@_registry.register(
+    "/load_asset",
+    usage="<type> <desc|id|*>",
+    description="Install an asset from the AssetStore into the active project. type=skill|modelconfig, desc=id/description or * for all.",
+)
+async def cmd_load_asset(state: REPLState, args: list[str]) -> str | None:
+    from .assetstore import find_assets, install_asset, VALID_TYPES
+
+    if len(args) < 2:
+        T.error(
+            "Usage: /load_asset <type> <desc|id|*>\n"
+            f"  type: {', '.join(sorted(VALID_TYPES))}\n"
+            "  desc: asset id, description, or * to install all of the type"
+        )
+        return "continue"
+
+    asset_type = args[0].strip().lower()
+    desc = " ".join(args[1:]).strip()
+
+    if asset_type not in VALID_TYPES:
+        T.error(f"Unknown type '{asset_type}'. Must be one of: {', '.join(sorted(VALID_TYPES))}")
+        return "continue"
+
+    matches = find_assets(asset_type, desc)
+    if not matches:
+        if desc == "*":
+            T.warning(f"No {asset_type} assets found in the AssetStore.")
+        else:
+            T.warning(f"No {asset_type} asset matching '{desc}' found in the AssetStore.")
+        return "continue"
+
+    project_path = state.project.project_path
+    installed = []
+    errors = []
+    for meta in matches:
+        try:
+            msg = install_asset(meta, project_path)
+            installed.append(msg)
+        except Exception as e:
+            errors.append(f"{meta.get('id', '?')}: {e}")
+
+    for msg in installed:
+        T.success(f"Installed: {msg}")
+    for err in errors:
+        T.error(f"Failed: {err}")
+
+    if installed and asset_type == "skill":
+        T.console.print(
+            "[dim]Tip: use /addskill <name> to activate the skill in this project.[/dim]"
+        )
+
+    return "continue"
+
+
+@_registry.register("/list_assets",
+    usage="[type]",
+    description="List available assets in the AssetStore. type=skill|modelconfig (optional).")
+async def cmd_list_assets(_state: REPLState, args: list[str]) -> str | None:
+    from .assetstore import list_assets, VALID_TYPES
+
+    asset_type = args[0].strip().lower() if args else None
+    if asset_type and asset_type not in VALID_TYPES:
+        T.error(f"Unknown type '{asset_type}'. Must be one of: {', '.join(sorted(VALID_TYPES))}")
+        return "continue"
+
+    assets = list_assets(asset_type)
+    if not assets:
+        T.warning("No assets found in the AssetStore.")
+        return "continue"
+
+    T.console.print(f"\n[cyan]{_('available_commands')}[/cyan]".replace("commands", "assets"))
+    for a in sorted(assets, key=lambda x: (x.get("type", ""), x.get("id", ""))):
+        label = f"{a.get('id', '?')} [{a.get('type', '')}]"
+        T.console.print(f"  [green]{label:<40}[/green] {a.get('desc', '')}")
+    T.console.print()
+    return "continue"
 
 
 @_registry.register("/undo", description=_("undo_desc"))

@@ -168,39 +168,44 @@ def test_linter_unused_import(project_dir):
 # search_bugs() integration
 # ---------------------------------------------------------------------------
 
-def test_search_bugs_returns_string(project_dir):
+@pytest.mark.anyio
+async def test_search_bugs_returns_string(project_dir):
     _write(project_dir, "x.py", "x = 1")
-    result = _search_bugs(path=".", llm_check=False)
+    result = await _search_bugs(path=".", llm_check=False)
     assert isinstance(result, str)
 
 
-def test_search_bugs_no_python_files(project_dir):
-    result = _search_bugs(path=".", llm_check=False)
+@pytest.mark.anyio
+async def test_search_bugs_no_python_files(project_dir):
+    result = await _search_bugs(path=".", llm_check=False)
     assert "No Python files found" in result
 
 
-def test_search_bugs_detects_mutable_default(project_dir):
+@pytest.mark.anyio
+async def test_search_bugs_detects_mutable_default(project_dir):
     _write(project_dir, "bug.py", """\
         def foo(x=[]):
             return x
     """)
-    result = _search_bugs(path=".", llm_check=False)
+    result = await _search_bugs(path=".", llm_check=False)
     assert "mutable" in result.lower() or "ast:mutable" in result
 
 
-def test_search_bugs_deduplicates(project_dir):
+@pytest.mark.anyio
+async def test_search_bugs_deduplicates(project_dir):
     _write(project_dir, "dup.py", """\
         try:
             pass
         except:
             pass
     """)
-    result = _search_bugs(path=".", llm_check=False)
+    result = await _search_bugs(path=".", llm_check=False)
     count = result.count("ast:bare-except")
     assert count == 1, "same bug should not appear twice"
 
 
-def test_search_bugs_errors_before_warnings(project_dir):
+@pytest.mark.anyio
+async def test_search_bugs_errors_before_warnings(project_dir):
     _write(project_dir, "mixed.py", """\
         def foo(x=[]):
             try:
@@ -208,7 +213,7 @@ def test_search_bugs_errors_before_warnings(project_dir):
             except:
                 pass
     """)
-    result = _search_bugs(path=".", llm_check=False)
+    result = await _search_bugs(path=".", llm_check=False)
     lines = [l for l in result.splitlines() if l.startswith("[")]
     severities = [l.split("]")[0].lstrip("[") for l in lines]
     # All ERRORs must appear before WARNINGs
@@ -217,10 +222,11 @@ def test_search_bugs_errors_before_warnings(project_dir):
     assert last_error < first_warning or first_warning == len(severities)
 
 
-def test_search_bugs_single_file(project_dir):
+@pytest.mark.anyio
+async def test_search_bugs_single_file(project_dir):
     _write(project_dir, "ok.py", "x = 1")
     _write(project_dir, "bug.py", "def foo(x={}): pass")
-    result = _search_bugs(path="bug.py", llm_check=False)
+    result = await _search_bugs(path="bug.py", llm_check=False)
     assert "bug.py" in result
     assert "ok.py" not in result
 

@@ -1,8 +1,8 @@
 """Agent factory functions for OpalaCoder."""
 
-from agenticblocks.blocks.llm.agent import LLMAgentBlock, AgentInput
+from agenticblocks.blocks.llm.agent import LLMAgentBlock
 
-from .config import DEFAULT_MODEL, get_agent_llm_kwargs, get_agent_model
+from .config import DEFAULT_MODEL, get_agent_llm_kwargs, get_agent_model, get_project_agent_params
 from . import i18n
 
 def _make_llm(name: str, system_prompt: str, model: str | None, disable_lang_rule: bool = False, **kwargs) -> LLMAgentBlock:
@@ -14,8 +14,14 @@ def _make_llm(name: str, system_prompt: str, model: str | None, disable_lang_rul
     resolved_model = get_agent_model(name, model or DEFAULT_MODEL)
 
     # Start from per-agent config, then apply any explicit caller overrides (caller wins)
-    merged_kwargs = {**get_agent_llm_kwargs(name), **kwargs.get("litellm_kwargs", {})}
-    kwargs["litellm_kwargs"] = merged_kwargs
+    merged_kwargs = {**get_agent_llm_kwargs(name), **kwargs.get("model_kwargs", {})}
+    kwargs["model_kwargs"] = merged_kwargs
+
+    # Apply project-level agent constructor overrides (e.g. max_iterations, debug)
+    agent_params = get_project_agent_params()
+    for key in ("max_iterations", "max_tool_calls", "on_max_iterations", "debug", "use_shared_router"):
+        if key in agent_params and key not in kwargs:
+            kwargs[key] = agent_params[key]
 
     return LLMAgentBlock(
         name=name,

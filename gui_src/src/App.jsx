@@ -6,6 +6,7 @@ import {
   MessageSquare,
   Settings,
   Folder,
+  FolderOpen,
   FolderPlus,
   File,
   Plus,
@@ -25,7 +26,9 @@ import {
   Maximize2,
   Minimize2,
   AlertCircle,
-  AlertTriangle
+  AlertTriangle,
+  HelpCircle,
+  Cpu
 } from 'lucide-react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -72,6 +75,10 @@ export default function App() {
   const [thinkingLogs, setThinkingLogs] = useState([]);
   const [showAdvancedParams, setShowAdvancedParams] = useState(false);
   const [newProjError, setNewProjError] = useState('');
+  const [modelConfigMsg, setModelConfigMsg] = useState('');
+
+  // Directory picker state: { target: 'new'|'edit', current: '/path', dirs: [{name,path}] } | null
+  const [dirPicker, setDirPicker] = useState(null);
 
   // IDE Settings States
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -176,6 +183,7 @@ export default function App() {
   const [newProjDesc, setNewProjDesc] = useState('');
   const [newProjModel, setNewProjModel] = useState('gemini/gemini-2.5-flash');
   const [newProjMode, setNewProjMode] = useState('auto');
+  const [newProjModelParams, setNewProjModelParams] = useState({});
   const [newProjApiKey, setNewProjApiKey] = useState('');
   const [newProjApiBase, setNewProjApiBase] = useState('http://localhost:11434/v1');
 
@@ -228,21 +236,8 @@ export default function App() {
   // Initial load
   useEffect(() => {
     fetchProjects();
-    const checkOptionalDeps = async () => {
-      try {
-        const res = await fetch('/api/settings/check-dependencies');
-        if (res.ok) {
-          const data = await res.json();
-          if (!data.installed) {
-            setShowInstallPrompt(true);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to check optional dependencies", e);
-      }
-    };
-    checkOptionalDeps();
   }, []);
+
 
   // Sync files and greetings when project changes
   useEffect(() => {
@@ -987,7 +982,8 @@ export default function App() {
           model: newProjModel,
           mode: newProjMode,
           api_key: newProjApiKey,
-          api_base: newProjApiBase
+          api_base: newProjApiBase,
+          model_params: Object.keys(newProjModelParams).length ? newProjModelParams : undefined
         })
       });
       if (res.ok) {
@@ -1030,17 +1026,30 @@ export default function App() {
     }
   };
 
-  const openEditModal = (e, proj) => {
+  const openEditModal = async (e, proj) => {
     e.stopPropagation();
+    // Fetch fresh project data from server so params/prompts are up to date
+    let fresh = proj;
+    try {
+      const res = await fetch(`/api/opalacoder/list-projects`);
+      if (res.ok) {
+        const { projects } = await res.json();
+        const found = projects.find(p => p.name === proj.name);
+        if (found) fresh = found;
+      }
+    } catch (_) { }
+    setModelConfigMsg('');
     setEditingProject({
-      name: proj.name,
-      project_name: proj.project_name || proj.name,
-      project_path: proj.project_path || '',
-      model: proj.model || '',
-      alternative_model: proj.alternative_model || '',
-      mode: proj.mode || 'auto',
-      description: proj.description || '',
-      model_params: proj.model_params || {},
+      name: fresh.name,
+      project_name: fresh.project_name || fresh.name,
+      project_path: fresh.project_path || '',
+      model: fresh.model || '',
+      alternative_model: fresh.alternative_model || '',
+      mode: fresh.mode || 'auto',
+      description: fresh.description || '',
+      model_params: fresh.model_params || {},
+      api_key: fresh.api_key || '',
+      api_base: fresh.api_base || '',
     });
   };
 
@@ -1060,6 +1069,8 @@ export default function App() {
           mode: editingProject.mode,
           description: editingProject.description,
           model_params: editingProject.model_params,
+          api_key: editingProject.api_key,
+          api_base: editingProject.api_base,
         })
       });
       if (res.ok) {
@@ -1078,6 +1089,64 @@ export default function App() {
     } catch (err) {
       addLog('error', `Erro ao atualizar projeto: ${err.message}`);
     }
+  };
+
+  const loadModelConfig = async (projectPath, model, applyFn) => {
+    setModelConfigMsg('');
+    if (!projectPath || !model) {
+      setModelConfigMsg('⚠️ Defina o caminho do projeto e o modelo antes de carregar.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/opalacoder/model-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath, model }),
+      });
+      const data = await res.json();
+      if (!data.found) {
+        setModelConfigMsg(data.message);
+        return;
+      }
+      applyFn(data);
+      setModelConfigMsg('✅ Configuração refinada carregada.');
+    } catch (e) {
+      setModelConfigMsg(`⚠️ Erro ao carregar: ${e.message}`);
+    }
+  };
+
+  const openDirPicker = async (target, startPath) => {
+    const path = startPath || '~';
+    try {
+      const res = await fetch(`/api/fs/dirs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      });
+      const data = await res.json();
+      setDirPicker({ target, current: data.current, dirs: data.dirs || [] });
+    } catch (e) {
+      setDirPicker({ target, current: path, dirs: [] });
+    }
+  };
+
+  const navigateDirPicker = async (path) => {
+    try {
+      const res = await fetch(`/api/fs/dirs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      });
+      const data = await res.json();
+      setDirPicker(prev => ({ ...prev, current: data.current, dirs: data.dirs || [] }));
+    } catch (e) { }
+  };
+
+  const confirmDirPicker = () => {
+    if (!dirPicker) return;
+    if (dirPicker.target === 'new') setNewProjPath(dirPicker.current);
+    else setEditingProject(p => ({ ...p, project_path: dirPicker.current }));
+    setDirPicker(null);
   };
 
   const addLog = (type, message) => {
@@ -1116,9 +1185,49 @@ export default function App() {
     setChatMessages(prev => [...prev, { role: 'user', content: userText }]);
     setIsAgentRunning(true);
     setProblems([]);
-    setThinkingLogs([]);
-    addLog('info', `Iniciando agente para prompt: "${userText}"`);
+    addLog('info', `Iniciando: "${userText}"`);
 
+    // ── Slash commands: use a dedicated non-streaming endpoint so WebKit
+    //    buffering cannot freeze the UI waiting for chunks.
+    if (userText.trim().startsWith('/')) {
+      try {
+        const res = await fetch('/api/opalacoder/slash-command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: userText.trim(),
+            project_name: activeProject.name,
+            project_path: activeProject.project_path,
+          }),
+        });
+        const result = await res.json();
+        if (result.status === 'confirm') {
+          // Command is paused waiting for Yes/No — show modal
+          setConfirmRequest({
+            id: result.id,
+            prompt: result.prompt,
+            options: result.options || ['yes', 'no'],
+            default: result.default || 'yes',
+            isSlashCommand: true,   // flag so sendConfirmResponse uses /continue
+          });
+          addLog('info', `🔔 Aguardando confirmação: ${result.prompt}`);
+        } else if (result.status === 'done') {
+          const msg = (result.messages || []).join('\n') || `Comando executado.`;
+          setChatMessages(prev => [...prev, { role: 'assistant', content: msg }]);
+        } else {
+          setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Erro: ${result.error || 'desconhecido'}` }]);
+        }
+      } catch (err) {
+        addLog('error', `Falha no comando: ${err.message}`);
+        setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Falha: ${err.message}` }]);
+      } finally {
+        setIsAgentRunning(false);
+        fetchFiles();
+      }
+      return;
+    }
+
+    // ── Regular chat: streaming via /api/opalacoder/run
     let selectedText = '';
     if (editorRef.current) {
       try {
@@ -1208,7 +1317,11 @@ export default function App() {
         break;
       case 'thought':
         addLog('thought', data.content);
-        setThinkingLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), content: data.content }]);
+        setThinkingLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'THINKING', content: data.content }]);
+        break;
+      case 'reflection':
+        addLog('thought', data.content);
+        setThinkingLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'REFLECTION', content: data.content }]);
         break;
       case 'cancelled':
         addLog('warning', data.message || 'Execução cancelada.');
@@ -1268,15 +1381,29 @@ export default function App() {
 
   const sendConfirmResponse = async (value) => {
     if (!confirmRequest) return;
-    const { id, prompt } = confirmRequest;
+    const { id, prompt, isSlashCommand } = confirmRequest;
     setConfirmRequest(null);
     addLog('info', `✅ Confirmação: "${prompt}" → ${value}`);
     try {
-      await fetch('/api/opalacoder/input_response', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, value }),
-      });
+      if (isSlashCommand) {
+        // Resume the slash-command that paused for confirmation
+        const res = await fetch('/api/opalacoder/slash-command/continue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, value }),
+        });
+        const result = await res.json();
+        if (result.status === 'done') {
+          const msg = (result.messages || []).join('\n') || 'Comando executado.';
+          setChatMessages(prev => [...prev, { role: 'assistant', content: msg }]);
+        }
+      } else {
+        await fetch('/api/opalacoder/input_response', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, value }),
+        });
+      }
     } catch (err) {
       addLog('error', `Erro ao enviar confirmação: ${err.message}`);
     }
@@ -1376,7 +1503,7 @@ export default function App() {
               <div className="vscode-sidebar-header">
                 <span className="vscode-sidebar-title">EXPLORER: PROJECTS</span>
                 <button
-                  onClick={() => setShowNewProjectModal(true)}
+                  onClick={() => { setShowNewProjectModal(true); setModelConfigMsg(''); setNewProjModelParams({}); }}
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#c5c5c5' }}
                   title="Novo Projeto..."
                 >
@@ -1773,13 +1900,20 @@ export default function App() {
                     {thinkingLogs.length === 0 ? (
                       <div style={{ color: '#808080', fontStyle: 'italic' }}>Nenhum pensamento gerado ainda. Execute uma instrução para ver o raciocínio do agente...</div>
                     ) : (
-                      thinkingLogs.map((log, i) => (
-                        <div key={i} className="text-[#da70d6]" style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '4px' }}>
-                          <span style={{ color: '#5a5a5a' }}>[{log.timestamp}]</span>
-                          <span style={{ fontWeight: 'bold' }}>[THOUGHT]</span>
-                          <span style={{ whiteSpace: 'pre-wrap', flex: 1, fontFamily: 'Consolas, monospace' }}>{log.content}</span>
-                        </div>
-                      ))
+                      thinkingLogs.map((log, i) => {
+                        const isReflection = log.type === 'REFLECTION';
+                        return (
+                          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '4px' }}>
+                            <span style={{ color: '#5a5a5a', flexShrink: 0 }}>[{log.timestamp}]</span>
+                            <span style={{ fontWeight: 'bold', flexShrink: 0, color: isReflection ? '#4ec9b0' : '#da70d6' }}>
+                              [{log.type || 'THINKING'}]
+                            </span>
+                            <span style={{ whiteSpace: 'pre-wrap', flex: 1, fontFamily: 'Consolas, monospace', color: isReflection ? '#4ec9b0' : '#da70d6' }}>
+                              {log.content}
+                            </span>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 )}
@@ -1822,13 +1956,13 @@ export default function App() {
 
             {/* Quick Actions toolbar */}
             <div className="vscode-chat-toolbar">
-              <button onClick={() => setChatInput('/undo')} className="vscode-chat-tool-btn">
-                <Undo size={11} />
-                <span>/undo</span>
+              <button onClick={() => setChatInput('/skills')} className="vscode-chat-tool-btn">
+                <Cpu size={11} />
+                <span>/skills</span>
               </button>
-              <button onClick={() => setChatInput('/clear')} className="vscode-chat-tool-btn">
-                <RefreshCw size={11} />
-                <span>/clear</span>
+              <button onClick={() => setChatInput('/help')} className="vscode-chat-tool-btn">
+                <HelpCircle size={11} />
+                <span>/help</span>
               </button>
               <button onClick={() => setChatInput('/commit')} className="vscode-chat-tool-btn">
                 <Check size={11} />
@@ -2006,13 +2140,20 @@ export default function App() {
 
               <div className="flex flex-col" style={{ gap: '4px' }}>
                 <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Caminho Absoluto *</label>
-                <input
-                  type="text"
-                  value={newProjPath}
-                  onChange={(e) => setNewProjPath(e.target.value)}
-                  placeholder="Ex: /home/gilzamir/projetos/meu-app"
-                  required
-                />
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input
+                    type="text"
+                    value={newProjPath}
+                    onChange={(e) => setNewProjPath(e.target.value)}
+                    placeholder="Ex: /home/gilzamir/projetos/meu-app"
+                    required
+                    style={{ flex: 1 }}
+                  />
+                  <button type="button" className="vscode-button" style={{ padding: '4px 8px', whiteSpace: 'nowrap' }}
+                    onClick={() => openDirPicker('new', newProjPath || '~')}>
+                    <FolderOpen size={14} />
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-col" style={{ gap: '4px' }}>
@@ -2080,6 +2221,22 @@ export default function App() {
                     <option value="edit">Edit (Editar)</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Load refined model config */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }}
+                  onClick={() => loadModelConfig(newProjPath, newProjModel, (cfg) => {
+                    if (cfg.model_params) setNewProjModelParams(cfg.model_params);
+                    if (cfg.model) setNewProjModel(cfg.model);
+                  })}>
+                  Load Refined Config
+                </button>
+                {modelConfigMsg && (
+                  <span style={{ fontSize: '11px', color: modelConfigMsg.startsWith('✅') ? '#4ec9b0' : '#f48771' }}>
+                    {modelConfigMsg}
+                  </span>
+                )}
               </div>
 
               {newProjError && (
@@ -2201,12 +2358,19 @@ export default function App() {
               {/* Project path */}
               <div className="flex flex-col" style={{ gap: '4px' }}>
                 <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Caminho Absoluto</label>
-                <input
-                  type="text"
-                  value={editingProject.project_path}
-                  onChange={e => setEditingProject(p => ({ ...p, project_path: e.target.value }))}
-                  placeholder="/caminho/absoluto/do/projeto"
-                />
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input
+                    type="text"
+                    value={editingProject.project_path}
+                    onChange={e => setEditingProject(p => ({ ...p, project_path: e.target.value }))}
+                    placeholder="/caminho/absoluto/do/projeto"
+                    style={{ flex: 1 }}
+                  />
+                  <button type="button" className="vscode-button" style={{ padding: '4px 8px', whiteSpace: 'nowrap' }}
+                    onClick={() => openDirPicker('edit', editingProject.project_path || '~')}>
+                    <FolderOpen size={14} />
+                  </button>
+                </div>
               </div>
 
               {/* Model + mode side by side */}
@@ -2240,6 +2404,25 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Load refined model config */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }}
+                  onClick={() => loadModelConfig(editingProject.project_path, editingProject.model, (cfg) => {
+                    setEditingProject(p => ({
+                      ...p,
+                      model_params: cfg.model_params || p.model_params,
+                      model: cfg.model || p.model,
+                    }));
+                  })}>
+                  Load Refined Config
+                </button>
+                {modelConfigMsg && (
+                  <span style={{ fontSize: '11px', color: modelConfigMsg.startsWith('✅') ? '#4ec9b0' : '#f48771' }}>
+                    {modelConfigMsg}
+                  </span>
+                )}
+              </div>
+
               {/* Alternative model */}
               <div className="flex flex-col" style={{ gap: '4px' }}>
                 <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Modelo Alternativo</label>
@@ -2255,6 +2438,28 @@ export default function App() {
                   <option value="openai/gpt-4o-mini" />
                   <option value="ollama/gemma3:4b" />
                 </datalist>
+              </div>
+
+              {/* API Key and API Base */}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
+                  <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Chave de API (Opcional)</label>
+                  <input
+                    type="password"
+                    value={editingProject.api_key}
+                    onChange={e => setEditingProject(p => ({ ...p, api_key: e.target.value }))}
+                    placeholder="Ex: sk-..."
+                  />
+                </div>
+                <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
+                  <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>URL Base da API (Opcional)</label>
+                  <input
+                    type="text"
+                    value={editingProject.api_base}
+                    onChange={e => setEditingProject(p => ({ ...p, api_base: e.target.value }))}
+                    placeholder="Ex: http://localhost:11434/v1"
+                  />
+                </div>
               </div>
 
               {/* Description */}
@@ -2293,139 +2498,173 @@ export default function App() {
                 </button>
 
                 {showAdvancedParams && (
-                  <div
-                    style={{
-                      border: '1px solid #3c3c3c',
-                      borderRadius: '4px',
-                      padding: '12px',
-                      marginTop: '8px',
-                      backgroundColor: '#252526',
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: '12px'
-                    }}
-                  >
-                    <div className="flex flex-col" style={{ gap: '4px' }}>
-                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Temperature</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="2"
-                        placeholder="Ex: 0.7"
-                        value={editingProject.model_params?.temperature !== undefined ? editingProject.model_params.temperature : ''}
-                        onChange={e => {
-                          const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
-                          setEditingProject(p => {
-                            const nextParams = { ...p.model_params };
-                            if (val === undefined) delete nextParams.temperature;
-                            else nextParams.temperature = val;
-                            return { ...p, model_params: nextParams };
-                          });
-                        }}
-                      />
+                  <div style={{ border: '1px solid #3c3c3c', borderRadius: '4px', padding: '12px', marginTop: '8px', backgroundColor: '#252526', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                    {/* ── LiteLLM / model_kwargs ── */}
+                    <div>
+                      <div style={{ color: '#9cdcfe', fontSize: '11px', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Parâmetros LiteLLM (model_kwargs)</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Temperature</label>
+                          <input type="number" step="0.1" min="0" max="2" placeholder="padrão: 0.7"
+                            value={editingProject.model_params?.temperature ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.temperature : (n.temperature = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Max Tokens</label>
+                          <input type="number" min="1" placeholder="padrão: 4096"
+                            value={editingProject.model_params?.max_tokens ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.max_tokens : (n.max_tokens = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Context Window (num_ctx)</label>
+                          <input type="number" min="1" placeholder="padrão: 8192"
+                            value={editingProject.model_params?.num_ctx ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.num_ctx : (n.num_ctx = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Seed</label>
+                          <input type="number" min="0" placeholder="padrão: nenhum"
+                            value={editingProject.model_params?.seed ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.seed : (n.seed = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Top P</label>
+                          <input type="number" step="0.05" min="0" max="1" placeholder="padrão: 1.0"
+                            value={editingProject.model_params?.top_p ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.top_p : (n.top_p = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Frequency Penalty</label>
+                          <input type="number" step="0.1" min="-2" max="2" placeholder="padrão: 0.0"
+                            value={editingProject.model_params?.frequency_penalty ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.frequency_penalty : (n.frequency_penalty = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Presence Penalty</label>
+                          <input type="number" step="0.1" min="-2" max="2" placeholder="padrão: 0.0"
+                            value={editingProject.model_params?.presence_penalty ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.presence_penalty : (n.presence_penalty = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Reasoning Effort</label>
+                          <select
+                            value={editingProject.model_params?.reasoning_effort ?? ''}
+                            onChange={e => { const v = e.target.value || undefined; setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.reasoning_effort : (n.reasoning_effort = v); return { ...p, model_params: n }; }); }}
+                            style={{ backgroundColor: '#3c3c3c', color: '#cccccc', border: '1px solid #555', borderRadius: '3px', padding: '4px 6px', fontSize: '12px' }}
+                          >
+                            <option value="">— padrão —</option>
+                            <option value="none">none</option>
+                            <option value="low">low</option>
+                            <option value="medium">medium</option>
+                            <option value="high">high</option>
+                            <option value="xhigh">xhigh</option>
+                          </select>
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px', justifyContent: 'flex-end' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Thinking (think)</label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                            <input type="checkbox"
+                              checked={!!editingProject.model_params?.think}
+                              onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, think: e.target.checked } }))} />
+                            <span style={{ fontSize: '12px', color: '#cccccc' }}>Habilitado</span>
+                          </label>
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px', justifyContent: 'flex-end' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Stream</label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                            <input type="checkbox"
+                              checked={!!editingProject.model_params?.stream}
+                              onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, stream: e.target.checked } }))} />
+                            <span style={{ fontSize: '12px', color: '#cccccc' }}>Habilitado</span>
+                          </label>
+                        </div>
+
+                      </div>
                     </div>
 
-                    <div className="flex flex-col" style={{ gap: '4px' }}>
-                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Max Tokens</label>
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Ex: 4096"
-                        value={editingProject.model_params?.max_tokens !== undefined ? editingProject.model_params.max_tokens : ''}
-                        onChange={e => {
-                          const val = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
-                          setEditingProject(p => {
-                            const nextParams = { ...p.model_params };
-                            if (val === undefined) delete nextParams.max_tokens;
-                            else nextParams.max_tokens = val;
-                            return { ...p, model_params: nextParams };
-                          });
-                        }}
-                      />
+                    {/* ── Agent constructor params ── */}
+                    <div>
+                      <div style={{ color: '#9cdcfe', fontSize: '11px', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Parâmetros do Agente</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Max Heartbeats (MemGPT)</label>
+                          <input type="number" min="1" placeholder="padrão: 20 (memgpt)"
+                            value={editingProject.model_params?.max_heartbeats ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.max_heartbeats : (n.max_heartbeats = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Max Context Tokens (MemGPT)</label>
+                          <input type="number" min="1" placeholder="padrão: igual a num_ctx"
+                            value={editingProject.model_params?.max_context_tokens ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.max_context_tokens : (n.max_context_tokens = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Eviction Threshold</label>
+                          <input type="number" step="0.05" min="0" max="1" placeholder="padrão: 1.0"
+                            value={editingProject.model_params?.eviction_threshold ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.eviction_threshold : (n.eviction_threshold = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Memory Pressure Threshold</label>
+                          <input type="number" step="0.05" min="0" max="1" placeholder="padrão: 0.7"
+                            value={editingProject.model_params?.memory_pressure_threshold ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.memory_pressure_threshold : (n.memory_pressure_threshold = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Max Iterations (Worker)</label>
+                          <input type="number" min="1" placeholder="padrão: sem limite"
+                            value={editingProject.model_params?.max_iterations ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.max_iterations : (n.max_iterations = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Max Tool Calls (Worker)</label>
+                          <input type="number" min="1" placeholder="padrão: 10"
+                            value={editingProject.model_params?.max_tool_calls ?? ''}
+                            onChange={e => { const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10); setEditingProject(p => { const n = { ...p.model_params }; v === undefined ? delete n.max_tool_calls : (n.max_tool_calls = v); return { ...p, model_params: n }; }); }} />
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Response Mode (MemGPT)</label>
+                          <select
+                            value={editingProject.model_params?.response_mode ?? 'all'}
+                            onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, response_mode: e.target.value } }))}
+                            style={{ backgroundColor: '#3c3c3c', color: '#cccccc', border: '1px solid #555', borderRadius: '3px', padding: '4px 6px', fontSize: '12px' }}
+                          >
+                            <option value="all">all — concatena todas as mensagens</option>
+                            <option value="last">last — só a última mensagem</option>
+                          </select>
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px', justifyContent: 'flex-end' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Debug</label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                            <input type="checkbox"
+                              checked={!!editingProject.model_params?.debug}
+                              onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, debug: e.target.checked } }))} />
+                            <span style={{ fontSize: '12px', color: '#cccccc' }}>Habilitado</span>
+                          </label>
+                        </div>
+
+                      </div>
                     </div>
 
-                    <div className="flex flex-col" style={{ gap: '4px' }}>
-                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Context Window (num_ctx)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Ex: 8192"
-                        value={editingProject.model_params?.num_ctx !== undefined ? editingProject.model_params.num_ctx : ''}
-                        onChange={e => {
-                          const val = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
-                          setEditingProject(p => {
-                            const nextParams = { ...p.model_params };
-                            if (val === undefined) delete nextParams.num_ctx;
-                            else nextParams.num_ctx = val;
-                            return { ...p, model_params: nextParams };
-                          });
-                        }}
-                      />
-                    </div>
-
-                    <div className="flex flex-col" style={{ gap: '4px' }}>
-                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Top P</label>
-                      <input
-                        type="number"
-                        step="0.05"
-                        min="0"
-                        max="1"
-                        placeholder="Ex: 0.9"
-                        value={editingProject.model_params?.top_p !== undefined ? editingProject.model_params.top_p : ''}
-                        onChange={e => {
-                          const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
-                          setEditingProject(p => {
-                            const nextParams = { ...p.model_params };
-                            if (val === undefined) delete nextParams.top_p;
-                            else nextParams.top_p = val;
-                            return { ...p, model_params: nextParams };
-                          });
-                        }}
-                      />
-                    </div>
-
-                    <div className="flex flex-col" style={{ gap: '4px' }}>
-                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Frequency Penalty</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="-2"
-                        max="2"
-                        placeholder="Ex: 0.0"
-                        value={editingProject.model_params?.frequency_penalty !== undefined ? editingProject.model_params.frequency_penalty : ''}
-                        onChange={e => {
-                          const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
-                          setEditingProject(p => {
-                            const nextParams = { ...p.model_params };
-                            if (val === undefined) delete nextParams.frequency_penalty;
-                            else nextParams.frequency_penalty = val;
-                            return { ...p, model_params: nextParams };
-                          });
-                        }}
-                      />
-                    </div>
-
-                    <div className="flex flex-col" style={{ gap: '4px' }}>
-                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Presence Penalty</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="-2"
-                        max="2"
-                        placeholder="Ex: 0.0"
-                        value={editingProject.model_params?.presence_penalty !== undefined ? editingProject.model_params.presence_penalty : ''}
-                        onChange={e => {
-                          const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
-                          setEditingProject(p => {
-                            const nextParams = { ...p.model_params };
-                            if (val === undefined) delete nextParams.presence_penalty;
-                            else nextParams.presence_penalty = val;
-                            return { ...p, model_params: nextParams };
-                          });
-                        }}
-                      />
-                    </div>
                   </div>
                 )}
               </div>
@@ -2446,6 +2685,51 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Directory Picker Modal */}
+      {dirPicker && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)' }}
+          onClick={() => setDirPicker(null)}>
+          <div style={{ background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '6px', padding: '16px', width: '480px', maxHeight: '60vh', display: 'flex', flexDirection: 'column', gap: '10px' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ color: '#cccccc', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <FolderOpen size={15} style={{ color: '#e8a838' }} />
+              Selecionar Diretório
+            </div>
+            {/* Current path display */}
+            <div style={{ background: '#252526', border: '1px solid #3c3c3c', borderRadius: '3px', padding: '5px 8px', fontSize: '12px', color: '#9cdcfe', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+              {dirPicker.current}
+            </div>
+            {/* Directory list */}
+            <div style={{ overflowY: 'auto', flex: 1, border: '1px solid #3c3c3c', borderRadius: '3px', background: '#252526' }}>
+              {dirPicker.dirs.length === 0 && (
+                <div style={{ color: '#808080', fontSize: '12px', padding: '12px', textAlign: 'center' }}>Nenhum subdiretório</div>
+              )}
+              {dirPicker.dirs.map(d => (
+                <div key={d.path}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 8px', cursor: 'pointer', fontSize: '12px', color: '#cccccc', borderBottom: '1px solid #2d2d2d' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#2a2d2e'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  onClick={() => navigateDirPicker(d.path)}>
+                  <Folder size={13} style={{ color: '#e8a838', flexShrink: 0 }} />
+                  <span style={{ fontFamily: 'monospace' }}>{d.name}</span>
+                </div>
+              ))}
+            </div>
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }}
+                onClick={() => setDirPicker(null)}>
+                Cancelar
+              </button>
+              <button type="button" className="vscode-button" style={{ fontSize: '12px' }}
+                onClick={confirmDirPicker}>
+                <Check size={12} /> Selecionar esta pasta
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2681,7 +2965,7 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#cccccc' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Versão</span>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.24 alfa</span>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.1.26 alfa</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Autor</span>
