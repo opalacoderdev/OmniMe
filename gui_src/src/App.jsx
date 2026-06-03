@@ -771,6 +771,7 @@ export default function App() {
               bottomPanelHeight={bottomPanelHeight}
               activeProject={activeProject}
               terminalRef={terminalRef}
+              terminalInstanceRef={terminalInstanceRef}
               logEndRef={logEndRef}
               startResizing={startResizing}
               isBottomMaximized={isBottomMaximized}

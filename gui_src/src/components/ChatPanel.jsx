@@ -1,6 +1,8 @@
-import React from 'react';
+import { useRef } from 'react';
 import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser } from 'lucide-react';
 import { formatMessageContent } from '../utils/formatMessage';
+import { useTextContextMenu } from '../hooks/useTextContextMenu.js';
+import TextContextMenu from './TextContextMenu.jsx';
 
 // Right-side chat panel for interacting with the OpalaCoder agent.
 export default function ChatPanel({
@@ -17,10 +19,19 @@ export default function ChatPanel({
   chatEndRef,
   onClearChat,
 }) {
+  const historyRef = useRef(null);
+  const { menu, onContextMenu, handleCopy, handlePaste, handleSelectAll } = useTextContextMenu();
+
   if (!isChatVisible) return null;
 
   return (
     <aside className="vscode-chat" style={{ width: `${chatWidth}px` }}>
+      <TextContextMenu
+        menu={menu}
+        onCopy={handleCopy}
+        onPaste={handlePaste}
+        onSelectAll={() => handleSelectAll(historyRef)}
+      />
       {/* Header */}
       <div className="vscode-chat-header">
         <span className="vscode-sidebar-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -61,7 +72,7 @@ export default function ChatPanel({
       </div>
 
       {/* Message history */}
-      <div className="vscode-chat-history">
+      <div className="vscode-chat-history" ref={historyRef} onContextMenu={onContextMenu}>
         {chatMessages.map((msg, i) => {
           const isUser = msg.role === 'user';
           return (

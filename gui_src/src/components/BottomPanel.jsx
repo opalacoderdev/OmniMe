@@ -1,5 +1,7 @@
-import React from 'react';
+import { useRef } from 'react';
 import { AlertCircle, Trash, Maximize2, Minimize2, ChevronUp, ChevronDown } from 'lucide-react';
+import { useTextContextMenu } from '../hooks/useTextContextMenu.js';
+import TextContextMenu from './TextContextMenu.jsx';
 
 // Bottom panel with Output / Problems / Thinking / Terminal tabs.
 export default function BottomPanel({
@@ -16,11 +18,15 @@ export default function BottomPanel({
   bottomPanelHeight,
   activeProject,
   terminalRef,
+  terminalInstanceRef,
   logEndRef,
   startResizing,
   isBottomMaximized,
   onToggleMaximizeBottom,
 }) {
+  const contentRef = useRef(null);
+  const { menu, onContextMenu, handleCopy, handlePaste, handleSelectAll } = useTextContextMenu();
+
   const selectTab = (tab) => {
     setActiveBottomTab(tab);
     if (isTerminalCollapsed) setIsTerminalCollapsed(false);
@@ -28,6 +34,23 @@ export default function BottomPanel({
 
   return (
     <>
+      <TextContextMenu
+        menu={menu}
+        onCopy={handleCopy}
+        onPaste={handlePaste}
+        onSelectAll={
+          activeBottomTab === 'terminal'
+            ? () => {
+                const term = terminalInstanceRef?.current;
+                close();
+                if (term) {
+                  term.selectAll();
+                  setTimeout(() => term.focus(), 50);
+                }
+              }
+            : () => handleSelectAll(contentRef)
+        }
+      />
       {/* Vertical resize handle */}
       {!isTerminalCollapsed && !isBottomMaximized && (
         <div
@@ -113,7 +136,11 @@ export default function BottomPanel({
 
         {/* Panel content */}
         {!isTerminalCollapsed && (
-          <div style={{ height: 'calc(100% - 30px)', width: '100%' }}>
+          <div
+            ref={contentRef}
+            style={{ height: 'calc(100% - 30px)', width: '100%' }}
+            onContextMenu={onContextMenu}
+          >
 
             {/* Output tab */}
             {activeBottomTab === 'output' && (
