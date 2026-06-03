@@ -54,9 +54,14 @@
 	Neste exemplo, em 3.1, o valor de max_tokens deve ser revertido depois que o agente der a resposta (a vida de uma meta instrução é só o do turno).
 	Em 3.3, o system_prompt softre uma injeção, mas que dura somente enquanto o agente responde. Observe que, a partir de 3.3, max_tokens já volta para o seu valor padrão. E partir de 3.5, a injeção de system prompt perde o efeito (resetando-se o system prompt para sua versão original).
 
-## FROM CURRENT = 0.2.3 TO NEXT = 0.2.4
+4. Prover ferramentas/funções de selecionar e pedir para o agente redefinir o que está selecionado. Ou para o agente detectar um erro em uma função ou trecho de código selecionado. Possíveis formas de se fazer isso:
+	4.1 : o usuário seleciona o texto, e no menu contextual tem opções: refinar e corrigir se algo estiver selecionado. Também há a possibilidade do usuário selecionar algo ou deixar o cursor em alguma parte e executar CTRL+i e então abrir uma caixa em que o usuário pode pedir algo (o agente recebe o que foi selecionado, a linha inicial, a linha final e a posição do cursor. Uma interpretação é feita "se seleção vazia e linha inicial igual a linha final, focar na posição do cursor como o lugar onde posso começar a colocar algo.")
+
+## FROM CURRENT = 0.2.4 TO NEXT = 0.2.5
 
 1. Implementar suporte a git.
 2. Focar na integração com ollama (funcionar com tudo o que o ollama oferece e suas peculiaridades).
 3. Criar spects de programador e de programador react.
 
+## FROM CURRENT = 0.2.5 TO NEXT = 0.2.6
+1. ...
