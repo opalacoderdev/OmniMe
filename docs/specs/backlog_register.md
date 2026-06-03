@@ -39,9 +39,9 @@
 9. Permitir que mensagens no chat não podem ser copiadas.
 
 ## FROM CURRENT = 0.2.3 TO NEXT = 0.2.4
-
-1. Menu contextual para copiar, cortar e colar no terminal e no chat.
+1. Revisar código. ✅
 2. Adicionar botões de maximizar e de minimizar o editor de texto (e outros paineis?).
+
 3. Adicionar o conceito de meta configurações de chat (configurações que somente são válidas naquele momento que se conversa com o agente - durante a vida de uma mensagem). Por enquanto, apenas os parâmetros max_tokens, system_prompt, temperature, top-k, top-p, min-p são permitidos. Exemplos:
 	3.1 User: Implemente uma função que calcula a série de fourier. <param max_tokens=3>.
 	3.2 Agent: ok ok
@@ -60,6 +60,12 @@
 5. Implementar e disponibilizar uma skill specs (em que o agente é instruído para a leitura de das specs).
 
 6. Disponibilizar a ferramenta web_search para o agente.
+
+7. Terminal do windows 11.
+
+8. Menu contextual para copiar, cortar e colar no terminal e no chat.
+
+9. Adicionar mais opções de parâmetros, como temperature,  top_p,  top_k,  min_p,  presence_penalty, repetition_penalty.
 
 ## FROM CURRENT = 0.2.4 TO NEXT = 0.2.5
 
