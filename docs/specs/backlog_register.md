@@ -37,3 +37,26 @@
 8. Criar uma janela de configuração de modelo com parâmetros mais usados que são aceitos no agenticblocks. E criar um comando set-model-param param-name value que permite qualquer parâmetro geralmente permitido pro litellm/ollama. Cuidado para implementar controle de verdade (valores adequados de parâmetro, por example).
 
 9. Permitir que mensagens no chat não podem ser copiadas.
+
+## FROM CURRENT = 0.2.3 TO NEXT = 0.2.4
+
+1. Menu contextual para copiar, cortar e colar no terminal e no chat.
+2. Adicionar botões de maximizar e de minimizar o editor de texto (e outros paineis?).
+3. Adicionar o conceito de meta configurações de chat (configurações que somente são válidas naquele momento que se conversa com o agente - durante a vida de uma mensagem). Por enquanto, apenas os parâmetros max_tokens, system_prompt, temperature, top-k, top-p, min-p são permitidos. Exemplos:
+	3.1 User: Implemente uma função que calcula a série de fourier. <param max_tokens=3>.
+	3.2 Agent: ok ok
+	3.3 User: Ora, ora, o que é você? <param system_prompt="seja irônico na resposta">
+	3.4 Agent: resposta irônica
+	3.5 User:...
+	3.6 Agent:...
+	...
+
+	Neste exemplo, em 3.1, o valor de max_tokens deve ser revertido depois que o agente der a resposta (a vida de uma meta instrução é só o do turno).
+	Em 3.3, o system_prompt softre uma injeção, mas que dura somente enquanto o agente responde. Observe que, a partir de 3.3, max_tokens já volta para o seu valor padrão. E partir de 3.5, a injeção de system prompt perde o efeito (resetando-se o system prompt para sua versão original).
+
+## FROM CURRENT = 0.2.3 TO NEXT = 0.2.4
+
+1. Implementar suporte a git.
+2. Focar na integração com ollama (funcionar com tudo o que o ollama oferece e suas peculiaridades).
+3. Criar spects de programador e de programador react.
+
