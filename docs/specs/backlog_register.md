@@ -59,6 +59,8 @@
 
 5. Implementar e disponibilizar uma skill specs (em que o agente é instruído para a leitura de das specs).
 
+6. Disponibilizar a ferramenta web_search para o agente.
+
 ## FROM CURRENT = 0.2.4 TO NEXT = 0.2.5
 
 1. Implementar suporte a git.
