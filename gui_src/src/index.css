@@ -92,6 +92,11 @@ input, select, textarea {
   outline: none;
 }
 
+select option {
+  background-color: var(--vscode-input-bg);
+  color: var(--vscode-text-fg);
+}
+
 input:focus, select:focus, textarea:focus {
   border-color: var(--vscode-active-border);
 }
