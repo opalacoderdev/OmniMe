@@ -972,6 +972,10 @@ def start_gui_server(host="127.0.0.1", port=3000):
         if not os.path.exists(icon_path):
             icon_path = None
 
+        import sys
+        if icon_path and sys.platform == "win32" and not icon_path.lower().endswith(".ico"):
+            icon_path = None
+
         # webview.start() blocks the main thread until the window is closed.
         webview.start(debug=False, icon=icon_path)
 
