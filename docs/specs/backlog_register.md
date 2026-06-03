@@ -63,9 +63,9 @@
 
 6. Disponibilizar a ferramenta web_search para o agente.
 
-7. Terminal do windows 11.
+7. Terminal do windows 11. ✅
 
-8. Menu contextual para copiar, cortar e colar no terminal e no chat.
+8. Menu contextual para copiar, cortar e colar no terminal.
 
 9. Adicionar mais opções de parâmetros, como temperature,  top_p, top_k,  min_p,  presence_penalty, repetition_penalty.
 
