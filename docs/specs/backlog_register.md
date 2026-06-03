@@ -57,6 +57,8 @@
 4. Prover ferramentas/funções de selecionar e pedir para o agente redefinir o que está selecionado. Ou para o agente detectar um erro em uma função ou trecho de código selecionado. Possíveis formas de se fazer isso:
 	4.1 : o usuário seleciona o texto, e no menu contextual tem opções: refinar e corrigir se algo estiver selecionado. Também há a possibilidade do usuário selecionar algo ou deixar o cursor em alguma parte e executar CTRL+i e então abrir uma caixa em que o usuário pode pedir algo (o agente recebe o que foi selecionado, a linha inicial, a linha final e a posição do cursor. Uma interpretação é feita "se seleção vazia e linha inicial igual a linha final, focar na posição do cursor como o lugar onde posso começar a colocar algo.")
 
+5. Implementar e disponibilizar uma skill specs (em que o agente é instruído para a leitura de das specs).
+
 ## FROM CURRENT = 0.2.4 TO NEXT = 0.2.5
 
 1. Implementar suporte a git.
