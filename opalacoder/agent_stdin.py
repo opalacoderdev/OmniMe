@@ -17,6 +17,7 @@ event_hook = None
 _gui_input_pending: dict = {}
 
 import litellm
+from opalacoder.chat_meta_params import parse_meta_params, apply_meta_params
 
 def _friendly_llm_error(exc: Exception, project=None) -> str:
     """Convert a LiteLLM/agent exception into a user-friendly message."""
@@ -430,7 +431,8 @@ async def handle_run(data: dict):
     agent_type = data.get("agent") or "chat_orchestrator"
     model = data.get("model")
     system_prompt = data.get("system_prompt")
-    prompt = data.get("prompt", "")
+    raw_prompt = data.get("prompt", "")
+    prompt, _meta_overrides = parse_meta_params(raw_prompt)
     messages_history = data.get("messages", [])
     requested_tools = data.get("tools")
     
@@ -528,7 +530,8 @@ async def handle_run(data: dict):
 
     try:
         try:
-            resp_obj = await agent.run(AgentInput(prompt=prompt))
+            with apply_meta_params(agent, _meta_overrides):
+                resp_obj = await agent.run(AgentInput(prompt=prompt))
             response = resp_obj.response.strip() if resp_obj.response else ""
 
             # Save to store if using chat_orchestrator

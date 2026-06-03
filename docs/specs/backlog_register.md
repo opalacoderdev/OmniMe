@@ -43,10 +43,10 @@
 
 2. Adicionar botões de maximizar e de minimizar o editor de texto (e outros paineis?). ✅
 
-3. Adicionar o conceito de meta configurações de chat (configurações que somente são válidas naquele momento que se conversa com o agente - durante a vida de uma mensagem). Por enquanto, apenas os parâmetros max_tokens, system_prompt, temperature, top-k, top-p, min-p são permitidos. Exemplos:
+3. ✅ Adicionar o conceito de meta configurações de chat (configurações que somente são válidas naquele momento que se conversa com o agente - durante a vida de uma mensagem). Por enquanto, apenas os parâmetros max_tokens, system_prompt, temperature, top-k, top-p, min-p são permitidos. Exemplos:
 	3.1 User: Implemente uma função que calcula a série de fourier. <param max_tokens=3>.
 	3.2 Agent: ok ok
-	3.3 User: Ora, ora, o que é você? <param system_prompt="seja irônico na resposta">
+	3.3 User: Ora, ora, o que é você?  @system_prompt="seja irônico na resposta"@
 	3.4 Agent: resposta irônica
 	3.5 User:...
 	3.6 Agent:...
@@ -54,6 +54,7 @@
 
 	Neste exemplo, em 3.1, o valor de max_tokens deve ser revertido depois que o agente der a resposta (a vida de uma meta instrução é só o do turno).
 	Em 3.3, o system_prompt softre uma injeção, mas que dura somente enquanto o agente responde. Observe que, a partir de 3.3, max_tokens já volta para o seu valor padrão. E partir de 3.5, a injeção de system prompt perde o efeito (resetando-se o system prompt para sua versão original).
+	Por baixo dos panos, primeiro identifica se a mensagem tem params, que são substituições válidas que começam com @, remove os parmas, faz a alteração temporária, executa a chamada, espera o modelo responder, desfaz a alteração temporária. ✅
 
 4. Prover ferramentas/funções de selecionar e pedir para o agente redefinir o que está selecionado. Ou para o agente detectar um erro em uma função ou trecho de código selecionado. Possíveis formas de se fazer isso:
 	4.1 : o usuário seleciona o texto, e no menu contextual tem opções: refinar e corrigir se algo estiver selecionado. Também há a possibilidade do usuário selecionar algo ou deixar o cursor em alguma parte e executar CTRL+i e então abrir uma caixa em que o usuário pode pedir algo (o agente recebe o que foi selecionado, a linha inicial, a linha final e a posição do cursor. Uma interpretação é feita "se seleção vazia e linha inicial igual a linha final, focar na posição do cursor como o lugar onde posso começar a colocar algo.")
@@ -66,7 +67,7 @@
 
 8. Menu contextual para copiar, cortar e colar no terminal e no chat.
 
-9. Adicionar mais opções de parâmetros, como temperature,  top_p,  top_k,  min_p,  presence_penalty, repetition_penalty.
+9. Adicionar mais opções de parâmetros, como temperature,  top_p, top_k,  min_p,  presence_penalty, repetition_penalty.
 
 ## FROM CURRENT = 0.2.4 TO NEXT = 0.2.5
 
