@@ -14,7 +14,7 @@ export default function ActivityBar({
     <div className="vscode-activitybar">
       <div className="vscode-activitybar-top">
         <button
-          onClick={() => setActiveSidebarTab('explorer')}
+          onClick={() => setActiveSidebarTab(activeSidebarTab === 'explorer' ? null : 'explorer')}
           className={`vscode-activitybar-btn ${activeSidebarTab === 'explorer' ? 'active' : ''}`}
           title="Explorer"
         >
@@ -22,7 +22,7 @@ export default function ActivityBar({
         </button>
 
         <button
-          onClick={() => setActiveSidebarTab('git')}
+          onClick={() => setActiveSidebarTab(activeSidebarTab === 'git' ? null : 'git')}
           className={`vscode-activitybar-btn ${activeSidebarTab === 'git' ? 'active' : ''}`}
           title="Source Control"
           style={{ position: 'relative' }}

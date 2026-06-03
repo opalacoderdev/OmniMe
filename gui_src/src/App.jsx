@@ -74,6 +74,8 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [chatWidth, setChatWidth] = useState(320);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(240);
+  const [isEditorMaximized, setIsEditorMaximized] = useState(false);
+  const [isBottomMaximized, setIsBottomMaximized] = useState(false);
 
   // ── Modals ─────────────────────────────────────────────────────────────────
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
@@ -691,105 +693,119 @@ export default function App() {
         />
 
         {/* Left Sidebar */}
-        <aside className="vscode-sidebar" style={{ width: `${sidebarWidth}px` }}>
-          {activeSidebarTab === 'explorer' ? (
-            <ExplorerSidebar
-              projects={projects}
-              activeProject={activeProject}
-              handleSelectProject={handleSelectProject}
-              onNewProject={() => { setShowNewProjectModal(true); setModelConfigMsg(''); setNewProjModelParams({}); }}
-              files={files}
-              selectedFile={selectedFile}
-              handleFileSelect={handleFileSelect}
-              handleNodeContextMenu={handleNodeContextMenu}
-              handleWorkspaceContextMenu={handleWorkspaceContextMenu}
-              draggedNode={draggedNode}
-              setDraggedNode={setDraggedNode}
-              dragOverPath={dragOverPath}
-              setDragOverPath={setDragOverPath}
-              handleMoveNode={handleMoveNode}
-              fetchFiles={fetchFiles}
-              openEditModal={openEditModal}
-              handleDeleteProject={handleDeleteProject}
-            />
-          ) : (
-            <GitSidebar
-              activeProject={activeProject}
-              gitChanges={gitChanges}
-              commitMessage={commitMessage}
-              setCommitMessage={setCommitMessage}
-              isCommitting={isCommitting}
-              handleGitCommit={handleGitCommit}
-            />
-          )}
-        </aside>
+        {!isEditorMaximized && activeSidebarTab && (
+          <aside className="vscode-sidebar" style={{ width: `${sidebarWidth}px` }}>
+            {activeSidebarTab === 'explorer' ? (
+              <ExplorerSidebar
+                projects={projects}
+                activeProject={activeProject}
+                handleSelectProject={handleSelectProject}
+                onNewProject={() => { setShowNewProjectModal(true); setModelConfigMsg(''); setNewProjModelParams({}); }}
+                files={files}
+                selectedFile={selectedFile}
+                handleFileSelect={handleFileSelect}
+                handleNodeContextMenu={handleNodeContextMenu}
+                handleWorkspaceContextMenu={handleWorkspaceContextMenu}
+                draggedNode={draggedNode}
+                setDraggedNode={setDraggedNode}
+                dragOverPath={dragOverPath}
+                setDragOverPath={setDragOverPath}
+                handleMoveNode={handleMoveNode}
+                fetchFiles={fetchFiles}
+                openEditModal={openEditModal}
+                handleDeleteProject={handleDeleteProject}
+              />
+            ) : (
+              <GitSidebar
+                activeProject={activeProject}
+                gitChanges={gitChanges}
+                commitMessage={commitMessage}
+                setCommitMessage={setCommitMessage}
+                isCommitting={isCommitting}
+                handleGitCommit={handleGitCommit}
+              />
+            )}
+          </aside>
+        )}
 
         {/* Left resize handle */}
-        <div className="vscode-resizer-horizontal" onMouseDown={(e) => startResizing(e, 'left')} />
+        {!isEditorMaximized && activeSidebarTab && (
+          <div className="vscode-resizer-horizontal" onMouseDown={(e) => startResizing(e, 'left')} />
+        )}
 
         {/* Center — Editor + Bottom Panel */}
         <main className="vscode-editor-panel">
-          <EditorPanel
-            selectedFile={selectedFile}
-            openFiles={openFiles}
-            fileContent={fileContent}
-            fileContents={fileContents}
-            isSaving={isSaving}
-            theme={theme}
-            editorFontSize={editorFontSize}
-            editorTabSize={editorTabSize}
-            editorWordWrap={editorWordWrap}
-            handleFileSelect={handleFileSelect}
-            handleCloseTab={handleCloseTab}
-            saveFile={saveFile}
-            handleEditorDidMount={handleEditorDidMount}
-            setFileContent={setFileContent}
-          />
+          {!isBottomMaximized && (
+            <EditorPanel
+              selectedFile={selectedFile}
+              openFiles={openFiles}
+              fileContent={fileContent}
+              fileContents={fileContents}
+              isSaving={isSaving}
+              theme={theme}
+              editorFontSize={editorFontSize}
+              editorTabSize={editorTabSize}
+              editorWordWrap={editorWordWrap}
+              handleFileSelect={handleFileSelect}
+              handleCloseTab={handleCloseTab}
+              saveFile={saveFile}
+              handleEditorDidMount={handleEditorDidMount}
+              setFileContent={setFileContent}
+              isMaximized={isEditorMaximized}
+              onToggleMaximize={() => setIsEditorMaximized(!isEditorMaximized)}
+            />
+          )}
 
-          <BottomPanel
-            activeBottomTab={activeBottomTab}
-            setActiveBottomTab={setActiveBottomTab}
-            isTerminalCollapsed={isTerminalCollapsed}
-            setIsTerminalCollapsed={setIsTerminalCollapsed}
-            terminalLogs={terminalLogs}
-            setTerminalLogs={setTerminalLogs}
-            problems={problems}
-            setProblems={setProblems}
-            thinkingLogs={thinkingLogs}
-            setThinkingLogs={setThinkingLogs}
-            bottomPanelHeight={bottomPanelHeight}
-            activeProject={activeProject}
-            terminalRef={terminalRef}
-            logEndRef={logEndRef}
-            startResizing={startResizing}
-          />
+          {!isEditorMaximized && (
+            <BottomPanel
+              activeBottomTab={activeBottomTab}
+              setActiveBottomTab={setActiveBottomTab}
+              isTerminalCollapsed={isTerminalCollapsed}
+              setIsTerminalCollapsed={setIsTerminalCollapsed}
+              terminalLogs={terminalLogs}
+              setTerminalLogs={setTerminalLogs}
+              problems={problems}
+              setProblems={setProblems}
+              thinkingLogs={thinkingLogs}
+              setThinkingLogs={setThinkingLogs}
+              bottomPanelHeight={bottomPanelHeight}
+              activeProject={activeProject}
+              terminalRef={terminalRef}
+              logEndRef={logEndRef}
+              startResizing={startResizing}
+              isBottomMaximized={isBottomMaximized}
+              onToggleMaximizeBottom={() => setIsBottomMaximized(!isBottomMaximized)}
+            />
+          )}
         </main>
 
         {/* Right resize handle */}
-        {isChatVisible && (
+        {!isEditorMaximized && isChatVisible && (
           <div className="vscode-resizer-horizontal" onMouseDown={(e) => startResizing(e, 'right')} />
         )}
 
         {/* Chat Panel */}
-        <ChatPanel
-          chatMessages={chatMessages}
-          chatInput={chatInput}
-          setChatInput={setChatInput}
-          isAgentRunning={isAgentRunning}
-          activeProject={activeProject}
-          isChatVisible={isChatVisible}
-          setIsChatVisible={setIsChatVisible}
-          chatWidth={chatWidth}
-          handleSendMessage={handleSendMessage}
-          handleInterruptAgent={handleInterruptAgent}
-          onClearChat={() => {
-            const currentProjName = activeProject ? (activeProject.project_name || activeProject.name) : '';
-            setChatMessages([
-              { role: 'assistant', content: `Olá! Estou pronto para auxiliar no projeto **${currentProjName}**.` }
-            ]);
-          }}
-          chatEndRef={chatEndRef}
-        />
+        {!isEditorMaximized && (
+          <ChatPanel
+            chatMessages={chatMessages}
+            chatInput={chatInput}
+            setChatInput={setChatInput}
+            isAgentRunning={isAgentRunning}
+            activeProject={activeProject}
+            isChatVisible={isChatVisible}
+            setIsChatVisible={setIsChatVisible}
+            chatWidth={chatWidth}
+            handleSendMessage={handleSendMessage}
+            handleInterruptAgent={handleInterruptAgent}
+            onClearChat={() => {
+              const currentProjName = activeProject ? (activeProject.project_name || activeProject.name) : '';
+              setChatMessages([
+                { role: 'assistant', content: `Olá! Estou pronto para auxiliar no projeto **${currentProjName}**.` }
+              ]);
+            }}
+            chatEndRef={chatEndRef}
+          />
+        )}
       </div>
 
       {/* Status Bar */}

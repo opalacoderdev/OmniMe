@@ -40,7 +40,8 @@
 
 ## FROM CURRENT = 0.2.3 TO NEXT = 0.2.4
 1. Revisar código. ✅
-2. Adicionar botões de maximizar e de minimizar o editor de texto (e outros paineis?).
+
+2. Adicionar botões de maximizar e de minimizar o editor de texto (e outros paineis?). ✅
 
 3. Adicionar o conceito de meta configurações de chat (configurações que somente são válidas naquele momento que se conversa com o agente - durante a vida de uma mensagem). Por enquanto, apenas os parâmetros max_tokens, system_prompt, temperature, top-k, top-p, min-p são permitidos. Exemplos:
 	3.1 User: Implemente uma função que calcula a série de fourier. <param max_tokens=3>.

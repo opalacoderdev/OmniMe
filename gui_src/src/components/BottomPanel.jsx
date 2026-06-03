@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, Trash, Maximize2, Minimize2 } from 'lucide-react';
+import { AlertCircle, Trash, Maximize2, Minimize2, ChevronUp, ChevronDown } from 'lucide-react';
 
 // Bottom panel with Output / Problems / Thinking / Terminal tabs.
 export default function BottomPanel({
@@ -18,6 +18,8 @@ export default function BottomPanel({
   terminalRef,
   logEndRef,
   startResizing,
+  isBottomMaximized,
+  onToggleMaximizeBottom,
 }) {
   const selectTab = (tab) => {
     setActiveBottomTab(tab);
@@ -27,7 +29,7 @@ export default function BottomPanel({
   return (
     <>
       {/* Vertical resize handle */}
-      {!isTerminalCollapsed && (
+      {!isTerminalCollapsed && !isBottomMaximized && (
         <div
           className="vscode-resizer-vertical"
           onMouseDown={(e) => startResizing(e, 'bottom')}
@@ -36,7 +38,7 @@ export default function BottomPanel({
 
       <div
         className="vscode-bottom-panel"
-        style={{ height: isTerminalCollapsed ? '30px' : `${bottomPanelHeight}px` }}
+        style={{ height: isTerminalCollapsed ? '30px' : isBottomMaximized ? '100%' : `${bottomPanelHeight}px` }}
       >
         {/* Tab header */}
         <div className="vscode-bottom-tabs">
@@ -88,11 +90,24 @@ export default function BottomPanel({
               </button>
             )}
             <button
-              onClick={() => setIsTerminalCollapsed(!isTerminalCollapsed)}
+              onClick={() => {
+                if (isBottomMaximized) onToggleMaximizeBottom();
+                setIsTerminalCollapsed(!isTerminalCollapsed);
+              }}
               style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
+              title={isTerminalCollapsed ? "Expandir Painel" : "Recolher Painel"}
             >
-              {isTerminalCollapsed ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
+              {isTerminalCollapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
+            {!isTerminalCollapsed && (
+              <button
+                onClick={onToggleMaximizeBottom}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
+                title={isBottomMaximized ? "Restaurar Painel" : "Maximizar Painel"}
+              >
+                {isBottomMaximized ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+              </button>
+            )}
           </div>
         </div>
 

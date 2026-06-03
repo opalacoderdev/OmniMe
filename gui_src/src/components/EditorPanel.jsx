@@ -1,6 +1,6 @@
 import React from 'react';
 import Editor from '@monaco-editor/react';
-import { Files, RefreshCw, Check, X } from 'lucide-react';
+import { Files, RefreshCw, Check, X, Maximize2, Minimize2 } from 'lucide-react';
 import { getLanguage } from '../utils/language';
 
 // Center panel: file tabs + Monaco editor (or empty state when no file is open).
@@ -19,6 +19,8 @@ export default function EditorPanel({
   saveFile,
   handleEditorDidMount,
   setFileContent,
+  isMaximized,
+  onToggleMaximize,
 }) {
   if (!selectedFile) {
     return (
@@ -60,7 +62,7 @@ export default function EditorPanel({
           })}
         </div>
 
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             onClick={saveFile}
             disabled={isSaving}
@@ -68,6 +70,15 @@ export default function EditorPanel({
           >
             {isSaving ? <RefreshCw size={12} className="animate-spin" /> : <Check size={12} />}
             <span>{isSaving ? 'Salvando...' : 'Salvar (Ctrl+S)'}</span>
+          </button>
+
+          <button
+            onClick={onToggleMaximize}
+            className="vscode-bottom-panel-clear-btn"
+            style={{ padding: '6px' }}
+            title={isMaximized ? "Restaurar Editor" : "Maximizar Editor"}
+          >
+            {isMaximized ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
           </button>
         </div>
       </div>
