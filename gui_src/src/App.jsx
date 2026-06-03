@@ -442,6 +442,18 @@ export default function App() {
     }
   }, [activeProject]);
 
+  // Polling for workspace file changes and git status (every 10 seconds)
+  useEffect(() => {
+    if (!activeProject) return;
+
+    const interval = setInterval(() => {
+      fetchFiles();
+      fetchGitStatus();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [activeProject]);
+
   useEffect(() => {
     if (activeSidebarTab === 'git' && activeProject) {
       fetchGitStatus();
@@ -1574,7 +1586,39 @@ export default function App() {
                 }}
                 style={dragOverPath === '__root__' ? { border: '2px dashed #007acc', backgroundColor: 'rgba(0, 122, 204, 0.05)' } : {}}
               >
-                <div className="vscode-sidebar-section-title">Workspace Files</div>
+                <div className="vscode-sidebar-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Workspace Files</span>
+                  {activeProject && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fetchFiles();
+                      }}
+                      title="Atualizar arquivos"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#808080',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '2px',
+                        borderRadius: '3px',
+                        transition: 'color 0.2s, background-color 0.2s',
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.color = '#ffffff';
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.color = '#808080';
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <RefreshCw size={12} />
+                    </button>
+                  )}
+                </div>
                 {files.length === 0 ? (
                   <div style={{ fontSize: '12px', color: '#808080', padding: '0 4px', fontStyle: 'italic' }}>
                     Selecione um projeto para explorar.
