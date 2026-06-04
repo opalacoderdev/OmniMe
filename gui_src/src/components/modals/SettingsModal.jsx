@@ -31,7 +31,7 @@ export default function SettingsModal({
     fetch('/api/settings/language')
       .then(r => r.ok ? r.json() : null)
       .then(cfg => { if (cfg?.lang !== undefined) setSelectedLang(cfg.lang); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   return (
@@ -39,7 +39,7 @@ export default function SettingsModal({
       <div className="vscode-modal" style={{ maxWidth: '440px', width: '90%' }}>
         {/* Header */}
         <div className="vscode-sidebar-header" style={{ padding: '10px 16px' }}>
-          <span className="vscode-sidebar-title" style={{ color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="vscode-sidebar-title" style={{ color: 'var(--vscode-text-fg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Settings size={14} style={{ color: '#007acc' }} />
             {t('settingsModal.title')}
           </span>
@@ -59,7 +59,7 @@ export default function SettingsModal({
                 background: settingsTab === tab ? 'var(--vscode-tab-active-bg)' : 'transparent',
                 border: 'none',
                 borderBottom: settingsTab === tab ? '2px solid var(--vscode-active-border)' : 'none',
-                color: settingsTab === tab ? '#ffffff' : '#808080',
+                color: settingsTab === tab ? 'var(--vscode-text-fg)' : '#808080',
                 fontWeight: 'bold', fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer',
               }}
             >
@@ -82,6 +82,7 @@ export default function SettingsModal({
                     i18n.changeLanguage(val || navigator.language || 'en');
                     if (onLanguageChange) onLanguageChange(val);
                   }}
+                  className="vscode-settings-input"
                   style={{ width: '100%' }}
                 >
                   <option value="">{t('settingsModal.languageSystem')}</option>
@@ -93,7 +94,7 @@ export default function SettingsModal({
               {/* Theme */}
               <div className="flex flex-col" style={{ gap: '6px' }}>
                 <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.colorTheme')}</label>
-                <select value={theme} onChange={(e) => setTheme(e.target.value)} style={{ width: '100%' }}>
+                <select value={theme} onChange={(e) => setTheme(e.target.value)} className="vscode-settings-input" style={{ width: '100%' }}>
                   <option value="dark">{t('settingsModal.themeDark')}</option>
                   <option value="light">{t('settingsModal.themeLight')}</option>
                 </select>
@@ -105,6 +106,7 @@ export default function SettingsModal({
                 <input
                   type="number" min="10" max="30" value={editorFontSize}
                   onChange={(e) => { const val = Number(e.target.value); setEditorFontSize(val); safeSetLocalStorage('editorFontSize', val); }}
+                  className="vscode-settings-input"
                   style={{ width: '100%' }}
                 />
               </div>
@@ -112,7 +114,7 @@ export default function SettingsModal({
               {/* Tab size */}
               <div className="flex flex-col" style={{ gap: '6px' }}>
                 <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.tabSize')}</label>
-                <select value={editorTabSize} onChange={(e) => { const val = Number(e.target.value); setEditorTabSize(val); safeSetLocalStorage('editorTabSize', val); }} style={{ width: '100%' }}>
+                <select value={editorTabSize} onChange={(e) => { const val = Number(e.target.value); setEditorTabSize(val); safeSetLocalStorage('editorTabSize', val); }} className="vscode-settings-input" style={{ width: '100%' }}>
                   <option value={2}>{t('settingsModal.twoSpaces')}</option>
                   <option value={4}>{t('settingsModal.fourSpaces')}</option>
                   <option value={8}>{t('settingsModal.eightSpaces')}</option>
@@ -122,7 +124,7 @@ export default function SettingsModal({
               {/* Word wrap */}
               <div className="flex flex-col" style={{ gap: '6px' }}>
                 <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.wordWrap')}</label>
-                <select value={editorWordWrap} onChange={(e) => { setEditorWordWrap(e.target.value); safeSetLocalStorage('editorWordWrap', e.target.value); }} style={{ width: '100%' }}>
+                <select value={editorWordWrap} onChange={(e) => { setEditorWordWrap(e.target.value); safeSetLocalStorage('editorWordWrap', e.target.value); }} className="vscode-settings-input" style={{ width: '100%' }}>
                   <option value="on">{t('settingsModal.wordWrapOn')}</option>
                   <option value="off">{t('settingsModal.wordWrapOff')}</option>
                 </select>
@@ -148,18 +150,18 @@ export default function SettingsModal({
               </div>
             </>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#cccccc' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: 'var(--vscode-text-fg)' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.version')}</span>
-                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.2.3.4 ALFA</span>
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--vscode-text-fg)' }}>0.2.3.4 ALFA</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.author')}</span>
-                <span style={{ fontSize: '13px', color: '#ffffff' }}>dev@opala.com</span>
+                <span style={{ fontSize: '13px', color: 'var(--vscode-text-fg)' }}>dev@opala.com</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.license')}</span>
-                <span style={{ fontSize: '13px', color: '#ffffff' }}>MIT</span>
+                <span style={{ fontSize: '13px', color: 'var(--vscode-text-fg)' }}>MIT</span>
               </div>
             </div>
           )}

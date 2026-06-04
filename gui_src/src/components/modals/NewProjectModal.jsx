@@ -24,7 +24,7 @@ export default function NewProjectModal({
     <div className="vscode-modal-overlay">
       <div className="vscode-modal">
         <div className="vscode-sidebar-header" style={{ padding: '10px 16px' }}>
-          <span className="vscode-sidebar-title" style={{ color: '#ffffff' }}>{t('newProjectModal.title')}</span>
+          <span className="vscode-sidebar-title" style={{ color: 'var(--vscode-text-fg)' }}>{t('newProjectModal.title')}</span>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}>
             <X size={14} />
           </button>

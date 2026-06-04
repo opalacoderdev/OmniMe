@@ -57,9 +57,9 @@ export default function EditProjectModal({
       <div className="vscode-modal" style={{ maxWidth: '520px', width: '92%' }}>
         {/* Header */}
         <div className="vscode-sidebar-header" style={{ padding: '10px 16px' }}>
-          <span className="vscode-sidebar-title" style={{ color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="vscode-sidebar-title" style={{ color: 'var(--vscode-text-fg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Settings size={14} style={{ color: '#007acc' }} />
-            {t('editProjectModal.title')}
+            {t('editProjectModal.title', { name: editingProject.project_name || editingProject.name })}
           </span>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}>
             <X size={14} />
@@ -124,7 +124,7 @@ export default function EditProjectModal({
             </div>
             <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
               <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.mode')}</label>
-              <select value={editingProject.mode} onChange={e => setEditingProject(p => ({ ...p, mode: e.target.value }))}>
+              <select className="vscode-settings-input" value={editingProject.mode} onChange={e => setEditingProject(p => ({ ...p, mode: e.target.value }))}>
                 <option value="auto">{t('editProjectModal.modeAuto')}</option>
                 <option value="plan">{t('editProjectModal.modePlan')}</option>
                 <option value="edit">{t('editProjectModal.modeEdit')}</option>
@@ -238,9 +238,9 @@ export default function EditProjectModal({
                     <div className="flex flex-col" style={{ gap: '4px' }}>
                       <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Reasoning Effort</label>
                       <select
+                        className="vscode-settings-input"
                         value={editingProject.model_params?.reasoning_effort ?? ''}
                         onChange={e => setParam('reasoning_effort', e.target.value || undefined)}
-                        style={{ backgroundColor: '#3c3c3c', color: '#cccccc', border: '1px solid #555', borderRadius: '3px', padding: '4px 6px', fontSize: '12px' }}
                       >
                         <option value="">— padrão —</option>
                         <option value="none">none</option>
@@ -301,9 +301,9 @@ export default function EditProjectModal({
                     <div className="flex flex-col" style={{ gap: '4px' }}>
                       <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Response Mode (MemGPT)</label>
                       <select
+                        className="vscode-settings-input"
                         value={editingProject.model_params?.response_mode ?? 'last'}
                         onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, response_mode: e.target.value } }))}
-                        style={{ backgroundColor: '#3c3c3c', color: '#cccccc', border: '1px solid #555', borderRadius: '3px', padding: '4px 6px', fontSize: '12px' }}
                       >
                         <option value="all">{t('editProjectModal.responseModeAll')}</option>
                         <option value="last">{t('editProjectModal.responseModeLast')}</option>

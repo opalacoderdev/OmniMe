@@ -140,7 +140,7 @@ export default function App() {
     fetch('/api/settings/web-search')
       .then(r => r.ok ? r.json() : null)
       .then(cfg => { if (cfg) setWebSearchConfig(cfg); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Restore language from backend on startup (localStorage not reliable in webview)
@@ -157,10 +157,10 @@ export default function App() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ lang: detected }),
-          }).catch(() => {});
+          }).catch(() => { });
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -837,7 +837,7 @@ export default function App() {
     const ext = (selectedFile || '').split('.').pop() || '';
     const fence = ext ? `\`\`\`${ext}` : '\`\`\`';
 
-    const fullPrompt = hasSelection 
+    const fullPrompt = hasSelection
       ? `${verb}\n\n${fence}\n${selectedText}\n\`\`\``
       : instruction;
     setChatInput('');
@@ -1196,7 +1196,7 @@ export default function App() {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ lang }),
-            }).catch(() => {});
+            }).catch(() => { });
           }}
         />
       )}
