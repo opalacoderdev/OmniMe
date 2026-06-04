@@ -1,9 +1,13 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 
 // Hook that initialises an xterm.js terminal and connects it to the backend SSE stream.
 export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight }) {
+  // Tracks whether the terminal has been made visible at least once after creation.
+  // Used to send a Ctrl+L redraw on first focus so the shell prompt appears correctly.
+  const promptDrawnRef = useRef(false);
+
   // Initialise / tear-down terminal when the active project changes.
   useEffect(() => {
     if (!activeProject) {
@@ -15,6 +19,9 @@ export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, f
     }
 
     if (!terminalRef.current) return;
+
+    // Reset the prompt-drawn flag whenever the terminal is (re)created.
+    promptDrawnRef.current = false;
 
     const term = new XTerm({
       cursorBlink: true,
@@ -103,7 +110,21 @@ export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, f
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'resize', cols, rows, projectPath: activeProject.project_path }),
           }).catch(err => console.error('Failed to send terminal resize', err));
+
           terminalInstanceRef.current.focus();
+
+          // On the first time the terminal becomes visible, the shell may not have
+          // redrawn its prompt after the initial resize (the tab was hidden during
+          // creation so xterm.js had no valid dimensions). Sending Ctrl+L forces
+          // bash/zsh to redraw the prompt without executing any command.
+          if (!promptDrawnRef.current) {
+            promptDrawnRef.current = true;
+            fetch('/api/terminal/input', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'input', text: '\x0c', projectPath: activeProject.project_path }),
+            }).catch(err => console.error('Failed to send prompt redraw', err));
+          }
         } catch (e) { /* ignore */ }
       }, 50);
     }
