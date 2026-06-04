@@ -222,6 +222,15 @@ export default function EditProjectModal({
                     <ParamNumber label="Presence Penalty" step="0.1" min="-2" max="2" placeholder="padrão: 0.0"
                       value={editingProject.model_params?.presence_penalty}
                       onChange={e => setParam('presence_penalty', parseNum(e.target.value, true))} />
+                    <ParamNumber label="Top K" min="1" placeholder="padrão: 40"
+                      value={editingProject.model_params?.top_k}
+                      onChange={e => setParam('top_k', parseNum(e.target.value))} />
+                    <ParamNumber label="Min P" step="0.05" min="0" max="1" placeholder="padrão: 0.0"
+                      value={editingProject.model_params?.min_p}
+                      onChange={e => setParam('min_p', parseNum(e.target.value, true))} />
+                    <ParamNumber label="Repetition Penalty" step="0.1" min="0" placeholder="padrão: 1.0"
+                      value={editingProject.model_params?.repetition_penalty}
+                      onChange={e => setParam('repetition_penalty', parseNum(e.target.value, true))} />
 
                     <div className="flex flex-col" style={{ gap: '4px' }}>
                       <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Reasoning Effort</label>

@@ -38,7 +38,8 @@
 6. O erro ao criar um projeto em um diretório existente ou proibido deveria ser mostrado como mensagem na janela de criação de projeto e não no terminal (colocar mensagem correta, de acordo com exceção).
 	6.1 Se diretório já existe e der erro de permissão, mostrar erro de permissão, se diretório não existe, criar diretório com nome do projeto. ✅
 
-7. Colocar hint de completação de servidor ollama (já trazer preenchido com o valor que geralmente é).
+7. Colocar hint de completação de servidor ollama (já trazer preenchido com o valor que geralmente é). ✅
+
 8. Criar uma janela de configuração de modelo com parâmetros mais usados que são aceitos no agenticblocks. E criar um comando set-model-param param-name value que permite qualquer parâmetro geralmente permitido pro litellm/ollama. Cuidado para implementar controle de verdade (valores adequados de parâmetro, por example). ✅
 
 9. Permitir que mensagens no chat não podem ser copiadas. ✅
@@ -64,22 +65,22 @@
 4. Prover ferramentas/funções de selecionar e pedir para o agente redefinir o que está selecionado. Ou para o agente detectar um erro em uma função ou trecho de código selecionado. Possíveis formas de se fazer isso:
 	4.1 : o usuário seleciona o texto, e no menu contextual tem opções: refinar e corrigir se algo estiver selecionado. Também há a possibilidade do usuário selecionar algo ou deixar o cursor em alguma parte e executar CTRL+i e então abrir uma caixa em que o usuário pode pedir algo (o agente recebe o que foi selecionado, a linha inicial, a linha final e a posição do cursor. Uma interpretação é feita "se seleção vazia e linha inicial igual a linha final, focar na posição do cursor como o lugar onde posso começar a colocar algo.")
 
-5. Implementar e disponibilizar uma skill specs (em que o agente é instruído para a leitura de das specs).
+5. Disponibilizar a ferramenta web_search para o agente. ✅
 
-6. Disponibilizar a ferramenta web_search para o agente. ✅
+6. Terminal do windows 11. ✅
 
-7. Terminal do windows 11. ✅
+7. Menu contextual para copiar, cortar e colar no terminal. ✅
 
-8. Menu contextual para copiar, cortar e colar no terminal. ✅
+8. Adicionar mais opções de parâmetros na interface de configuração do projeto, como temperature,  top_p, top_k,  min_p,  presence_penalty, repetition_penalty. ✅
 
-9. Adicionar mais opções de parâmetros na interface de configuração do projeto, como temperature,  top_p, top_k,  min_p,  presence_penalty, repetition_penalty.
+9. Histórico na entrada do chat.
 
-10. Histórico na entrada do chat.
+## FROM CURRENT = 0.2.4 TO NEXT = 0.2.5 (RELEASE FINAL DESSA ETAPA)
 
-## FROM CURRENT = 0.2.4 TO NEXT = 0.3.0 (RELEASE FINAL DESSA ETAPA)
+1. Implementar e disponibilizar uma skill specs (em que o agente é instruído para a leitura de das specs).
 
-1. Implementar suporte a git.
+2. Implementar suporte a git.
 
-2. Focar na integração com ollama (funcionar com tudo o que o ollama oferece e suas peculiaridades).
+3. Focar na integração com ollama (funcionar com tudo o que o ollama oferece e suas peculiaridades).
 
-3. Instalador autocontido para linux e windows.
+4. Instalador autocontido para linux e windows.
