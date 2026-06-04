@@ -28,12 +28,21 @@ export default function EditorPanel({
   setInlinePrompt,
   onInlineSubmit,
   isInlineRunning,
+  onToggleTerminal,
 }) {
   const { t } = useTranslation();
 
   // Wrap the external mount handler so we can also register the context-menu
   // actions and the Ctrl+L shortcut ourselves.
   const handleMount = (editor, monaco) => {
+    // ── Ctrl+J — toggle terminal ────────────────────────────────────────────
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ,
+      () => {
+        if (onToggleTerminal) onToggleTerminal();
+      }
+    );
+
     // ── Ctrl+L — open inline free prompt ────────────────────────────────────
     editor.addCommand(
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyL,

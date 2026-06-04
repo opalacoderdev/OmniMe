@@ -1076,6 +1076,16 @@ export default function App() {
               setInlinePrompt={setInlinePrompt}
               onInlineSubmit={handleInlineSubmit}
               isInlineRunning={isInlineRunning}
+              onToggleTerminal={() => {
+                if (isTerminalCollapsed) {
+                  setIsTerminalCollapsed(false);
+                  setActiveBottomTab('terminal');
+                } else if (activeBottomTab === 'terminal') {
+                  setIsTerminalCollapsed(true);
+                } else {
+                  setActiveBottomTab('terminal');
+                }
+              }}
             />
           )}
 
