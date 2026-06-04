@@ -27,6 +27,7 @@ export default function EditorPanel({
   inlinePrompt,
   setInlinePrompt,
   onInlineSubmit,
+  isInlineRunning,
 }) {
   const { t } = useTranslation();
 
@@ -210,6 +211,7 @@ export default function EditorPanel({
           inlinePrompt={inlinePrompt}
           onSubmit={onInlineSubmit}
           onClose={() => setInlinePrompt(null)}
+          isRunning={isInlineRunning}
         />
       )}
     </div>

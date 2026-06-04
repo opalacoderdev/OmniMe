@@ -49,6 +49,7 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [isAgentRunning, setIsAgentRunning] = useState(false);
+  const [isInlineRunning, setIsInlineRunning] = useState(false);
 
   // ── Bottom panel ──────────────────────────────────────────────────────────
   const [terminalLogs, setTerminalLogs] = useState([]);
@@ -247,6 +248,13 @@ export default function App() {
   useEffect(() => {
     if (activeSidebarTab === 'git' && activeProject) fetchGitStatus();
   }, [activeSidebarTab, activeProject]);
+
+  // Un-maximize editor if all files are closed
+  useEffect(() => {
+    if (openFiles.length === 0 && isEditorMaximized) {
+      setIsEditorMaximized(false);
+    }
+  }, [openFiles, isEditorMaximized]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const addLog = (type, message) =>
@@ -815,66 +823,140 @@ export default function App() {
    * Also stores the current selection range so that auto-replace can fire
    * when the agent returns the modified code.
    */
-  const handleInlineSubmit = (instruction) => {
+  const handleInlineSubmit = async (instruction) => {
     if (!inlinePrompt || !activeProject) return;
-    const { startLine, endLine, cursorCol, selectedText, mode } = inlinePrompt;
+    const { startLine, endLine, selectedText, mode } = inlinePrompt;
 
     const hasSelection = selectedText && selectedText.trim().length > 0;
 
-    let prefix;
-    if (mode === 'refine') {
-      prefix = `[REFINE SELECTION — lines ${startLine}–${endLine}]`;
-    } else if (mode === 'fix') {
-      prefix = `[FIX SELECTION — lines ${startLine}–${endLine}]`;
-    } else {
-      prefix = hasSelection
-        ? `[INLINE EDIT — lines ${startLine}–${endLine}]`
-        : `[INLINE EDIT — line ${startLine}, col ${cursorCol}]`;
-    }
+    let verb;
+    if (mode === 'refine') verb = instruction;
+    else if (mode === 'fix') verb = instruction;
+    else verb = instruction;
 
-    const fullPrompt = `${prefix}\n${instruction}`;
+    const ext = (selectedFile || '').split('.').pop() || '';
+    const fence = ext ? `\`\`\`${ext}` : '\`\`\`';
 
-    // Save the selection range so agent_response can apply auto-replace
-    if (hasSelection && editorRef.current && monacoRef.current) {
-      pendingInlineRangeRef.current = {
-        startLineNumber: startLine,
-        startColumn: 1,
-        endLineNumber: endLine,
-        // end column = length of that line + 1
-        endColumn: (() => {
+    const fullPrompt = hasSelection 
+      ? `${verb}\n\n${fence}\n${selectedText}\n\`\`\``
+      : instruction;
+    setChatInput('');
+    setIsInlineRunning(true);
+    addLog('info', `Iniciando edição inline: "${instruction}"`);
+
+    const systemPrompt = "You are an expert developer performing an inline code edit. " +
+      "Return ONLY the modified code snippet inside a single markdown code block. " +
+      "Do NOT include greetings, conversational filler, or explanations. " +
+      "If you need context, use your read-only memory tools.";
+
+    try {
+      const res = await fetch('/api/opalacoder/run', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: 'run',
+          agent: 'inline_editor',
+          model: activeProject.model,
+          project_name: activeProject.name,
+          project_path: activeProject.project_path,
+          system_prompt: systemPrompt,
+          tools: ["read_file", "search_code", "get_file_overview"],
+          prompt: fullPrompt,
+          current_file: selectedFile || '',
+          editor_content: fileContent || '',
+          selected_text: selectedText || ''
+        }),
+      });
+
+      if (!res.body) {
+        addLog('error', 'ReadableStream não suportado no background.');
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let agentResponse = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.trim()) continue;
           try {
-            return editorRef.current.getModel()?.getLineMaxColumn(endLine) ?? 1;
-          } catch (_) { return 1; }
-        })(),
-        selectedText,
-      };
-    } else {
-      pendingInlineRangeRef.current = null;
-    }
+            const data = JSON.parse(line);
+            if (data.event === 'agent_response' && data.response) {
+              agentResponse = data.response;
+            } else if (data.event === 'error') {
+              addLog('error', `Inline Agent Error: ${data.message}`);
+            }
+          } catch (e) {
+            // ignore non-json logs
+          }
+        }
+      }
 
-    setInlinePrompt(null);
-    setChatInput(fullPrompt);
-    // Trigger send on next tick so chatInput state is committed
-    setTimeout(() => {
-      handleSendMessageWithPrompt(fullPrompt);
-    }, 0);
+      if (buffer.trim()) {
+        try {
+          const data = JSON.parse(buffer);
+          if (data.event === 'agent_response' && data.response) agentResponse = data.response;
+        } catch (e) { }
+      }
+
+      if (agentResponse && hasSelection && editorRef.current && monacoRef.current) {
+        // Extract code block
+        const regex = /```(?:\w+)?\n([\s\S]*?)```/;
+        const match = regex.exec(agentResponse);
+        const codeToInsert = match ? match[1].replace(/\n$/, '') : agentResponse.trim();
+
+        // Calculate end column dynamically
+        const model = editorRef.current.getModel();
+        const endCol = model ? model.getLineMaxColumn(endLine) : 1;
+
+        const range = new monacoRef.current.Range(startLine, 1, endLine, endCol);
+        editorRef.current.executeEdits('opalacoder_inline', [{
+          range: range,
+          text: codeToInsert,
+          forceMoveMarkers: true,
+        }]);
+        addLog('info', 'Edição inline aplicada com sucesso.');
+      }
+
+    } catch (err) {
+      addLog('error', `Falha na edição inline: ${err.message}`);
+    } finally {
+      setInlinePrompt(null);
+      setIsInlineRunning(false);
+      fetchFiles();
+      fetchProblems();
+    }
   };
 
   /**
    * Variant of handleSendMessage that accepts an explicit prompt string.
    * Used by handleInlineSubmit to bypass the chatInput state timing.
+   * @param {string} userText   - The full prompt to send to the agent.
+   * @param {string} [capturedSelectedText] - The text captured at submit time
+   *   (avoids re-reading Monaco selection which may be gone by now).
    */
-  const handleSendMessageWithPrompt = async (userText) => {
+  const handleSendMessageWithPrompt = async (userText, capturedSelectedText) => {
     if (!userText.trim() || !activeProject || isAgentRunning) return;
     setChatInput('');
     setChatMessages(prev => [...prev, { role: 'user', content: userText }]);
     setIsAgentRunning(true);
     setProblems([]);
-    addLog('info', `Iniciando: "${userText}"`);
+    addLog('info', `Iniciando: "${userText.slice(0, 80)}${userText.length > 80 ? '…' : ''}"`)
 
-    let selectedText = '';
-    if (editorRef.current) {
-      try { const model = editorRef.current.getModel(); const sel = editorRef.current.getSelection(); if (model && sel) selectedText = model.getValueInRange(sel); } catch (e) { }
+    // Use the captured text if provided; otherwise try reading Monaco
+    let selectedText = capturedSelectedText ?? '';
+    if (!selectedText && editorRef.current) {
+      try {
+        const model = editorRef.current.getModel();
+        const sel = editorRef.current.getSelection();
+        if (model && sel) selectedText = model.getValueInRange(sel);
+      } catch (e) { }
     }
 
     try {
@@ -912,9 +994,15 @@ export default function App() {
         {/* Activity Bar */}
         <ActivityBar
           activeSidebarTab={activeSidebarTab}
-          setActiveSidebarTab={setActiveSidebarTab}
+          setActiveSidebarTab={(tab) => {
+            setActiveSidebarTab(tab);
+            if (isEditorMaximized) setIsEditorMaximized(false);
+          }}
           isChatVisible={isChatVisible}
-          setIsChatVisible={setIsChatVisible}
+          setIsChatVisible={(val) => {
+            setIsChatVisible(val);
+            if (isEditorMaximized) setIsEditorMaximized(false);
+          }}
           gitChangesCount={gitChanges.length}
           onOpenSettings={() => setIsSettingsOpen(true)}
         />
@@ -987,6 +1075,7 @@ export default function App() {
               inlinePrompt={inlinePrompt}
               setInlinePrompt={setInlinePrompt}
               onInlineSubmit={handleInlineSubmit}
+              isInlineRunning={isInlineRunning}
             />
           )}
 
