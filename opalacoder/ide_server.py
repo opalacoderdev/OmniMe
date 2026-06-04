@@ -965,6 +965,38 @@ def start_gui_server(host="127.0.0.1", port=3000):
     try:
         import webview  # pywebview
 
+        # Monkey-patch pywebview's Qt backend to use proper PyQt6 enum values
+        # instead of raw ints for setFeaturePermission. PyQt6 no longer accepts
+        # int in place of PermissionPolicy, causing a TypeError + crash on copy.
+        try:
+            from webview.platforms import qt as _wv_qt
+            from PyQt6.QtWebEngineCore import QWebEnginePage as _QWP
+
+            _granted = _QWP.PermissionPolicy.PermissionGrantedByUser
+            _denied = _QWP.PermissionPolicy.PermissionDeniedByUser
+
+            def _onFeaturePermissionRequested(self, url, feature):
+                if feature in (
+                    _QWP.Feature.MediaAudioCapture,
+                    _QWP.Feature.MediaVideoCapture,
+                    _QWP.Feature.MediaAudioVideoCapture,
+                ):
+                    self.setFeaturePermission(url, feature, _granted)
+                else:
+                    self.setFeaturePermission(url, feature, _denied)
+
+            # Patch only if the broken version (using int literals) is present
+            import inspect as _inspect
+            _src = _inspect.getsource(_wv_qt)
+            if "setFeaturePermission(url, feature, 2)" in _src:
+                # Find the BrowserView class and replace the method
+                for _cls in vars(_wv_qt).values():
+                    if isinstance(_cls, type) and hasattr(_cls, "onFeaturePermissionRequested"):
+                        _cls.onFeaturePermissionRequested = _onFeaturePermissionRequested
+                        break
+        except Exception:
+            pass
+
         # Ensure WebKit2GTK GObject introspection is available on Linux
         try:
             import gi

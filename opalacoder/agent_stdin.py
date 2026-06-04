@@ -17,6 +17,11 @@ event_hook = None
 _gui_input_pending: dict = {}
 
 import litellm
+
+# Ollama (and some other local providers) don't support params like
+# presence_penalty. Drop unsupported params silently instead of crashing.
+litellm.drop_params = True
+
 from opalacoder.chat_meta_params import parse_meta_params, apply_meta_params
 
 def _friendly_llm_error(exc: Exception, project=None) -> str:
