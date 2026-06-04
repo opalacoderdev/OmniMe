@@ -62,25 +62,27 @@
 	Em 3.3, o system_prompt softre uma injeção, mas que dura somente enquanto o agente responde. Observe que, a partir de 3.3, max_tokens já volta para o seu valor padrão. E partir de 3.5, a injeção de system prompt perde o efeito (resetando-se o system prompt para sua versão original).
 	Por baixo dos panos, primeiro identifica se a mensagem tem params, que são substituições válidas que começam com @, remove os parmas, faz a alteração temporária, executa a chamada, espera o modelo responder, desfaz a alteração temporária. ✅
 
-4. Prover ferramentas/funções de selecionar e pedir para o agente redefinir o que está selecionado. Ou para o agente detectar um erro em uma função ou trecho de código selecionado. Possíveis formas de se fazer isso:
-	4.1 : o usuário seleciona o texto, e no menu contextual tem opções: refinar e corrigir se algo estiver selecionado. Também há a possibilidade do usuário selecionar algo ou deixar o cursor em alguma parte e executar CTRL+i e então abrir uma caixa em que o usuário pode pedir algo (o agente recebe o que foi selecionado, a linha inicial, a linha final e a posição do cursor. Uma interpretação é feita "se seleção vazia e linha inicial igual a linha final, focar na posição do cursor como o lugar onde posso começar a colocar algo.")
+4. Disponibilizar a ferramenta web_search para o agente. ✅
 
-5. Disponibilizar a ferramenta web_search para o agente. ✅
+5. Terminal do windows 11. ✅
 
-6. Terminal do windows 11. ✅
+6. Menu contextual para copiar, cortar e colar no terminal. ✅
 
-7. Menu contextual para copiar, cortar e colar no terminal. ✅
+7. Adicionar mais opções de parâmetros na interface de configuração do projeto, como temperature,  top_p, top_k,  min_p,  presence_penalty, repetition_penalty. ✅
 
-8. Adicionar mais opções de parâmetros na interface de configuração do projeto, como temperature,  top_p, top_k,  min_p,  presence_penalty, repetition_penalty. ✅
-
-9. Histórico na entrada do chat.
+8. Histórico na entrada do chat. ✅
 
 ## FROM CURRENT = 0.2.4 TO NEXT = 0.2.5 (RELEASE FINAL DESSA ETAPA)
 
-1. Implementar e disponibilizar uma skill specs (em que o agente é instruído para a leitura de das specs).
+1. Revisar a Internacionalização.
 
-2. Implementar suporte a git.
+2. Implementar e disponibilizar uma skill specs (em que o agente é instruído para a leitura de das specs).
 
-3. Focar na integração com ollama (funcionar com tudo o que o ollama oferece e suas peculiaridades).
+3. Implementar suporte a git.
 
-4. Instalador autocontido para linux e windows.
+4. Prover ferramentas/funções de selecionar e pedir para o agente redefinir o que está selecionado. Ou para o agente detectar um erro em uma função ou trecho de código selecionado. Possíveis formas de se fazer isso:
+	4.1 : o usuário seleciona o texto, e no menu contextual tem opções: refinar e corrigir se algo estiver selecionado. Também há a possibilidade do usuário selecionar algo ou deixar o cursor em alguma parte e executar CTRL+i e então abrir uma caixa em que o usuário pode pedir algo (o agente recebe o que foi selecionado, a linha inicial, a linha final e a posição do cursor. Uma interpretação é feita "se seleção vazia e linha inicial igual a linha final, focar na posição do cursor como o lugar onde posso começar a colocar algo.")
+
+5. Focar na integração com ollama (funcionar com tudo o que o ollama oferece e suas peculiaridades).
+
+6. Instalador autocontido para linux e windows.

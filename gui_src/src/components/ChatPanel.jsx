@@ -24,6 +24,18 @@ export default function ChatPanel({
   const historyRef = useRef(null);
   const { menu, onContextMenu, handleCopy, handlePaste, handleSelectAll } = useTextContextMenu();
 
+  // Chat input history state
+  const [inputHistory, setInputHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('chatInputHistory');
+      return saved ? JSON.parse(saved) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [tempInput, setTempInput] = useState('');
+
   // MCP config panel state
   const [showMcpPanel, setShowMcpPanel] = useState(false);
   const [mcpUrlDraft, setMcpUrlDraft] = useState('');
@@ -95,6 +107,56 @@ export default function ChatPanel({
       setMcpTestStatus(data.ok ? 'ok' : `error:${data.error || 'Unknown error'}`);
     } catch (e) {
       setMcpTestStatus(`error:${e.message}`);
+    }
+  };
+
+  const handleFormSubmit = (e) => {
+    if (e) e.preventDefault();
+    if (!chatInput.trim() || !activeProject || isAgentRunning) return;
+    const text = chatInput.trim();
+    setInputHistory(prev => {
+      if (prev[prev.length - 1] === text) return prev;
+      const newHist = [...prev, text].slice(-100);
+      try {
+        localStorage.setItem('chatInputHistory', JSON.stringify(newHist));
+      } catch (_) {}
+      return newHist;
+    });
+    setHistoryIndex(-1);
+    setTempInput('');
+    handleSendMessage(e);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowUp') {
+      if (inputHistory.length === 0) return;
+      e.preventDefault();
+      let newIndex;
+      if (historyIndex === -1) {
+        setTempInput(chatInput);
+        newIndex = inputHistory.length - 1;
+      } else {
+        newIndex = Math.max(0, historyIndex - 1);
+      }
+      setHistoryIndex(newIndex);
+      setChatInput(inputHistory[newIndex]);
+    } else if (e.key === 'ArrowDown') {
+      if (historyIndex === -1) return;
+      e.preventDefault();
+      if (historyIndex === inputHistory.length - 1) {
+        setHistoryIndex(-1);
+        setChatInput(tempInput);
+      } else {
+        const newIndex = historyIndex + 1;
+        setHistoryIndex(newIndex);
+        setChatInput(inputHistory[newIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      if (historyIndex !== -1) {
+        e.preventDefault();
+        setHistoryIndex(-1);
+        setChatInput(tempInput);
+      }
     }
   };
 
@@ -408,12 +470,13 @@ export default function ChatPanel({
       </div>
 
       {/* Input form */}
-      <form onSubmit={handleSendMessage} className="vscode-chat-form">
+      <form onSubmit={handleFormSubmit} className="vscode-chat-form">
         <div className="vscode-chat-input-row">
           <input
             type="text"
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={handleKeyDown}
             disabled={!activeProject || isAgentRunning}
             placeholder={
               !activeProject ? 'Defina um projeto...' :
