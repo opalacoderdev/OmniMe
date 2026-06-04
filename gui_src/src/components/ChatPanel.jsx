@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings } from 'lucide-react';
 import { formatMessageContent } from '../utils/formatMessage';
 import { useTextContextMenu } from '../hooks/useTextContextMenu.js';
 import TextContextMenu from './TextContextMenu.jsx';
@@ -18,11 +18,87 @@ export default function ChatPanel({
   handleInterruptAgent,
   chatEndRef,
   onClearChat,
+  webSearchConfig,
+  setWebSearchConfig,
 }) {
   const historyRef = useRef(null);
   const { menu, onContextMenu, handleCopy, handlePaste, handleSelectAll } = useTextContextMenu();
 
+  // MCP config panel state
+  const [showMcpPanel, setShowMcpPanel] = useState(false);
+  const [mcpUrlDraft, setMcpUrlDraft] = useState('');
+  const [mcpToolDraft, setMcpToolDraft] = useState('web_search');
+  const [mcpApiKeyDraft, setMcpApiKeyDraft] = useState('');
+  const [useMcpDraft, setUseMcpDraft] = useState(false);
+  const [mcpTestStatus, setMcpTestStatus] = useState(''); // '', 'testing', 'ok', 'error:<msg>'
+
   if (!isChatVisible) return null;
+
+  const searchEnabled = webSearchConfig?.enabled ?? true;
+
+  const handleToggleWebSearch = async () => {
+    const newEnabled = !searchEnabled;
+    const updated = { ...webSearchConfig, enabled: newEnabled };
+    setWebSearchConfig(updated);
+    try {
+      await fetch('/api/settings/web-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch (_) {}
+  };
+
+  const handleOpenMcp = () => {
+    setMcpUrlDraft(webSearchConfig?.mcp_url || '');
+    setMcpToolDraft(webSearchConfig?.mcp_tool || 'web_search');
+    setMcpApiKeyDraft(webSearchConfig?.mcp_api_key || '');
+    const provider = webSearchConfig?.provider;
+    const isMcp = provider ? (provider === 'mcp') : !!(webSearchConfig?.mcp_url);
+    setUseMcpDraft(isMcp);
+    setMcpTestStatus('');
+    setShowMcpPanel(p => !p);
+  };
+
+  const handleSaveMcp = async () => {
+    const updated = {
+      ...webSearchConfig,
+      mcp_url: mcpUrlDraft.trim(),
+      mcp_tool: mcpToolDraft.trim() || 'web_search',
+      mcp_api_key: mcpApiKeyDraft.trim(),
+      provider: useMcpDraft ? 'mcp' : 'duckduckgo',
+    };
+    setWebSearchConfig(updated);
+    try {
+      await fetch('/api/settings/web-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+      setShowMcpPanel(false);
+    } catch (_) {}
+  };
+
+  const handleTestMcp = async () => {
+    setMcpTestStatus('testing');
+    try {
+      const res = await fetch('/api/settings/web-search/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mcp_url: mcpUrlDraft.trim(),
+          mcp_tool: mcpToolDraft.trim() || 'web_search',
+          mcp_api_key: mcpApiKeyDraft.trim(),
+        }),
+      });
+      const data = await res.json();
+      setMcpTestStatus(data.ok ? 'ok' : `error:${data.error || 'Unknown error'}`);
+    } catch (e) {
+      setMcpTestStatus(`error:${e.message}`);
+    }
+  };
+
+  const hasMcp = webSearchConfig?.provider === 'mcp' && !!(webSearchConfig?.mcp_url);
 
   return (
     <aside className="vscode-chat" style={{ width: `${chatWidth}px` }}>
@@ -70,6 +146,232 @@ export default function ChatPanel({
           <span>/commit</span>
         </button>
       </div>
+
+      {/* Web Search toggle bar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '4px 10px',
+          borderBottom: '1px solid var(--border-color, #333)',
+          background: 'var(--sidebar-bg, #1e1e1e)',
+          minHeight: '28px',
+          gap: '6px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Globe size={12} style={{ color: searchEnabled ? '#4ec9b0' : '#666' }} />
+          <span style={{ fontSize: '11px', color: searchEnabled ? '#ccc' : '#666', userSelect: 'none' }}>
+            Web Search
+            {hasMcp && searchEnabled && (
+              <span style={{ marginLeft: '4px', fontSize: '10px', color: '#888' }}>(MCP)</span>
+            )}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {/* Settings / MCP gear button */}
+          <button
+            onClick={handleOpenMcp}
+            title="Configurar MCP de busca"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: showMcpPanel ? '#4ec9b0' : '#555',
+              padding: '1px',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <Settings size={11} />
+          </button>
+          {/* Toggle switch */}
+          <button
+            id="web-search-toggle"
+            onClick={handleToggleWebSearch}
+            title={searchEnabled ? 'Desabilitar Web Search' : 'Habilitar Web Search'}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '0',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: '28px',
+                height: '14px',
+                borderRadius: '7px',
+                background: searchEnabled ? '#4ec9b0' : '#444',
+                position: 'relative',
+                transition: 'background 0.2s',
+              }}
+            >
+              <div
+                style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  background: '#fff',
+                  position: 'absolute',
+                  top: '2px',
+                  left: searchEnabled ? '16px' : '2px',
+                  transition: 'left 0.2s',
+                }}
+              />
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* MCP config panel (inline, collapsible) */}
+      {showMcpPanel && (
+        <div
+          style={{
+            padding: '8px 10px',
+            borderBottom: '1px solid var(--border-color, #333)',
+            background: 'var(--sidebar-bg, #1a1a1a)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+            <input
+              id="use-mcp-checkbox"
+              type="checkbox"
+              checked={useMcpDraft}
+              onChange={e => setUseMcpDraft(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            <label htmlFor="use-mcp-checkbox" style={{ fontSize: '11px', color: '#ccc', cursor: 'pointer', userSelect: 'none' }}>
+              Use custom MCP Server
+            </label>
+          </div>
+
+          <label style={{ fontSize: '10px', color: useMcpDraft ? '#aaa' : '#555' }}>Server URL</label>
+          <input
+            id="mcp-url-input"
+            type="text"
+            value={mcpUrlDraft}
+            disabled={!useMcpDraft}
+            onChange={e => { setMcpUrlDraft(e.target.value); setMcpTestStatus(''); }}
+            placeholder="http://localhost:8080/mcp"
+            style={{
+              fontSize: '11px',
+              padding: '3px 6px',
+              background: useMcpDraft ? '#2d2d2d' : '#222',
+              border: '1px solid #444',
+              borderRadius: '3px',
+              color: useMcpDraft ? '#ccc' : '#666',
+              outline: 'none',
+            }}
+          />
+
+          <label style={{ fontSize: '10px', color: useMcpDraft ? '#aaa' : '#555' }}>Tool name</label>
+          <input
+            id="mcp-tool-input"
+            type="text"
+            value={mcpToolDraft}
+            disabled={!useMcpDraft}
+            onChange={e => { setMcpToolDraft(e.target.value); setMcpTestStatus(''); }}
+            placeholder="web_search"
+            style={{
+              fontSize: '11px',
+              padding: '3px 6px',
+              background: useMcpDraft ? '#2d2d2d' : '#222',
+              border: '1px solid #444',
+              borderRadius: '3px',
+              color: useMcpDraft ? '#ccc' : '#666',
+              outline: 'none',
+            }}
+          />
+
+          <label style={{ fontSize: '10px', color: useMcpDraft ? '#aaa' : '#555' }}>API Key (optional)</label>
+          <input
+            id="mcp-api-key-input"
+            type="password"
+            value={mcpApiKeyDraft}
+            disabled={!useMcpDraft}
+            onChange={e => { setMcpApiKeyDraft(e.target.value); setMcpTestStatus(''); }}
+            placeholder="Bearer token or empty"
+            style={{
+              fontSize: '11px',
+              padding: '3px 6px',
+              background: useMcpDraft ? '#2d2d2d' : '#222',
+              border: '1px solid #444',
+              borderRadius: '3px',
+              color: useMcpDraft ? '#ccc' : '#666',
+              outline: 'none',
+            }}
+          />
+
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
+            <button
+              id="mcp-test-btn"
+              onClick={handleTestMcp}
+              disabled={!useMcpDraft || !mcpUrlDraft.trim() || mcpTestStatus === 'testing'}
+              style={{
+                fontSize: '10px',
+                padding: '3px 8px',
+                background: '#2d2d2d',
+                border: '1px solid #555',
+                borderRadius: '3px',
+                color: (useMcpDraft && mcpUrlDraft.trim()) ? '#ccc' : '#555',
+                cursor: (useMcpDraft && mcpUrlDraft.trim()) ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {mcpTestStatus === 'testing' ? '...' : 'Test'}
+            </button>
+            <button
+              id="mcp-save-btn"
+              onClick={handleSaveMcp}
+              style={{
+                fontSize: '10px',
+                padding: '3px 8px',
+                background: '#0e639c',
+                border: 'none',
+                borderRadius: '3px',
+                color: '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              Save
+            </button>
+            <button
+              onClick={() => { setShowMcpPanel(false); setMcpTestStatus(''); }}
+              style={{
+                fontSize: '10px',
+                padding: '3px 6px',
+                background: 'transparent',
+                border: 'none',
+                color: '#888',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+
+          {/* Test result */}
+          {mcpTestStatus && mcpTestStatus !== 'testing' && (
+            <div
+              style={{
+                fontSize: '10px',
+                color: mcpTestStatus === 'ok' ? '#4ec9b0' : '#f48771',
+                marginTop: '2px',
+              }}
+            >
+              {mcpTestStatus === 'ok'
+                ? '✅ Connection OK'
+                : `❌ ${mcpTestStatus.replace('error:', '')}`}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Message history */}
       <div className="vscode-chat-history" ref={historyRef} onContextMenu={onContextMenu}>

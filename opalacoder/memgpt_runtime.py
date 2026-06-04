@@ -29,7 +29,14 @@ from agenticblocks.blocks.llm.memgpt_agent import MemGPTAgentBlock
 from agenticblocks.core.function_block import as_tool
 
 from . import terminal as T
-from .tools import ask_human
+from .tools import (
+    ask_human,
+    read_core_memory,
+    append_core_memory,
+    search_conversation_history,
+    web_search,
+    set_project_context,
+)
 from .config import (
     DEFAULT_MODEL,
     ALTERNATIVE_MODEL,
@@ -326,7 +333,7 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         name="chat_orchestrator",
         system_prompt=system_prompt,
         model=model,
-        tools=[read_core_memory, append_core_memory, search_conversation_history],
+        tools=[read_core_memory, append_core_memory, search_conversation_history, web_search],
         model_kwargs=_llm_kwargs,
         max_heartbeats=_agent_params.get("max_heartbeats", get_agent_max_heartbeats("memgpt", 20)),
         max_context_tokens=_agent_params.get("max_context_tokens", _llm_kwargs.get("num_ctx", 8192)),

@@ -953,3 +953,41 @@ def search_conversation_history(query: str, limit: int = 5) -> str:
         return "\n".join(out)
     except Exception as e:
         return f"Error searching Archival Memory: {e}"
+
+
+@as_tool(
+    name="web_search",
+    description=(
+        "Search the web for current information, documentation, news, or any topic. "
+        "Use this when you need information that may be recent, external, or not in your training data. "
+        "Returns a list of results with titles, URLs and snippets. "
+        "Requires web search to be enabled in OpalaCoder settings."
+    ),
+)
+def web_search(query: str, max_results: int = 5) -> str:
+    """Search the web using DuckDuckGo (default) or the configured MCP server."""
+    AGENT_PROGRESS.update("web_search", f"query={_preview(query)}")
+    try:
+        from .web_search_config import is_enabled, do_search
+    except ImportError as exc:
+        return f"[web_search] Configuration module unavailable: {exc}"
+
+    if not is_enabled():
+        return (
+            "[web_search] Web search is currently disabled. "
+            "Enable it via the Web Search toggle in the OpalaCoder chat panel."
+        )
+
+    # Bridge the async do_search into the synchronous tool interface.
+    # Always use a fresh ThreadPoolExecutor so that asyncio.run() creates its own
+    # event loop in a clean thread — this is safe regardless of whether the caller
+    # is the main thread, an async worker thread (agenticblocks), or any other
+    # context.  Using asyncio.get_event_loop() in Python 3.10+ raises RuntimeError
+    # when called from a thread that never had an event loop (e.g. 'asyncio_0').
+    import concurrent.futures
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(__import__("asyncio").run, do_search(query, max_results))
+            return future.result(timeout=30)
+    except Exception as exc:
+        return f"[web_search] Search failed: {exc}"

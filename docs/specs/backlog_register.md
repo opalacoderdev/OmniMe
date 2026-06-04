@@ -66,21 +66,20 @@
 
 5. Implementar e disponibilizar uma skill specs (em que o agente é instruído para a leitura de das specs).
 
-6. Disponibilizar a ferramenta web_search para o agente.
+6. Disponibilizar a ferramenta web_search para o agente. ✅
 
 7. Terminal do windows 11. ✅
 
 8. Menu contextual para copiar, cortar e colar no terminal. ✅
 
-9. Adicionar mais opções de parâmetros, como temperature,  top_p, top_k,  min_p,  presence_penalty, repetition_penalty.
+9. Adicionar mais opções de parâmetros na interface de configuração do projeto, como temperature,  top_p, top_k,  min_p,  presence_penalty, repetition_penalty.
 
 10. Histórico na entrada do chat.
 
-## FROM CURRENT = 0.2.4 TO NEXT = 0.2.5
+## FROM CURRENT = 0.2.4 TO NEXT = 0.3.0 (RELEASE FINAL DESSA ETAPA)
 
 1. Implementar suporte a git.
-2. Focar na integração com ollama (funcionar com tudo o que o ollama oferece e suas peculiaridades).
-3. Criar spects de programador e de programador react.
 
-## FROM CURRENT = 0.2.5 TO NEXT = 0.2.6 RELEASE FINAL DESSA ETAPA
-1. Instalador autocontido para linux e windows.
+2. Focar na integração com ollama (funcionar com tudo o que o ollama oferece e suas peculiaridades).
+
+3. Instalador autocontido para linux e windows.

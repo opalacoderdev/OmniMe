@@ -16,3 +16,4 @@ pywinpty>=2.0.0; sys_platform == "win32"
 PyQt6>=6.0.0
 PyQt6-WebEngine>=6.0.0
 qtpy>=2.4.0
+ddgs>=1.0.0

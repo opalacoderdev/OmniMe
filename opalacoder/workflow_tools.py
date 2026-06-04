@@ -315,7 +315,7 @@ def get_workflow_tools(skill_tools: list = None) -> list:
     Intentionally small — large tool lists confuse small models.
     Workers execute atomic commands; they read, edit, write, run, and signal done.
     """
-    from .tools import write_file, run_command, search_code, read_content_pos
+    from .tools import write_file, run_command, search_code, read_content_pos, web_search
     base = [
         read_file,        # token-aware read (workflow_tools version)
         read_content_pos, # read specific line range of large files
@@ -324,6 +324,7 @@ def get_workflow_tools(skill_tools: list = None) -> list:
         replace_lines,    # line-range replace when edit_file old_str fails
         run_command,      # lint, compile, node --check
         search_code,      # grep across project when worker needs to locate something
+        web_search,       # search the web for docs, APIs, or recent information
         send_message,     # signals task completion (termination tool)
     ]
     if skill_tools:

@@ -884,6 +884,37 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
+
+        # 7j. Web search config — GET
+        elif path == '/api/settings/web-search' and method == 'GET':
+            from opalacoder.web_search_config import load_config
+            try:
+                cfg = load_config()
+                self.send_response(writer, 200, json.dumps(cfg).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
+        # 7k. Web search config — POST (save)
+        elif path == '/api/settings/web-search' and method == 'POST':
+            from opalacoder.web_search_config import save_config
+            try:
+                save_config(data)
+                self.send_response(writer, 200, b'{"success":true}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
+        # 7l. Web search MCP test
+        elif path == '/api/settings/web-search/test' and method == 'POST':
+            from opalacoder.web_search_config import test_mcp
+            mcp_url = data.get("mcp_url", "").strip()
+            mcp_tool = data.get("mcp_tool", "web_search") or "web_search"
+            mcp_api_key = data.get("mcp_api_key", "").strip()
+            try:
+                result = await test_mcp(mcp_url, mcp_tool, mcp_api_key)
+                self.send_response(writer, 200, json.dumps(result).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"ok": False, "error": str(e)}).encode('utf-8'), "application/json")
+
         else:
             self.send_response(writer, 404, b'{"error":"Not Found"}', "application/json")
 

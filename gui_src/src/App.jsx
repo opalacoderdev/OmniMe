@@ -92,6 +92,7 @@ export default function App() {
   const [editingProject, setEditingProject] = useState(null);
   const [confirmRequest, setConfirmRequest] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [webSearchConfig, setWebSearchConfig] = useState({ enabled: true, mcp_url: '', mcp_tool: 'web_search' });
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
   // ── IDE settings ──────────────────────────────────────────────────────────
@@ -123,6 +124,13 @@ export default function App() {
 
   // ── Effects ───────────────────────────────────────────────────────────────
   useEffect(() => { fetchProjects(); }, []);
+
+  useEffect(() => {
+    fetch('/api/settings/web-search')
+      .then(r => r.ok ? r.json() : null)
+      .then(cfg => { if (cfg) setWebSearchConfig(cfg); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!editingProject) setShowAdvancedParams(false);
@@ -805,6 +813,8 @@ export default function App() {
               ]);
             }}
             chatEndRef={chatEndRef}
+            webSearchConfig={webSearchConfig}
+            setWebSearchConfig={setWebSearchConfig}
           />
         )}
       </div>

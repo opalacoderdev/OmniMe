@@ -113,6 +113,7 @@ from opalacoder.tools import (
     read_content_pos,
     search_bugs,
     set_project_context,
+    web_search,
 )
 from opalacoder.workflow_tools import (
     read_file as raw_read_file_workflow,
@@ -138,6 +139,7 @@ ALL_TOOLS_MAP = {
     "write_content_pos": write_content_pos,
     "read_content_pos": read_content_pos,
     "search_bugs": search_bugs,
+    "web_search": web_search,
     "edit_file": edit_file,
     "replace_lines": replace_lines,
     "find_symbol": find_symbol,
