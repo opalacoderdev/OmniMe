@@ -444,8 +444,7 @@ export default function ChatPanel({
           return (
             <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <span
-                className="vscode-chat-msg-header"
-                style={{ color: isUser ? '#75beff' : '#da70d6' }}
+                className={`vscode-chat-msg-header ${isUser ? 'chat-header-user' : 'chat-header-agent'}`}
               >
                 {isUser ? t('chatPanel.you') : t('chatPanel.opalacoder')}
               </span>
@@ -458,7 +457,7 @@ export default function ChatPanel({
 
         {isAgentRunning && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span className="vscode-chat-msg-header" style={{ color: '#da70d6' }}>{t('chatPanel.opalacoder')}</span>
+            <span className="vscode-chat-msg-header chat-header-agent">{t('chatPanel.opalacoder')}</span>
             <div className="vscode-chat-msg-content">
               <div className="thinking-indicator">
                 <span className="dot" />

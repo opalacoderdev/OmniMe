@@ -53,7 +53,15 @@
     "saving": "Salvando...",
     "save": "Salvar (Ctrl+S)",
     "restoreEditor": "Restaurar Editor",
-    "maximizeEditor": "Maximizar Editor"
+    "maximizeEditor": "Maximizar Editor",
+    "refineSelection": "Refinar Seleção (OpalaCoder)",
+    "fixSelection": "Corrigir Seleção (OpalaCoder)",
+    "inlinePromptTitle": "Edição Inline",
+    "inlinePromptPlaceholder": "Pergunte ao OpalaCoder...",
+    "inlinePromptSend": "Enviar",
+    "inlinePromptCancel": "Cancelar",
+    "inlinePromptRefineDefault": "Refine o código selecionado",
+    "inlinePromptFixDefault": "Corrija os erros no código selecionado"
   },
   "chatPanel": {
     "header": "OPALA CHAT",

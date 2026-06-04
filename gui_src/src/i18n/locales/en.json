@@ -53,7 +53,15 @@
     "saving": "Saving...",
     "save": "Save (Ctrl+S)",
     "restoreEditor": "Restore Editor",
-    "maximizeEditor": "Maximize Editor"
+    "maximizeEditor": "Maximize Editor",
+    "refineSelection": "Refine Selection (OpalaCoder)",
+    "fixSelection": "Fix Selection (OpalaCoder)",
+    "inlinePromptTitle": "Inline Edit",
+    "inlinePromptPlaceholder": "Ask OpalaCoder...",
+    "inlinePromptSend": "Send",
+    "inlinePromptCancel": "Cancel",
+    "inlinePromptRefineDefault": "Refine the selected code",
+    "inlinePromptFixDefault": "Fix errors in the selected code"
   },
   "chatPanel": {
     "header": "OPALA CHAT",

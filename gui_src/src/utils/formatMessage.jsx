@@ -1,6 +1,7 @@
 import React from 'react';
 
 // Renders chat message content, converting simple markdown syntax to styled HTML elements.
+// All colors use CSS custom properties so they adapt to dark/light themes.
 export function formatMessageContent(content) {
   if (!content) return null;
   const lines = content.split('\n');
@@ -11,7 +12,7 @@ export function formatMessageContent(content) {
     if (trimmed.startsWith('### ')) {
       const title = trimmed.replace('### ', '');
       return (
-        <h4 key={idx} style={{ margin: '14px 0 6px 0', fontWeight: 'bold', color: '#ffffff', fontSize: '13px' }}>
+        <h4 key={idx} style={{ margin: '14px 0 6px 0', fontWeight: 'bold', color: 'var(--vscode-text-light, #ffffff)', fontSize: '13px' }}>
           {title}
         </h4>
       );
@@ -30,10 +31,10 @@ export function formatMessageContent(content) {
           <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', margin: '4px 0', paddingLeft: '4px' }}>
             <span style={{ fontSize: '12px', flexShrink: 0 }}>{icon}</span>
             <span style={{ fontSize: '13px', lineHeight: '1.4' }}>
-              <code style={{ background: '#2d2d2d', padding: '2px 4px', borderRadius: '3px', color: '#f8f8f2', fontFamily: 'monospace', fontSize: '11px', marginRight: '6px' }}>
+              <code className="chat-inline-code" style={{ padding: '2px 4px', borderRadius: '3px', fontFamily: 'monospace', fontSize: '11px', marginRight: '6px' }}>
                 {cmdPart}
               </code>
-              <span style={{ color: '#cccccc' }}>{descPart}</span>
+              <span className="chat-text-secondary">{descPart}</span>
             </span>
           </div>
         );
@@ -44,7 +45,7 @@ export function formatMessageContent(content) {
     if (trimmed.startsWith('_(') && trimmed.endsWith(')_')) {
       const note = trimmed.substring(2, trimmed.length - 2);
       return (
-        <p key={idx} style={{ margin: '8px 0', fontStyle: 'italic', color: '#8a8a8a', fontSize: '11px' }}>
+        <p key={idx} style={{ margin: '8px 0', fontStyle: 'italic', color: 'var(--chat-muted, #8a8a8a)', fontSize: '11px' }}>
           {note}
         </p>
       );
@@ -52,7 +53,7 @@ export function formatMessageContent(content) {
 
     // Regular line (preserving line breaks)
     return (
-      <div key={idx} style={{ minHeight: '1.2em', color: '#cccccc', fontSize: '13px', margin: '2px 0' }}>
+      <div key={idx} className="chat-text-primary" style={{ minHeight: '1.2em', fontSize: '13px', margin: '2px 0' }}>
         {line}
       </div>
     );

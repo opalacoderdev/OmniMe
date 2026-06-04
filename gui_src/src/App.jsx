@@ -111,6 +111,11 @@ export default function App() {
   const [installDepsStatus, setInstallDepsStatus] = useState('');
   const [installDepsLog, setInstallDepsLog] = useState('');
 
+  // ── Inline prompt (editor Ctrl+L / context-menu actions) ────────────────
+  const [inlinePrompt, setInlinePrompt] = useState(null);
+  // Stores the Monaco range that should be replaced after an inline agent reply
+  const pendingInlineRangeRef = useRef(null);
+
   // ── Refs ──────────────────────────────────────────────────────────────────
   const terminalRef = useRef(null);
   const terminalInstanceRef = useRef(null);
@@ -119,6 +124,7 @@ export default function App() {
   const chatEndRef = useRef(null);
   const logEndRef = useRef(null);
   const editorRef = useRef(null);
+  const monacoRef = useRef(null);
   const saveFileRef = useRef(null);
 
   // ── Hooks ─────────────────────────────────────────────────────────────────
@@ -662,6 +668,32 @@ export default function App() {
           if (last?.role === 'assistant' && last.content === data.response) return prev;
           return [...prev, { role: 'assistant', content: data.response }];
         });
+        // ── Auto-replace: if there is a pending inline selection range, extract
+        //    the first fenced code block from the response and apply it.
+        if (pendingInlineRangeRef.current && editorRef.current && monacoRef.current) {
+          const range = pendingInlineRangeRef.current;
+          pendingInlineRangeRef.current = null;
+          try {
+            const codeBlockMatch = data.response.match(/```(?:\w+)?\n([\s\S]*?)```/);
+            if (codeBlockMatch) {
+              const newCode = codeBlockMatch[1].replace(/\n$/, '');
+              const monacoRange = new monacoRef.current.Range(
+                range.startLineNumber,
+                range.startColumn,
+                range.endLineNumber,
+                range.endColumn,
+              );
+              editorRef.current.executeEdits('opalacoder-inline', [{
+                range: monacoRange,
+                text: newCode,
+                forceMoveMarkers: true,
+              }]);
+              addLog('info', `[Inline] Substituição aplicada nas linhas ${range.startLineNumber}–${range.endLineNumber}.`);
+            }
+          } catch (replaceErr) {
+            addLog('error', `[Inline] Falha ao aplicar substituição: ${replaceErr.message}`);
+          }
+        }
         break;
       case 'agent_finished': addLog('info', 'Processamento concluído.'); break;
       case 'input_request':
@@ -758,8 +790,9 @@ export default function App() {
   };
 
   // ── Editor mount ──────────────────────────────────────────────────────────
-  const handleEditorDidMount = (editor) => {
+  const handleEditorDidMount = (editor, monaco) => {
     editorRef.current = editor;
+    if (monaco) monacoRef.current = monaco;
     editor.onKeyDown((e) => {
       const ev = e.browserEvent;
       const isCtrl = ev.ctrlKey || ev.metaKey;
@@ -774,6 +807,101 @@ export default function App() {
         if (saveFileRef.current) saveFileRef.current();
       }
     });
+  };
+
+  // ── Inline submit — called by InlinePromptOverlay ─────────────────────────
+  /**
+   * Builds a context-prefixed prompt and sends it to the agent.
+   * Also stores the current selection range so that auto-replace can fire
+   * when the agent returns the modified code.
+   */
+  const handleInlineSubmit = (instruction) => {
+    if (!inlinePrompt || !activeProject) return;
+    const { startLine, endLine, cursorCol, selectedText, mode } = inlinePrompt;
+
+    const hasSelection = selectedText && selectedText.trim().length > 0;
+
+    let prefix;
+    if (mode === 'refine') {
+      prefix = `[REFINE SELECTION — lines ${startLine}–${endLine}]`;
+    } else if (mode === 'fix') {
+      prefix = `[FIX SELECTION — lines ${startLine}–${endLine}]`;
+    } else {
+      prefix = hasSelection
+        ? `[INLINE EDIT — lines ${startLine}–${endLine}]`
+        : `[INLINE EDIT — line ${startLine}, col ${cursorCol}]`;
+    }
+
+    const fullPrompt = `${prefix}\n${instruction}`;
+
+    // Save the selection range so agent_response can apply auto-replace
+    if (hasSelection && editorRef.current && monacoRef.current) {
+      pendingInlineRangeRef.current = {
+        startLineNumber: startLine,
+        startColumn: 1,
+        endLineNumber: endLine,
+        // end column = length of that line + 1
+        endColumn: (() => {
+          try {
+            return editorRef.current.getModel()?.getLineMaxColumn(endLine) ?? 1;
+          } catch (_) { return 1; }
+        })(),
+        selectedText,
+      };
+    } else {
+      pendingInlineRangeRef.current = null;
+    }
+
+    setInlinePrompt(null);
+    setChatInput(fullPrompt);
+    // Trigger send on next tick so chatInput state is committed
+    setTimeout(() => {
+      handleSendMessageWithPrompt(fullPrompt);
+    }, 0);
+  };
+
+  /**
+   * Variant of handleSendMessage that accepts an explicit prompt string.
+   * Used by handleInlineSubmit to bypass the chatInput state timing.
+   */
+  const handleSendMessageWithPrompt = async (userText) => {
+    if (!userText.trim() || !activeProject || isAgentRunning) return;
+    setChatInput('');
+    setChatMessages(prev => [...prev, { role: 'user', content: userText }]);
+    setIsAgentRunning(true);
+    setProblems([]);
+    addLog('info', `Iniciando: "${userText}"`);
+
+    let selectedText = '';
+    if (editorRef.current) {
+      try { const model = editorRef.current.getModel(); const sel = editorRef.current.getSelection(); if (model && sel) selectedText = model.getValueInRange(sel); } catch (e) { }
+    }
+
+    try {
+      const res = await fetch('/api/opalacoder/run', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'run', agent: 'chat_orchestrator', prompt: userText, project_name: activeProject.name, project_path: activeProject.project_path, model: activeProject.model, current_file: selectedFile || '', editor_content: fileContent || '', selected_text: selectedText || '' }),
+      });
+      if (!res.body) { addLog('error', 'ReadableStream não suportado pelo backend.'); setIsAgentRunning(false); return; }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try { handleAgentEvent(JSON.parse(line)); } catch (e) { addLog('stdout', line); }
+        }
+      }
+      if (buffer.trim()) { try { handleAgentEvent(JSON.parse(buffer)); } catch (e) { addLog('stdout', buffer); } }
+    } catch (err) {
+      addLog('error', `Falha na execução: ${err.message}`);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Falha na execução: ${err.message}` }]);
+    } finally { setIsAgentRunning(false); fetchFiles(); fetchProblems(); }
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -856,6 +984,9 @@ export default function App() {
               setFileContent={setFileContent}
               isMaximized={isEditorMaximized}
               onToggleMaximize={() => setIsEditorMaximized(!isEditorMaximized)}
+              inlinePrompt={inlinePrompt}
+              setInlinePrompt={setInlinePrompt}
+              onInlineSubmit={handleInlineSubmit}
             />
           )}
 

@@ -3,6 +3,7 @@ import Editor from '@monaco-editor/react';
 import { Files, RefreshCw, Check, X, Maximize2, Minimize2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getLanguage } from '../utils/language';
+import InlinePromptOverlay from './InlinePromptOverlay';
 
 // Center panel: file tabs + Monaco editor (or empty state when no file is open).
 export default function EditorPanel({
@@ -22,8 +23,104 @@ export default function EditorPanel({
   setFileContent,
   isMaximized,
   onToggleMaximize,
+  // Inline prompt props
+  inlinePrompt,
+  setInlinePrompt,
+  onInlineSubmit,
 }) {
   const { t } = useTranslation();
+
+  // Wrap the external mount handler so we can also register the context-menu
+  // actions and the Ctrl+L shortcut ourselves.
+  const handleMount = (editor, monaco) => {
+    // ── Ctrl+L — open inline free prompt ────────────────────────────────────
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyL,
+      () => {
+        const model = editor.getModel();
+        const sel = editor.getSelection();
+        if (!model || !sel) return;
+
+        const selectedText = model.getValueInRange(sel);
+        const pos = editor.getPosition();
+
+        // Get pixel coordinates near the cursor
+        const coords = editor.getScrolledVisiblePosition(pos);
+        const domNode = editor.getDomNode();
+        const rect = domNode?.getBoundingClientRect() ?? { left: 200, top: 100 };
+
+        setInlinePrompt({
+          x: rect.left + (coords?.left ?? 60) + 20,
+          y: rect.top + (coords?.top ?? 40) + 24,
+          startLine: sel.startLineNumber,
+          endLine: sel.endLineNumber,
+          cursorCol: pos?.column ?? 1,
+          selectedText,
+          mode: 'free',
+        });
+      }
+    );
+
+    // ── Monaco context menu — Refine Selection ───────────────────────────────
+    editor.addAction({
+      id: 'opalacoder.refineSelection',
+      label: t('editorPanel.refineSelection'),
+      contextMenuGroupId: 'opalacoder',
+      contextMenuOrder: 1,
+      // Only show when there is a non-empty selection
+      precondition: 'editorHasSelection',
+      run: (ed) => {
+        const model = ed.getModel();
+        const sel = ed.getSelection();
+        if (!model || !sel) return;
+        const selectedText = model.getValueInRange(sel);
+        const pos = ed.getPosition();
+        const coords = ed.getScrolledVisiblePosition(pos);
+        const domNode = ed.getDomNode();
+        const rect = domNode?.getBoundingClientRect() ?? { left: 200, top: 100 };
+        setInlinePrompt({
+          x: rect.left + (coords?.left ?? 60) + 20,
+          y: rect.top + (coords?.top ?? 40) + 24,
+          startLine: sel.startLineNumber,
+          endLine: sel.endLineNumber,
+          cursorCol: pos?.column ?? 1,
+          selectedText,
+          mode: 'refine',
+        });
+      },
+    });
+
+    // ── Monaco context menu — Fix Selection ──────────────────────────────────
+    editor.addAction({
+      id: 'opalacoder.fixSelection',
+      label: t('editorPanel.fixSelection'),
+      contextMenuGroupId: 'opalacoder',
+      contextMenuOrder: 2,
+      precondition: 'editorHasSelection',
+      run: (ed) => {
+        const model = ed.getModel();
+        const sel = ed.getSelection();
+        if (!model || !sel) return;
+        const selectedText = model.getValueInRange(sel);
+        const pos = ed.getPosition();
+        const coords = ed.getScrolledVisiblePosition(pos);
+        const domNode = ed.getDomNode();
+        const rect = domNode?.getBoundingClientRect() ?? { left: 200, top: 100 };
+        setInlinePrompt({
+          x: rect.left + (coords?.left ?? 60) + 20,
+          y: rect.top + (coords?.top ?? 40) + 24,
+          startLine: sel.startLineNumber,
+          endLine: sel.endLineNumber,
+          cursorCol: pos?.column ?? 1,
+          selectedText,
+          mode: 'fix',
+        });
+      },
+    });
+
+    // Delegate to the parent-level mount handler (font-size, Ctrl+S, etc.)
+    if (handleEditorDidMount) handleEditorDidMount(editor, monaco);
+  };
 
   if (!selectedFile) {
     return (
@@ -38,7 +135,7 @@ export default function EditorPanel({
   }
 
   return (
-    <div className="vscode-editor-panel">
+    <div className="vscode-editor-panel" style={{ position: 'relative' }}>
       {/* Tab bar */}
       <div className="vscode-tabs">
         <div className="flex h-full overflow-x-auto" style={{ gap: '2px' }}>
@@ -95,7 +192,7 @@ export default function EditorPanel({
           theme={theme === 'light' ? 'light' : 'vs-dark'}
           value={fileContent}
           onChange={(val) => setFileContent(val)}
-          onMount={handleEditorDidMount}
+          onMount={handleMount}
           options={{
             minimap: { enabled: true },
             fontSize: editorFontSize,
@@ -106,6 +203,15 @@ export default function EditorPanel({
           }}
         />
       </div>
+
+      {/* Inline prompt overlay (rendered inside the panel for correct stacking) */}
+      {inlinePrompt && (
+        <InlinePromptOverlay
+          inlinePrompt={inlinePrompt}
+          onSubmit={onInlineSubmit}
+          onClose={() => setInlinePrompt(null)}
+        />
+      )}
     </div>
   );
 }

@@ -79,12 +79,12 @@
 2. Implementar suporte a git. ✅
 
 3. Prover ferramentas/funções de selecionar e pedir para o agente redefinir o que está selecionado. Ou para o agente detectar um erro em uma função ou trecho de código selecionado. Possíveis formas de se fazer isso:
-	4.1 : o usuário seleciona o texto, e no menu contextual tem opções: refinar e corrigir se algo estiver selecionado. Também há a possibilidade do usuário selecionar algo ou deixar o cursor em alguma parte e executar CTRL+i e então abrir uma caixa em que o usuário pode pedir algo (o agente recebe o que foi selecionado, a linha inicial, a linha final e a posição do cursor. Uma interpretação é feita "se seleção vazia e linha inicial igual a linha final, focar na posição do cursor como o lugar onde posso começar a colocar algo.")
+	4.1 : o usuário seleciona o texto, e no menu contextual tem opções: refinar e corrigir se algo estiver selecionado. Também há a possibilidade do usuário selecionar algo ou deixar o cursor em alguma parte e executar CTRL+L e então abrir uma caixa em que o usuário pode pedir algo (o agente recebe o que foi selecionado, a linha inicial, a linha final e a posição do cursor. Uma interpretação é feita "se seleção vazia e linha inicial igual a linha final, focar na posição do cursor como o lugar onde posso começar a colocar algo.") ✅
 
-4. Focar na integração com ollama (funcionar com tudo o que o ollama oferece e suas peculiaridades).
+4. Melhorar contraste dos themas (dark está razoável, o modo claro não está legal). ✅
 
 5. Instalador autocontido para linux e windows.
 
-# FROM CURRENT 0.2.5 TO  0.2.6:
+# FROM CURRENT 0.2.5 TO  0.2.6 (NÃO IMPLEMENTAR AGORA):
 
 1. Implementar e disponibilizar uma skill specs (em que o agente é instruído para a leitura das specs). Deve ser disponibilizado na loja, não carregado automaticamente no projeto.
