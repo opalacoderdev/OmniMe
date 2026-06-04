@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { AlertCircle, Trash, Maximize2, Minimize2, ChevronUp, ChevronDown } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useTextContextMenu } from '../hooks/useTextContextMenu.js';
 import TextContextMenu from './TextContextMenu.jsx';
 
@@ -24,6 +25,7 @@ export default function BottomPanel({
   isBottomMaximized,
   onToggleMaximizeBottom,
 }) {
+  const { t } = useTranslation();
   const contentRef = useRef(null);
   const { menu, onContextMenu, handleCopy, handlePaste, handleSelectAll } = useTextContextMenu();
 
@@ -31,6 +33,12 @@ export default function BottomPanel({
     setActiveBottomTab(tab);
     if (isTerminalCollapsed) setIsTerminalCollapsed(false);
   };
+
+  const clearTitle = activeBottomTab === 'output'
+    ? t('bottomPanel.clearOutput')
+    : activeBottomTab === 'problems'
+      ? t('bottomPanel.clearProblems')
+      : t('bottomPanel.clearThinking');
 
   return (
     <>
@@ -72,10 +80,10 @@ export default function BottomPanel({
                 className={`vscode-bottom-tab ${activeBottomTab === tab ? 'active' : ''}`}
                 onClick={() => selectTab(tab)}
               >
-                {tab === 'output' && 'OUTPUT (OPALACODER)'}
+                {tab === 'output' && t('bottomPanel.outputTab')}
                 {tab === 'problems' && (
                   <>
-                    PROBLEMS{' '}
+                    {t('bottomPanel.problemsTab')}{' '}
                     {problems.length > 0 && (
                       <span style={{ marginLeft: '4px', background: '#f48771', color: '#1e1e1e', borderRadius: '10px', padding: '0 6px', fontSize: '10px', fontWeight: 'bold' }}>
                         {problems.length}
@@ -83,8 +91,8 @@ export default function BottomPanel({
                     )}
                   </>
                 )}
-                {tab === 'thinking' && 'THINKING'}
-                {tab === 'terminal' && 'TERMINAL'}
+                {tab === 'thinking' && t('bottomPanel.thinkingTab')}
+                {tab === 'terminal' && t('bottomPanel.terminalTab')}
               </span>
             ))}
           </div>
@@ -100,16 +108,10 @@ export default function BottomPanel({
                       : () => setThinkingLogs([])
                 }
                 className="vscode-bottom-panel-clear-btn"
-                title={
-                  activeBottomTab === 'output'
-                    ? 'Limpar Output'
-                    : activeBottomTab === 'problems'
-                      ? 'Limpar Problemas'
-                      : 'Limpar Pensamentos'
-                }
+                title={clearTitle}
               >
                 <Trash size={12} />
-                <span>Clear</span>
+                <span>{t('bottomPanel.clear')}</span>
               </button>
             )}
             <button
@@ -118,7 +120,7 @@ export default function BottomPanel({
                 setIsTerminalCollapsed(!isTerminalCollapsed);
               }}
               style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
-              title={isTerminalCollapsed ? "Expandir Painel" : "Recolher Painel"}
+              title={isTerminalCollapsed ? t('bottomPanel.expandPanel') : t('bottomPanel.collapsePanel')}
             >
               {isTerminalCollapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
@@ -126,7 +128,7 @@ export default function BottomPanel({
               <button
                 onClick={onToggleMaximizeBottom}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
-                title={isBottomMaximized ? "Restaurar Painel" : "Maximizar Painel"}
+                title={isBottomMaximized ? t('bottomPanel.restorePanel') : t('bottomPanel.maximizePanel')}
               >
                 {isBottomMaximized ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
               </button>
@@ -147,7 +149,7 @@ export default function BottomPanel({
               <div className="vscode-logs" style={{ height: '100%' }}>
                 {terminalLogs.length === 0 ? (
                   <div style={{ color: '#808080', fontStyle: 'italic' }}>
-                    Nenhum log gerado. Envie uma instrução no chat para iniciar...
+                    {t('bottomPanel.noLogs')}
                   </div>
                 ) : (
                   terminalLogs.map((log, i) => {
@@ -177,14 +179,14 @@ export default function BottomPanel({
             {activeBottomTab === 'problems' && (
               <div className="vscode-problems-list" style={{ padding: '8px', overflowY: 'auto', height: '100%', color: '#cccccc', fontFamily: 'Consolas, monospace', fontSize: '12px' }}>
                 {problems.length === 0 ? (
-                  <div style={{ color: '#808080', fontStyle: 'italic', padding: '8px' }}>Nenhum problema detectado.</div>
+                  <div style={{ color: '#808080', fontStyle: 'italic', padding: '8px' }}>{t('bottomPanel.noProblems')}</div>
                 ) : (
                   problems.map((prob) => (
                     <div key={prob.id} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', borderBottom: '1px solid #2d2d2d', padding: '6px 0' }}>
                       <AlertCircle size={14} className="text-[#f48771]" style={{ flexShrink: 0, marginTop: '2px' }} />
                       <div>
                         <div style={{ fontWeight: 'bold', color: '#f48771', marginBottom: '2px' }}>
-                          [{prob.timestamp}] Erro em {prob.tool}:
+                          [{prob.timestamp}] {t('bottomPanel.errorIn', { tool: prob.tool })}
                         </div>
                         <pre style={{ whiteSpace: 'pre-wrap', margin: 0, color: '#e0e0e0', fontSize: '12px', fontFamily: 'inherit' }}>
                           {prob.message}
@@ -201,7 +203,7 @@ export default function BottomPanel({
               <div className="vscode-logs" style={{ height: '100%' }}>
                 {thinkingLogs.length === 0 ? (
                   <div style={{ color: '#808080', fontStyle: 'italic' }}>
-                    Nenhum pensamento gerado ainda. Execute uma instrução para ver o raciocínio do agente...
+                    {t('bottomPanel.noThinking')}
                   </div>
                 ) : (
                   thinkingLogs.map((log, i) => {
@@ -226,7 +228,7 @@ export default function BottomPanel({
             <div style={{ display: activeBottomTab === 'terminal' ? 'block' : 'none', height: '100%', background: '#1e1e1e', overflow: 'hidden' }}>
               {!activeProject ? (
                 <div style={{ color: '#808080', fontStyle: 'italic', padding: '16px' }}>
-                  Defina um projeto/workspace para habilitar o terminal.
+                  {t('bottomPanel.setProjectForTerminal')}
                 </div>
               ) : (
                 <div ref={terminalRef} style={{ width: '100%', height: '100%', padding: '4px' }} />

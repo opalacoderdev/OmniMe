@@ -1,6 +1,7 @@
 import React from 'react';
 import Editor from '@monaco-editor/react';
 import { Files, RefreshCw, Check, X, Maximize2, Minimize2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { getLanguage } from '../utils/language';
 
 // Center panel: file tabs + Monaco editor (or empty state when no file is open).
@@ -22,13 +23,15 @@ export default function EditorPanel({
   isMaximized,
   onToggleMaximize,
 }) {
+  const { t } = useTranslation();
+
   if (!selectedFile) {
     return (
       <div className="vscode-editor-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
           <Files size={64} style={{ color: '#3c3c3c', marginBottom: '16px' }} />
-          <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#b0b0b0', marginBottom: '4px' }}>Nenhum Arquivo Aberto</h3>
-          <p style={{ fontSize: '12px', color: '#808080' }}>Abra um arquivo na barra lateral esquerda.</p>
+          <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#b0b0b0', marginBottom: '4px' }}>{t('editorPanel.noFileOpen')}</h3>
+          <p style={{ fontSize: '12px', color: '#808080' }}>{t('editorPanel.openFileHint')}</p>
         </div>
       </div>
     );
@@ -69,14 +72,14 @@ export default function EditorPanel({
             className="vscode-button"
           >
             {isSaving ? <RefreshCw size={12} className="animate-spin" /> : <Check size={12} />}
-            <span>{isSaving ? 'Salvando...' : 'Salvar (Ctrl+S)'}</span>
+            <span>{isSaving ? t('editorPanel.saving') : t('editorPanel.save')}</span>
           </button>
 
           <button
             onClick={onToggleMaximize}
             className="vscode-bottom-panel-clear-btn"
             style={{ padding: '6px' }}
-            title={isMaximized ? "Restaurar Editor" : "Maximizar Editor"}
+            title={isMaximized ? t('editorPanel.restoreEditor') : t('editorPanel.maximizeEditor')}
           >
             {isMaximized ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
           </button>

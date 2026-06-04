@@ -1,5 +1,6 @@
 import React from 'react';
 import { Plus, Settings, Trash2, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import FileNode from './FileNode';
 
 // Left sidebar — Explorer tab: project list + workspace file tree.
@@ -22,15 +23,17 @@ export default function ExplorerSidebar({
   openEditModal,
   handleDeleteProject,
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="vscode-sidebar-header">
-        <span className="vscode-sidebar-title">EXPLORER: PROJECTS</span>
+        <span className="vscode-sidebar-title">{t('explorerSidebar.header')}</span>
         <button
           onClick={onNewProject}
           style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#c5c5c5' }}
-          title="Novo Projeto..."
+          title={t('explorerSidebar.newProject')}
         >
           <Plus size={14} />
         </button>
@@ -38,7 +41,7 @@ export default function ExplorerSidebar({
 
       {/* Projects list */}
       <div className="vscode-sidebar-section">
-        <div className="vscode-sidebar-section-title">Selecione o Projeto</div>
+        <div className="vscode-sidebar-section-title">{t('explorerSidebar.selectProject')}</div>
         <div className="overflow-y-auto" style={{ maxHeight: '140px' }}>
           {projects.map(p => {
             const isActive = activeProject && activeProject.name === p.name;
@@ -59,14 +62,14 @@ export default function ExplorerSidebar({
                 <button
                   onClick={(e) => openEditModal(e, p)}
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0', padding: '2px 4px' }}
-                  title="Configurar projeto"
+                  title={t('explorerSidebar.configureProject')}
                 >
                   <Settings size={12} />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteProject(p.name); }}
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0', padding: '2px 4px' }}
-                  title="Remover projeto"
+                  title={t('explorerSidebar.removeProject')}
                 >
                   <Trash2 size={12} />
                 </button>
@@ -96,11 +99,11 @@ export default function ExplorerSidebar({
         style={dragOverPath === '__root__' ? { border: '2px dashed #007acc', backgroundColor: 'rgba(0, 122, 204, 0.05)' } : {}}
       >
         <div className="vscode-sidebar-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Workspace Files</span>
+          <span>{t('explorerSidebar.workspaceFiles')}</span>
           {activeProject && (
             <button
               onClick={(e) => { e.stopPropagation(); fetchFiles(); }}
-              title="Atualizar arquivos"
+              title={t('explorerSidebar.refreshFiles')}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -122,7 +125,7 @@ export default function ExplorerSidebar({
 
         {files.length === 0 ? (
           <div style={{ fontSize: '12px', color: '#808080', padding: '0 4px', fontStyle: 'italic' }}>
-            Selecione um projeto para explorar.
+            {t('explorerSidebar.selectProjectToExplore')}
           </div>
         ) : (
           <div>

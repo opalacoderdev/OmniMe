@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Settings, Check, FolderOpen } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 // Numeric input helper to avoid repetition in the advanced params grid.
 function ParamNumber({ label, value, onChange, step, min, max, placeholder }) {
@@ -31,6 +32,8 @@ export default function EditProjectModal({
   onLoadModelConfig,
   onOpenDirPicker,
 }) {
+  const { t } = useTranslation();
+
   if (!editingProject) return null;
 
   // Helper to update a model_param key.
@@ -56,7 +59,7 @@ export default function EditProjectModal({
         <div className="vscode-sidebar-header" style={{ padding: '10px 16px' }}>
           <span className="vscode-sidebar-title" style={{ color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Settings size={14} style={{ color: '#007acc' }} />
-            CONFIGURAÇÕES DO PROJETO
+            {t('editProjectModal.title')}
           </span>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}>
             <X size={14} />
@@ -67,31 +70,31 @@ export default function EditProjectModal({
 
           {/* Internal key (read-only) */}
           <div className="flex flex-col" style={{ gap: '4px' }}>
-            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>ID Interno (somente leitura)</label>
+            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.internalId')}</label>
             <input type="text" value={editingProject.name} readOnly style={{ opacity: 0.5, cursor: 'not-allowed' }} />
           </div>
 
           {/* Display name */}
           <div className="flex flex-col" style={{ gap: '4px' }}>
-            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Nome de Exibição *</label>
+            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.displayName')}</label>
             <input
               type="text"
               value={editingProject.project_name}
               onChange={e => setEditingProject(p => ({ ...p, project_name: e.target.value }))}
               required
-              placeholder="Nome do projeto"
+              placeholder={t('editProjectModal.projectNamePlaceholder')}
             />
           </div>
 
           {/* Project path */}
           <div className="flex flex-col" style={{ gap: '4px' }}>
-            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Caminho Absoluto</label>
+            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.projectPath')}</label>
             <div style={{ display: 'flex', gap: '6px' }}>
               <input
                 type="text"
                 value={editingProject.project_path}
                 onChange={e => setEditingProject(p => ({ ...p, project_path: e.target.value }))}
-                placeholder="/caminho/absoluto/do/projeto"
+                placeholder={t('editProjectModal.projectPathPlaceholder')}
                 style={{ flex: 1 }}
               />
               <button type="button" className="vscode-button" style={{ padding: '4px 8px', whiteSpace: 'nowrap' }}
@@ -104,7 +107,7 @@ export default function EditProjectModal({
           {/* Model + mode */}
           <div style={{ display: 'flex', gap: '12px' }}>
             <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
-              <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Modelo Principal</label>
+              <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.mainModel')}</label>
               <input
                 type="text"
                 list="edit-models"
@@ -120,11 +123,11 @@ export default function EditProjectModal({
               </datalist>
             </div>
             <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
-              <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Modo</label>
+              <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.mode')}</label>
               <select value={editingProject.mode} onChange={e => setEditingProject(p => ({ ...p, mode: e.target.value }))}>
-                <option value="auto">Auto (Completo)</option>
-                <option value="plan">Plan (Planejar)</option>
-                <option value="edit">Edit (Editar)</option>
+                <option value="auto">{t('editProjectModal.modeAuto')}</option>
+                <option value="plan">{t('editProjectModal.modePlan')}</option>
+                <option value="edit">{t('editProjectModal.modeEdit')}</option>
               </select>
             </div>
           </div>
@@ -132,7 +135,7 @@ export default function EditProjectModal({
           {/* Load refined config */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }} onClick={onLoadModelConfig}>
-              Load Refined Config
+              {t('editProjectModal.loadRefinedConfig')}
             </button>
             {modelConfigMsg && (
               <span style={{ fontSize: '11px', color: modelConfigMsg.startsWith('✅') ? '#4ec9b0' : '#f48771' }}>
@@ -143,13 +146,13 @@ export default function EditProjectModal({
 
           {/* Alternative model */}
           <div className="flex flex-col" style={{ gap: '4px' }}>
-            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Modelo Alternativo</label>
+            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.alternativeModel')}</label>
             <input
               type="text"
               list="edit-alt-models"
               value={editingProject.alternative_model}
               onChange={e => setEditingProject(p => ({ ...p, alternative_model: e.target.value }))}
-              placeholder="(usa o padrão global se vazio)"
+              placeholder={t('editProjectModal.altModelPlaceholder')}
             />
             <datalist id="edit-alt-models">
               <option value="gemini/gemini-2.5-flash" />
@@ -161,22 +164,22 @@ export default function EditProjectModal({
           {/* API credentials */}
           <div style={{ display: 'flex', gap: '12px' }}>
             <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
-              <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Chave de API (Opcional)</label>
-              <input type="password" value={editingProject.api_key} onChange={e => setEditingProject(p => ({ ...p, api_key: e.target.value }))} placeholder="Ex: sk-..." />
+              <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.apiKey')}</label>
+              <input type="password" value={editingProject.api_key} onChange={e => setEditingProject(p => ({ ...p, api_key: e.target.value }))} placeholder={t('editProjectModal.apiKeyPlaceholder')} />
             </div>
             <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
-              <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>URL Base da API (Opcional)</label>
-              <input type="text" value={editingProject.api_base} onChange={e => setEditingProject(p => ({ ...p, api_base: e.target.value }))} placeholder="Ex: http://localhost:11434/v1" />
+              <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.apiBase')}</label>
+              <input type="text" value={editingProject.api_base} onChange={e => setEditingProject(p => ({ ...p, api_base: e.target.value }))} placeholder={t('editProjectModal.apiBasePlaceholder')} />
             </div>
           </div>
 
           {/* Description */}
           <div className="flex flex-col" style={{ gap: '4px' }}>
-            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Descrição</label>
+            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.description')}</label>
             <textarea
               value={editingProject.description}
               onChange={e => setEditingProject(p => ({ ...p, description: e.target.value }))}
-              placeholder="Descrição opcional do projeto..."
+              placeholder={t('editProjectModal.descriptionPlaceholder')}
               rows={2}
               style={{ resize: 'none' }}
             />
@@ -189,7 +192,7 @@ export default function EditProjectModal({
               onClick={() => setShowAdvancedParams(!showAdvancedParams)}
               style={{ background: 'transparent', border: 'none', color: '#007acc', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 0', fontSize: '12px', fontWeight: 'bold', textAlign: 'left', width: 'fit-content' }}
             >
-              <span>{showAdvancedParams ? '▼' : '▶'} Parâmetros do Modelo (Avançado)</span>
+              <span>{showAdvancedParams ? '▼' : '▶'} {t('editProjectModal.advancedParams')}</span>
             </button>
 
             {showAdvancedParams && (
@@ -198,7 +201,7 @@ export default function EditProjectModal({
                 {/* LiteLLM params */}
                 <div>
                   <div style={{ color: '#9cdcfe', fontSize: '11px', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Parâmetros LiteLLM (model_kwargs)
+                    {t('editProjectModal.litellmParams')}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <ParamNumber label="Temperature" step="0.1" min="0" max="2" placeholder="padrão: 0.7"
@@ -254,7 +257,7 @@ export default function EditProjectModal({
                         <input type="checkbox"
                           checked={!!editingProject.model_params?.think}
                           onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, think: e.target.checked } }))} />
-                        <span style={{ fontSize: '12px', color: '#cccccc' }}>Habilitado</span>
+                        <span style={{ fontSize: '12px', color: '#cccccc' }}>{t('editProjectModal.enabled')}</span>
                       </label>
                     </div>
 
@@ -264,7 +267,7 @@ export default function EditProjectModal({
                         <input type="checkbox"
                           checked={!!editingProject.model_params?.stream}
                           onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, stream: e.target.checked } }))} />
-                        <span style={{ fontSize: '12px', color: '#cccccc' }}>Habilitado</span>
+                        <span style={{ fontSize: '12px', color: '#cccccc' }}>{t('editProjectModal.enabled')}</span>
                       </label>
                     </div>
                   </div>
@@ -273,7 +276,7 @@ export default function EditProjectModal({
                 {/* Agent params */}
                 <div>
                   <div style={{ color: '#9cdcfe', fontSize: '11px', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Parâmetros do Agente
+                    {t('editProjectModal.agentParams')}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <ParamNumber label="Max Heartbeats (MemGPT)" min="1" placeholder="padrão: 20 (memgpt)"
@@ -302,8 +305,8 @@ export default function EditProjectModal({
                         onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, response_mode: e.target.value } }))}
                         style={{ backgroundColor: '#3c3c3c', color: '#cccccc', border: '1px solid #555', borderRadius: '3px', padding: '4px 6px', fontSize: '12px' }}
                       >
-                        <option value="all">all — concatena todas as mensagens</option>
-                        <option value="last">last — só a última mensagem</option>
+                        <option value="all">{t('editProjectModal.responseModeAll')}</option>
+                        <option value="last">{t('editProjectModal.responseModeLast')}</option>
                       </select>
                     </div>
 
@@ -313,7 +316,7 @@ export default function EditProjectModal({
                         <input type="checkbox"
                           checked={!!editingProject.model_params?.debug}
                           onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, debug: e.target.checked } }))} />
-                        <span style={{ fontSize: '12px', color: '#cccccc' }}>Habilitado</span>
+                        <span style={{ fontSize: '12px', color: '#cccccc' }}>{t('editProjectModal.enabled')}</span>
                       </label>
                     </div>
                   </div>
@@ -325,11 +328,11 @@ export default function EditProjectModal({
           {/* Actions */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '12px', borderTop: '1px solid #3c3c3c', marginTop: '4px' }}>
             <button type="button" onClick={onClose} className="vscode-button" style={{ backgroundColor: '#3c3c3c', color: '#ffffff' }}>
-              Cancelar
+              {t('editProjectModal.cancel')}
             </button>
             <button type="submit" className="vscode-button">
               <Check size={12} />
-              Salvar Alterações
+              {t('editProjectModal.saveChanges')}
             </button>
           </div>
         </form>

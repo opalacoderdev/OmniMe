@@ -1,5 +1,6 @@
 import React from 'react';
 import { Plus, FolderPlus, Edit2, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 // Floating right-click context menu for the file explorer.
 export default function ContextMenu({
@@ -10,6 +11,8 @@ export default function ContextMenu({
   handleRenameNode,
   handleDeleteNode,
 }) {
+  const { t } = useTranslation();
+
   if (!contextMenu) return null;
 
   const parentPath = rightClickedNode
@@ -28,14 +31,14 @@ export default function ContextMenu({
         onClick={() => handleCreateNewFile(parentPath)}
       >
         <Plus size={13} style={{ color: '#007acc' }} />
-        <span>New File...</span>
+        <span>{t('contextMenu.newFile')}</span>
       </div>
       <div
         className="vscode-context-menu-item"
         onClick={() => handleCreateNewDir(parentPath)}
       >
         <FolderPlus size={13} style={{ color: '#007acc' }} />
-        <span>New Dir...</span>
+        <span>{t('contextMenu.newDir')}</span>
       </div>
       {rightClickedNode && (
         <>
@@ -44,14 +47,14 @@ export default function ContextMenu({
             onClick={() => handleRenameNode(rightClickedNode)}
           >
             <Edit2 size={13} style={{ color: '#e2b52b' }} />
-            <span>Rename...</span>
+            <span>{t('contextMenu.rename')}</span>
           </div>
           <div
             className="vscode-context-menu-item"
             onClick={() => handleDeleteNode(rightClickedNode)}
           >
             <Trash2 size={13} style={{ color: '#f48771' }} />
-            <span>Delete</span>
+            <span>{t('contextMenu.delete')}</span>
           </div>
         </>
       )}

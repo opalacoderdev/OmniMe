@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '@xterm/xterm/css/xterm.css';
+import { useTranslation } from 'react-i18next';
+import i18n from './i18n/index.js';
 
 // Utils
 import { safeGetLocalStorage, safeSetLocalStorage } from './utils/storage';
@@ -30,6 +32,8 @@ import DirPickerModal from './components/modals/DirPickerModal';
 // App
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
+  const { t } = useTranslation();
+
   // ── Projects / files ──────────────────────────────────────────────────────
   const [projects, setProjects] = useState([]);
   const [activeProject, setActiveProject] = useState(null);
@@ -132,6 +136,26 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  // Restore language from backend on startup (localStorage not reliable in webview)
+  useEffect(() => {
+    fetch('/api/settings/language')
+      .then(r => r.ok ? r.json() : null)
+      .then(cfg => {
+        if (cfg?.lang) {
+          i18n.changeLanguage(cfg.lang);
+        } else {
+          // No saved preference — push current detected language to backend
+          const detected = i18n.language?.startsWith('pt') ? 'pt' : 'en';
+          fetch('/api/settings/language', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lang: detected }),
+          }).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!editingProject) setShowAdvancedParams(false);
   }, [editingProject]);
@@ -151,7 +175,7 @@ export default function App() {
       fetchProblems();
       if (prevProjectNameRef.current !== activeProject.name) {
         setChatMessages([
-          { role: 'assistant', content: `Olá! Estou pronto para auxiliar no projeto **${activeProject.project_name || activeProject.name}**.` }
+          { role: 'assistant', content: t('app.greeting', { projectName: activeProject.project_name || activeProject.name }) }
         ]);
         prevProjectNameRef.current = activeProject.name;
       }
@@ -242,7 +266,7 @@ export default function App() {
         setProjects(data.projects || []);
         if (data.projects?.length > 0 && !activeProject) handleSelectProject(data.projects[0]);
       }
-    } catch (err) { addLog('error', `Falha ao carregar projetos: ${err.message}`); }
+    } catch (err) { addLog('error', t('app.failedToLoadProjects', { error: err.message })); }
   };
 
   const fetchFiles = async () => {
@@ -250,8 +274,8 @@ export default function App() {
     try {
       const res = await fetch(`/api/files?projectPath=${encodeURIComponent(activeProject.project_path)}`);
       if (res.ok) { const data = await res.json(); setFiles(data.files || []); }
-      else { const e = await res.json(); addLog('error', `Falha ao listar arquivos: ${e.error}`); }
-    } catch (err) { addLog('error', `Erro na chamada de arquivos: ${err.message}`); }
+      else { const e = await res.json(); addLog('error', t('app.failedToListFiles', { error: e.error })); }
+    } catch (err) { addLog('error', t('app.fileCallError', { error: err.message })); }
   };
 
   const fetchProblems = async () => {
@@ -272,23 +296,57 @@ export default function App() {
 
   const handleSelectProject = (proj) => {
     setActiveProject(proj);
-    addLog('info', `Projeto selecionado: ${proj.project_name || proj.name}`);
+    addLog('info', t('app.projectSelected', { name: proj.project_name || proj.name }));
   };
 
   const handleGitCommit = async (e) => {
     if (e) e.preventDefault();
     if (!activeProject || !commitMessage.trim() || isCommitting) return;
     setIsCommitting(true);
-    addLog('info', `Criando commit com a mensagem: "${commitMessage}"...`);
+    addLog('info', t('app.commitCreating', { message: commitMessage }));
     try {
       const res = await fetch('/api/git/commit', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectPath: activeProject.project_path, message: commitMessage }),
       });
-      if (res.ok) { addLog('info', 'Commit criado com sucesso!'); setCommitMessage(''); fetchGitStatus(); }
-      else { const data = await res.json(); addLog('error', `Falha ao fazer commit: ${data.error || 'Erro desconhecido'}`); }
-    } catch (err) { addLog('error', `Erro ao fazer commit: ${err.message}`); }
+      if (res.ok) { addLog('info', t('app.commitSuccess')); setCommitMessage(''); fetchGitStatus(); }
+      else { const data = await res.json(); addLog('error', t('app.commitFailed', { error: data.error || t('app.unknownError') })); }
+    } catch (err) { addLog('error', t('app.commitError', { error: err.message })); }
     finally { setIsCommitting(false); }
+  };
+
+  const handleStageFile = async (filePath) => {
+    if (!activeProject) return;
+    try {
+      await fetch('/api/git/stage', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: activeProject.project_path, filePath, action: 'stage' }),
+      });
+      fetchGitStatus();
+    } catch (err) { addLog('error', t('app.stageError', { error: err.message })); }
+  };
+
+  const handleUnstageFile = async (filePath) => {
+    if (!activeProject) return;
+    try {
+      await fetch('/api/git/stage', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: activeProject.project_path, filePath, action: 'unstage' }),
+      });
+      fetchGitStatus();
+    } catch (err) { addLog('error', t('app.unstageError', { error: err.message })); }
+  };
+
+  const handleDiscardFile = async (filePath) => {
+    if (!activeProject) return;
+    try {
+      const res = await fetch('/api/git/discard', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: activeProject.project_path, filePath }),
+      });
+      if (res.ok) { addLog('info', `Alterações descartadas: ${filePath}`); fetchGitStatus(); fetchFiles(); }
+      else { const d = await res.json(); addLog('error', `Erro ao descartar: ${d.error}`); }
+    } catch (err) { addLog('error', `Erro ao descartar alterações: ${err.message}`); }
   };
 
   const handleInstallOptionalDeps = async () => {
@@ -760,10 +818,14 @@ export default function App() {
               <GitSidebar
                 activeProject={activeProject}
                 gitChanges={gitChanges}
+                fetchGitStatus={fetchGitStatus}
                 commitMessage={commitMessage}
                 setCommitMessage={setCommitMessage}
                 isCommitting={isCommitting}
                 handleGitCommit={handleGitCommit}
+                onStageFile={handleStageFile}
+                onUnstageFile={handleUnstageFile}
+                onDiscardFile={handleDiscardFile}
               />
             )}
           </aside>
@@ -841,9 +903,9 @@ export default function App() {
             handleInterruptAgent={handleInterruptAgent}
             onClearChat={() => {
               const currentProjName = activeProject ? (activeProject.project_name || activeProject.name) : '';
-              setChatMessages([
-                { role: 'assistant', content: `Olá! Estou pronto para auxiliar no projeto **${currentProjName}**.` }
-              ]);
+              setChatMessages(currentProjName ? [
+                { role: 'assistant', content: t('app.greeting', { projectName: currentProjName }) }
+              ] : []);
             }}
             chatEndRef={chatEndRef}
             webSearchConfig={webSearchConfig}
@@ -909,6 +971,13 @@ export default function App() {
           installDepsStatus={installDepsStatus}
           installDepsLog={installDepsLog}
           onInstallDeps={handleInstallOptionalDeps}
+          onLanguageChange={(lang) => {
+            fetch('/api/settings/language', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ lang }),
+            }).catch(() => {});
+          }}
         />
       )}
 

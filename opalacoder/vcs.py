@@ -69,7 +69,7 @@ def _init_shadow_git(project_path: str):
     gitignore_path = os.path.join(shadow_base, ".gitignore")
     
     os.makedirs(shadow_base, exist_ok=True)
-    
+
     if not os.path.exists(shadow_dir):
         # Init repo
         cmd = f"git --git-dir={shadow_dir} --work-tree={project_path} init"

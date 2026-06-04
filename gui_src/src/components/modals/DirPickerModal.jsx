@@ -1,8 +1,11 @@
 import React from 'react';
 import { FolderOpen, Folder, Check } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 // Modal for browsing and selecting a directory from the filesystem.
 export default function DirPickerModal({ dirPicker, onNavigate, onConfirm, onClose }) {
+  const { t } = useTranslation();
+
   if (!dirPicker) return null;
 
   return (
@@ -17,7 +20,7 @@ export default function DirPickerModal({ dirPicker, onNavigate, onConfirm, onClo
         {/* Title */}
         <div style={{ color: '#cccccc', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <FolderOpen size={15} style={{ color: '#e8a838' }} />
-          Selecionar Diretório
+          {t('dirPickerModal.title')}
         </div>
 
         {/* Current path */}
@@ -28,7 +31,7 @@ export default function DirPickerModal({ dirPicker, onNavigate, onConfirm, onClo
         {/* Directory list */}
         <div style={{ overflowY: 'auto', flex: 1, border: '1px solid #3c3c3c', borderRadius: '3px', background: '#252526' }}>
           {dirPicker.dirs.length === 0 && (
-            <div style={{ color: '#808080', fontSize: '12px', padding: '12px', textAlign: 'center' }}>Nenhum subdiretório</div>
+            <div style={{ color: '#808080', fontSize: '12px', padding: '12px', textAlign: 'center' }}>{t('dirPickerModal.noSubdirs')}</div>
           )}
           {dirPicker.dirs.map(d => (
             <div
@@ -47,10 +50,10 @@ export default function DirPickerModal({ dirPicker, onNavigate, onConfirm, onClo
         {/* Actions */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
           <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }} onClick={onClose}>
-            Cancelar
+            {t('dirPickerModal.cancel')}
           </button>
           <button type="button" className="vscode-button" style={{ fontSize: '12px' }} onClick={onConfirm}>
-            <Check size={12} /> Selecionar esta pasta
+            <Check size={12} /> {t('dirPickerModal.selectFolder')}
           </button>
         </div>
       </div>

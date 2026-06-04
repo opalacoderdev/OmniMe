@@ -1,5 +1,6 @@
 import React from 'react';
 import { Files, GitBranch, MessageSquare, Settings } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 // Left-side vertical activity bar (VSCode-style icon strip).
 export default function ActivityBar({
@@ -10,13 +11,15 @@ export default function ActivityBar({
   gitChangesCount,
   onOpenSettings,
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="vscode-activitybar">
       <div className="vscode-activitybar-top">
         <button
           onClick={() => setActiveSidebarTab(activeSidebarTab === 'explorer' ? null : 'explorer')}
           className={`vscode-activitybar-btn ${activeSidebarTab === 'explorer' ? 'active' : ''}`}
-          title="Explorer"
+          title={t('activityBar.explorer')}
         >
           <Files size={22} />
         </button>
@@ -24,7 +27,7 @@ export default function ActivityBar({
         <button
           onClick={() => setActiveSidebarTab(activeSidebarTab === 'git' ? null : 'git')}
           className={`vscode-activitybar-btn ${activeSidebarTab === 'git' ? 'active' : ''}`}
-          title="Source Control"
+          title={t('activityBar.sourceControl')}
           style={{ position: 'relative' }}
         >
           <GitBranch size={22} />
@@ -53,7 +56,7 @@ export default function ActivityBar({
         <button
           onClick={() => setIsChatVisible(!isChatVisible)}
           className={`vscode-activitybar-btn ${isChatVisible ? 'active' : ''}`}
-          title="Opala Chat"
+          title={t('activityBar.opalaCodes')}
         >
           <MessageSquare size={22} />
         </button>
@@ -63,7 +66,7 @@ export default function ActivityBar({
         <button
           onClick={onOpenSettings}
           className="vscode-activitybar-btn"
-          title="Settings"
+          title={t('activityBar.settings')}
         >
           <Settings size={20} />
         </button>

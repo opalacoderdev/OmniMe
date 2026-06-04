@@ -779,7 +779,113 @@ class AsyncHTTPServer:
                 self.send_response(writer, 200, b'{"success":true}', "application/json")
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
-        # 7g. Install Optional Dependencies (Streaming)
+        # 7g. Git diff (single file or full)
+        elif path == '/api/git/diff':
+            project_path = query.get('projectPath', [None])[0]
+            file_path_param = query.get('filePath', [None])[0]
+            if not project_path or not os.path.exists(project_path):
+                self.send_response(writer, 400, b'{"error":"Invalid project path"}', "application/json")
+                return
+            import subprocess
+            try:
+                diff = ""
+                if file_path_param:
+                    # Check if file is untracked
+                    ls = subprocess.run(
+                        ["git", "ls-files", "--", file_path_param],
+                        cwd=project_path, capture_output=True, text=True
+                    )
+                    full_path = os.path.join(project_path, file_path_param)
+                    if not ls.stdout.strip() and os.path.isfile(full_path):
+                        # Untracked file: show as new file diff
+                        res = subprocess.run(
+                            ["git", "diff", "--no-index", "/dev/null", file_path_param],
+                            cwd=project_path, capture_output=True, text=True
+                        )
+                        diff = res.stdout
+                    elif not ls.stdout.strip() and os.path.isdir(full_path):
+                        diff = f"(diretório não rastreado: {file_path_param})"
+                    else:
+                        res = subprocess.run(["git", "diff", "--", file_path_param], cwd=project_path, capture_output=True, text=True)
+                        res_staged = subprocess.run(["git", "diff", "--cached", "--", file_path_param], cwd=project_path, capture_output=True, text=True)
+                        diff = res.stdout + res_staged.stdout
+                else:
+                    res = subprocess.run(["git", "diff"], cwd=project_path, capture_output=True, text=True)
+                    res_staged = subprocess.run(["git", "diff", "--cached"], cwd=project_path, capture_output=True, text=True)
+                    diff = res.stdout + res_staged.stdout
+                self.send_response(writer, 200, json.dumps({"diff": diff}).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
+        # 7h. Git log
+        elif path == '/api/git/log':
+            project_path = query.get('projectPath', [None])[0]
+            limit = query.get('limit', ['20'])[0]
+            if not project_path or not os.path.exists(project_path):
+                self.send_response(writer, 400, b'{"error":"Invalid project path"}', "application/json")
+                return
+            import subprocess
+            try:
+                res = subprocess.run(
+                    ["git", "log", f"--max-count={limit}", "--pretty=format:%H|%h|%an|%ar|%s"],
+                    cwd=project_path, capture_output=True, text=True
+                )
+                commits = []
+                for line in res.stdout.splitlines():
+                    parts = line.split("|", 4)
+                    if len(parts) == 5:
+                        commits.append({"hash": parts[0], "short": parts[1], "author": parts[2], "date": parts[3], "message": parts[4]})
+                self.send_response(writer, 200, json.dumps({"commits": commits}).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
+        # 7i. Git stage / unstage
+        elif path == '/api/git/stage' and method == 'POST':
+            project_path = data.get("projectPath")
+            file_path_param = data.get("filePath")
+            action = data.get("action", "stage")  # "stage" or "unstage"
+            if not project_path or not file_path_param:
+                self.send_response(writer, 400, b'{"error":"projectPath and filePath required"}', "application/json")
+                return
+            import subprocess
+            try:
+                if action == "stage":
+                    subprocess.run(["git", "add", "--", file_path_param], cwd=project_path, check=True)
+                else:
+                    subprocess.run(["git", "restore", "--staged", "--", file_path_param], cwd=project_path, check=True)
+                self.send_response(writer, 200, b'{"success":true}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
+        # 7j. Git discard changes
+        elif path == '/api/git/discard' and method == 'POST':
+            project_path = data.get("projectPath")
+            file_path_param = data.get("filePath")
+            if not project_path or not file_path_param:
+                self.send_response(writer, 400, b'{"error":"projectPath and filePath required"}', "application/json")
+                return
+            import subprocess
+            try:
+                # For untracked files, remove them; for tracked files, restore
+                res = subprocess.run(
+                    ["git", "ls-files", "--error-unmatch", "--", file_path_param],
+                    cwd=project_path, capture_output=True
+                )
+                if res.returncode != 0:
+                    # Untracked — delete file or directory
+                    import shutil
+                    full = os.path.join(project_path, file_path_param)
+                    if os.path.isdir(full):
+                        shutil.rmtree(full)
+                    elif os.path.exists(full):
+                        os.remove(full)
+                else:
+                    subprocess.run(["git", "restore", "--", file_path_param], cwd=project_path, check=True)
+                self.send_response(writer, 200, b'{"success":true}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
+        # 7k. Install Optional Dependencies (Streaming)
         elif path == '/api/settings/install-dependencies' and method == 'POST':
             headers = (
                 "HTTP/1.1 200 OK\r\n"
@@ -903,6 +1009,23 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
+        # 7m. Language — GET
+        elif path == '/api/settings/language' and method == 'GET':
+            from opalacoder.ui_settings import load_ui_settings
+            cfg = load_ui_settings()
+            self.send_response(writer, 200, json.dumps({"lang": cfg.get("lang", "")}).encode('utf-8'), "application/json")
+
+        # 7n. Language — POST (set)
+        elif path == '/api/settings/language' and method == 'POST':
+            from opalacoder.i18n import set_lang
+            from opalacoder.ui_settings import save_ui_settings
+            lang = data.get("lang", "")
+            save_ui_settings({"lang": lang})
+            # map frontend locale to backend lang key
+            backend_lang = "pt" if (lang or "").startswith("pt") else "en"
+            set_lang(backend_lang)
+            self.send_response(writer, 200, b'{"success":true}', "application/json")
+
         # 7l. Web search MCP test
         elif path == '/api/settings/web-search/test' and method == 'POST':
             from opalacoder.web_search_config import test_mcp
@@ -919,6 +1042,15 @@ class AsyncHTTPServer:
             self.send_response(writer, 404, b'{"error":"Not Found"}', "application/json")
 
 def start_gui_server(host="127.0.0.1", port=3000):
+    from opalacoder.config import DEFAULT_LANG
+    from opalacoder.i18n import set_lang
+    from opalacoder.ui_settings import load_ui_settings
+    saved_lang = load_ui_settings().get("lang", "")
+    if saved_lang:
+        backend_lang = "pt" if saved_lang.startswith("pt") else "en"
+        set_lang(backend_lang)
+    else:
+        set_lang(DEFAULT_LANG)
     # Path to gui directory inside opalacoder package
     package_dir = os.path.dirname(os.path.abspath(__file__))
     static_dir = os.path.join(package_dir, "gui")

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { formatMessageContent } from '../utils/formatMessage';
 import { useTextContextMenu } from '../hooks/useTextContextMenu.js';
 import TextContextMenu from './TextContextMenu.jsx';
@@ -21,6 +22,7 @@ export default function ChatPanel({
   webSearchConfig,
   setWebSearchConfig,
 }) {
+  const { t } = useTranslation();
   const historyRef = useRef(null);
   const { menu, onContextMenu, handleCopy, handlePaste, handleSelectAll } = useTextContextMenu();
 
@@ -174,13 +176,13 @@ export default function ChatPanel({
       <div className="vscode-chat-header">
         <span className="vscode-sidebar-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <MessageSquare size={12} style={{ color: '#007acc' }} />
-          <span>OPALA CHAT</span>
+          <span>{t('chatPanel.header')}</span>
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             onClick={onClearChat}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
-            title="Limpar chat (Varrer)"
+            title={t('chatPanel.clearChat')}
           >
             <Eraser size={14} />
           </button>
@@ -225,9 +227,9 @@ export default function ChatPanel({
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Globe size={12} style={{ color: searchEnabled ? '#4ec9b0' : '#666' }} />
           <span style={{ fontSize: '11px', color: searchEnabled ? '#ccc' : '#666', userSelect: 'none' }}>
-            Web Search
+            {t('chatPanel.webSearch')}
             {hasMcp && searchEnabled && (
-              <span style={{ marginLeft: '4px', fontSize: '10px', color: '#888' }}>(MCP)</span>
+              <span style={{ marginLeft: '4px', fontSize: '10px', color: '#888' }}>{t('chatPanel.mcpIndicator')}</span>
             )}
           </span>
         </div>
@@ -235,7 +237,7 @@ export default function ChatPanel({
           {/* Settings / MCP gear button */}
           <button
             onClick={handleOpenMcp}
-            title="Configurar MCP de busca"
+            title={t('chatPanel.configureMcp')}
             style={{
               background: 'transparent',
               border: 'none',
@@ -252,7 +254,7 @@ export default function ChatPanel({
           <button
             id="web-search-toggle"
             onClick={handleToggleWebSearch}
-            title={searchEnabled ? 'Desabilitar Web Search' : 'Habilitar Web Search'}
+            title={searchEnabled ? t('chatPanel.disableWebSearch') : t('chatPanel.enableWebSearch')}
             style={{
               background: 'transparent',
               border: 'none',
@@ -310,18 +312,18 @@ export default function ChatPanel({
               style={{ cursor: 'pointer' }}
             />
             <label htmlFor="use-mcp-checkbox" style={{ fontSize: '11px', color: '#ccc', cursor: 'pointer', userSelect: 'none' }}>
-              Use custom MCP Server
+              {t('chatPanel.useMcpServer')}
             </label>
           </div>
 
-          <label style={{ fontSize: '10px', color: useMcpDraft ? '#aaa' : '#555' }}>Server URL</label>
+          <label style={{ fontSize: '10px', color: useMcpDraft ? '#aaa' : '#555' }}>{t('chatPanel.serverUrl')}</label>
           <input
             id="mcp-url-input"
             type="text"
             value={mcpUrlDraft}
             disabled={!useMcpDraft}
             onChange={e => { setMcpUrlDraft(e.target.value); setMcpTestStatus(''); }}
-            placeholder="http://localhost:8080/mcp"
+            placeholder={t('chatPanel.mcpUrlPlaceholder')}
             style={{
               fontSize: '11px',
               padding: '3px 6px',
@@ -333,14 +335,14 @@ export default function ChatPanel({
             }}
           />
 
-          <label style={{ fontSize: '10px', color: useMcpDraft ? '#aaa' : '#555' }}>Tool name</label>
+          <label style={{ fontSize: '10px', color: useMcpDraft ? '#aaa' : '#555' }}>{t('chatPanel.toolName')}</label>
           <input
             id="mcp-tool-input"
             type="text"
             value={mcpToolDraft}
             disabled={!useMcpDraft}
             onChange={e => { setMcpToolDraft(e.target.value); setMcpTestStatus(''); }}
-            placeholder="web_search"
+            placeholder={t('chatPanel.mcpToolPlaceholder')}
             style={{
               fontSize: '11px',
               padding: '3px 6px',
@@ -352,14 +354,14 @@ export default function ChatPanel({
             }}
           />
 
-          <label style={{ fontSize: '10px', color: useMcpDraft ? '#aaa' : '#555' }}>API Key (optional)</label>
+          <label style={{ fontSize: '10px', color: useMcpDraft ? '#aaa' : '#555' }}>{t('chatPanel.apiKeyOptional')}</label>
           <input
             id="mcp-api-key-input"
             type="password"
             value={mcpApiKeyDraft}
             disabled={!useMcpDraft}
             onChange={e => { setMcpApiKeyDraft(e.target.value); setMcpTestStatus(''); }}
-            placeholder="Bearer token or empty"
+            placeholder={t('chatPanel.mcpApiKeyPlaceholder')}
             style={{
               fontSize: '11px',
               padding: '3px 6px',
@@ -386,7 +388,7 @@ export default function ChatPanel({
                 cursor: (useMcpDraft && mcpUrlDraft.trim()) ? 'pointer' : 'not-allowed',
               }}
             >
-              {mcpTestStatus === 'testing' ? '...' : 'Test'}
+              {mcpTestStatus === 'testing' ? '...' : t('chatPanel.test')}
             </button>
             <button
               id="mcp-save-btn"
@@ -401,7 +403,7 @@ export default function ChatPanel({
                 cursor: 'pointer',
               }}
             >
-              Save
+              {t('chatPanel.save')}
             </button>
             <button
               onClick={() => { setShowMcpPanel(false); setMcpTestStatus(''); }}
@@ -414,7 +416,7 @@ export default function ChatPanel({
                 cursor: 'pointer',
               }}
             >
-              Cancel
+              {t('chatPanel.cancel')}
             </button>
           </div>
 
@@ -428,8 +430,8 @@ export default function ChatPanel({
               }}
             >
               {mcpTestStatus === 'ok'
-                ? '✅ Connection OK'
-                : `❌ ${mcpTestStatus.replace('error:', '')}`}
+                ? t('chatPanel.connectionOk')
+                : t('chatPanel.connectionError', { error: mcpTestStatus.replace('error:', '') })}
             </div>
           )}
         </div>
@@ -445,7 +447,7 @@ export default function ChatPanel({
                 className="vscode-chat-msg-header"
                 style={{ color: isUser ? '#75beff' : '#da70d6' }}
               >
-                {isUser ? 'VOCÊ' : 'OPALACODER'}
+                {isUser ? t('chatPanel.you') : t('chatPanel.opalacoder')}
               </span>
               <div className="vscode-chat-msg-content">
                 {formatMessageContent(msg.content)}
@@ -456,7 +458,7 @@ export default function ChatPanel({
 
         {isAgentRunning && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span className="vscode-chat-msg-header" style={{ color: '#da70d6' }}>OPALACODER</span>
+            <span className="vscode-chat-msg-header" style={{ color: '#da70d6' }}>{t('chatPanel.opalacoder')}</span>
             <div className="vscode-chat-msg-content">
               <div className="thinking-indicator">
                 <span className="dot" />
@@ -479,9 +481,9 @@ export default function ChatPanel({
             onKeyDown={handleKeyDown}
             disabled={!activeProject || isAgentRunning}
             placeholder={
-              !activeProject ? 'Defina um projeto...' :
-              isAgentRunning ? 'Pensando...' :
-              'Pergunte ao OpalaCoder...'
+              !activeProject ? t('chatPanel.setProjectFirst') :
+              isAgentRunning ? t('chatPanel.thinking') :
+              t('chatPanel.askOpalaCoder')
             }
             style={{ flex: 1 }}
           />
@@ -491,7 +493,7 @@ export default function ChatPanel({
               onClick={handleInterruptAgent}
               className="vscode-button"
               style={{ padding: '6px', backgroundColor: '#f48771', color: '#1e1e1e' }}
-              title="Interromper agente"
+              title={t('chatPanel.interruptAgent')}
             >
               <X size={14} />
             </button>

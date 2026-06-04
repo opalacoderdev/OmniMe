@@ -1,7 +1,10 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 // Modal displayed when the backend emits an input_request (Yes/No confirmation).
 export default function ConfirmModal({ confirmRequest, onConfirm }) {
+  const { t } = useTranslation();
+
   if (!confirmRequest) return null;
 
   return (
@@ -24,7 +27,7 @@ export default function ConfirmModal({ confirmRequest, onConfirm }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
           <span style={{ fontSize: '22px' }}>🔔</span>
           <span style={{ fontSize: '12px', fontWeight: 700, color: '#a0a0c0', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            Confirmação Necessária
+            {t('confirmModal.title')}
           </span>
         </div>
 
@@ -46,7 +49,7 @@ export default function ConfirmModal({ confirmRequest, onConfirm }) {
             onMouseEnter={e => { e.target.style.background = '#2c2c3c'; e.target.style.color = '#e0e0f0'; }}
             onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = '#a0a0c0'; }}
           >
-            Não
+            {t('confirmModal.no')}
           </button>
           <button
             id="confirm-yes-btn"
@@ -62,7 +65,7 @@ export default function ConfirmModal({ confirmRequest, onConfirm }) {
             onMouseEnter={e => { e.target.style.background = 'linear-gradient(135deg, #0090f0, #007acc)'; }}
             onMouseLeave={e => { e.target.style.background = 'linear-gradient(135deg, #007acc, #0062a3)'; }}
           >
-            Sim
+            {t('confirmModal.yes')}
           </button>
         </div>
       </div>

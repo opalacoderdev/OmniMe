@@ -1,6 +1,9 @@
 import React from 'react';
 import { X, Settings } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n/index.js';
 import { safeSetLocalStorage } from '../../utils/storage';
+// Language preference is persisted server-side via /api/settings/language (survives webview restarts)
 
 // IDE global settings modal (theme, font size, tab size, word wrap, optional deps).
 export default function SettingsModal({
@@ -19,7 +22,18 @@ export default function SettingsModal({
   installDepsStatus,
   installDepsLog,
   onInstallDeps,
+  onLanguageChange,
 }) {
+  const { t } = useTranslation();
+  const [selectedLang, setSelectedLang] = React.useState('');
+
+  React.useEffect(() => {
+    fetch('/api/settings/language')
+      .then(r => r.ok ? r.json() : null)
+      .then(cfg => { if (cfg?.lang !== undefined) setSelectedLang(cfg.lang); })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="vscode-modal-overlay">
       <div className="vscode-modal" style={{ maxWidth: '440px', width: '90%' }}>
@@ -27,7 +41,7 @@ export default function SettingsModal({
         <div className="vscode-sidebar-header" style={{ padding: '10px 16px' }}>
           <span className="vscode-sidebar-title" style={{ color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Settings size={14} style={{ color: '#007acc' }} />
-            CONFIGURAÇÕES DA IDE
+            {t('settingsModal.title')}
           </span>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}>
             <X size={14} />
@@ -49,7 +63,7 @@ export default function SettingsModal({
                 fontWeight: 'bold', fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer',
               }}
             >
-              {tab === 'preferences' ? 'Preferências' : 'Sobre'}
+              {tab === 'preferences' ? t('settingsModal.tabPreferences') : t('settingsModal.tabAbout')}
             </button>
           ))}
         </div>
@@ -57,18 +71,37 @@ export default function SettingsModal({
         <div className="flex flex-col overflow-y-auto flex-1" style={{ padding: '16px', gap: '14px' }}>
           {settingsTab === 'preferences' ? (
             <>
+              {/* Language */}
+              <div className="flex flex-col" style={{ gap: '6px' }}>
+                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.language')}</label>
+                <select
+                  value={selectedLang}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedLang(val);
+                    i18n.changeLanguage(val || navigator.language || 'en');
+                    if (onLanguageChange) onLanguageChange(val);
+                  }}
+                  style={{ width: '100%' }}
+                >
+                  <option value="">{t('settingsModal.languageSystem')}</option>
+                  <option value="pt-BR">{t('settingsModal.languagePtBR')}</option>
+                  <option value="en">{t('settingsModal.languageEn')}</option>
+                </select>
+              </div>
+
               {/* Theme */}
               <div className="flex flex-col" style={{ gap: '6px' }}>
-                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Tema de Cor</label>
+                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.colorTheme')}</label>
                 <select value={theme} onChange={(e) => setTheme(e.target.value)} style={{ width: '100%' }}>
-                  <option value="dark">Escuro (Dark Mode)</option>
-                  <option value="light">Claro (Light Mode)</option>
+                  <option value="dark">{t('settingsModal.themeDark')}</option>
+                  <option value="light">{t('settingsModal.themeLight')}</option>
                 </select>
               </div>
 
               {/* Font size */}
               <div className="flex flex-col" style={{ gap: '6px' }}>
-                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Tamanho da Fonte do Editor</label>
+                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.editorFontSize')}</label>
                 <input
                   type="number" min="10" max="30" value={editorFontSize}
                   onChange={(e) => { const val = Number(e.target.value); setEditorFontSize(val); safeSetLocalStorage('editorFontSize', val); }}
@@ -78,35 +111,35 @@ export default function SettingsModal({
 
               {/* Tab size */}
               <div className="flex flex-col" style={{ gap: '6px' }}>
-                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Tamanho do Tab (Espaços)</label>
+                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.tabSize')}</label>
                 <select value={editorTabSize} onChange={(e) => { const val = Number(e.target.value); setEditorTabSize(val); safeSetLocalStorage('editorTabSize', val); }} style={{ width: '100%' }}>
-                  <option value={2}>2 Espaços</option>
-                  <option value={4}>4 Espaços</option>
-                  <option value={8}>8 Espaços</option>
+                  <option value={2}>{t('settingsModal.twoSpaces')}</option>
+                  <option value={4}>{t('settingsModal.fourSpaces')}</option>
+                  <option value={8}>{t('settingsModal.eightSpaces')}</option>
                 </select>
               </div>
 
               {/* Word wrap */}
               <div className="flex flex-col" style={{ gap: '6px' }}>
-                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Quebra Automática de Linha (Word Wrap)</label>
+                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.wordWrap')}</label>
                 <select value={editorWordWrap} onChange={(e) => { setEditorWordWrap(e.target.value); safeSetLocalStorage('editorWordWrap', e.target.value); }} style={{ width: '100%' }}>
-                  <option value="on">Ativado (On)</option>
-                  <option value="off">Desativado (Off)</option>
+                  <option value="on">{t('settingsModal.wordWrapOn')}</option>
+                  <option value="off">{t('settingsModal.wordWrapOff')}</option>
                 </select>
               </div>
 
               {/* Optional dependencies */}
               <div className="flex flex-col" style={{ gap: '6px', borderTop: '1px solid var(--vscode-border)', paddingTop: '12px', marginTop: '6px' }}>
-                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Dependências Opcionais</label>
+                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.optionalDeps')}</label>
                 <span style={{ fontSize: '11px', color: '#888888', lineHeight: '1.4' }}>
-                  Instale recursos extras (Local Embeddings, PyTorch, CUDA, etc.) que otimizam o processamento off-line.
+                  {t('settingsModal.optionalDepsHint')}
                 </span>
                 <button type="button" className="vscode-button" disabled={isInstallingDeps} onClick={onInstallDeps} style={{ width: '100%', marginTop: '6px' }}>
-                  {isInstallingDeps ? 'Instalando...' : 'Instalar Recursos Opcionais'}
+                  {isInstallingDeps ? t('settingsModal.installingDeps') : t('settingsModal.installDeps')}
                 </button>
                 {installDepsStatus && (
-                  <span style={{ fontSize: '11px', fontWeight: 'bold', color: installDepsStatus.includes('Erro') || installDepsStatus.includes('Falha') ? '#f48771' : '#73c991', marginTop: '4px' }}>
-                    Status: {installDepsStatus}
+                  <span style={{ fontSize: '11px', fontWeight: 'bold', color: installDepsStatus.includes('Erro') || installDepsStatus.includes('Falha') || installDepsStatus.includes('Error') || installDepsStatus.includes('Fail') ? '#f48771' : '#73c991', marginTop: '4px' }}>
+                    {t('settingsModal.installStatus', { status: installDepsStatus })}
                   </span>
                 )}
                 {installDepsLog && (
@@ -117,15 +150,15 @@ export default function SettingsModal({
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#cccccc' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Versão</span>
+                <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.version')}</span>
                 <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffffff' }}>0.2.3.4 ALFA</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Autor</span>
+                <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.author')}</span>
                 <span style={{ fontSize: '13px', color: '#ffffff' }}>dev@opala.com</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>Licença</span>
+                <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.license')}</span>
                 <span style={{ fontSize: '13px', color: '#ffffff' }}>MIT</span>
               </div>
             </div>
@@ -134,7 +167,7 @@ export default function SettingsModal({
 
         {/* Footer */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 16px', gap: '8px', borderTop: '1px solid var(--vscode-border)', backgroundColor: 'var(--vscode-sidebar-bg)' }}>
-          <button onClick={onClose} className="vscode-button">Fechar</button>
+          <button onClick={onClose} className="vscode-button">{t('settingsModal.close')}</button>
         </div>
       </div>
     </div>

@@ -16,9 +16,12 @@
     "@xterm/xterm": "^6.0.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "i18next": "^26.3.1",
+    "i18next-browser-languagedetector": "^8.2.1",
     "lucide-react": "^0.378.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-i18next": "^17.0.8"
   },
   "devDependencies": {
     "@monaco-editor/react": "^4.6.0",
