@@ -220,7 +220,18 @@ export default function App() {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const addLog = (type, message) =>
-    setTerminalLogs(prev => [...prev, { type, message, timestamp: new Date().toLocaleTimeString() }]);
+    setTerminalLogs(prev => {
+      if (prev.length > 0) {
+        const last = prev[prev.length - 1];
+        if (last.type === type && (type === 'thought' || type === 'stdout' || type === 'stderr')) {
+          return [
+            ...prev.slice(0, -1),
+            { ...last, message: last.message + message }
+          ];
+        }
+      }
+      return [...prev, { type, message, timestamp: new Date().toLocaleTimeString() }];
+    });
 
   // ── API calls ─────────────────────────────────────────────────────────────
   const fetchProjects = async () => {
@@ -559,8 +570,30 @@ export default function App() {
     switch (event) {
       case 'server_ready': addLog('info', 'Agente pronto.'); break;
       case 'agent_started': addLog('info', `Agente ${data.agent} iniciado.`); break;
-      case 'thought': addLog('thought', data.content); setThinkingLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'THINKING', content: data.content }]); break;
-      case 'reflection': addLog('thought', data.content); setThinkingLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'REFLECTION', content: data.content }]); break;
+      case 'thought':
+        addLog('thought', data.content);
+        setThinkingLogs(prev => {
+          if (prev.length > 0) {
+            const last = prev[prev.length - 1];
+            if (last.type === 'THINKING') {
+              return [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
+            }
+          }
+          return [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'THINKING', content: data.content }];
+        });
+        break;
+      case 'reflection':
+        addLog('thought', data.content);
+        setThinkingLogs(prev => {
+          if (prev.length > 0) {
+            const last = prev[prev.length - 1];
+            if (last.type === 'REFLECTION') {
+              return [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
+            }
+          }
+          return [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'REFLECTION', content: data.content }];
+        });
+        break;
       case 'cancelled': addLog('warning', data.message || 'Execução cancelada.'); setChatMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Interrompido: ${data.message || 'A execução do agente foi parada.'}` }]); break;
       case 'tool_call': addLog('tool_call', `Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`); break;
       case 'tool_result': addLog('tool_result', `Sucesso: ${data.tool}`); break;

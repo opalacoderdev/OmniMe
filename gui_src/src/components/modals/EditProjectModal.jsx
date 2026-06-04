@@ -298,7 +298,7 @@ export default function EditProjectModal({
                     <div className="flex flex-col" style={{ gap: '4px' }}>
                       <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Response Mode (MemGPT)</label>
                       <select
-                        value={editingProject.model_params?.response_mode ?? 'all'}
+                        value={editingProject.model_params?.response_mode ?? 'last'}
                         onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, response_mode: e.target.value } }))}
                         style={{ backgroundColor: '#3c3c3c', color: '#cccccc', border: '1px solid #555', borderRadius: '3px', padding: '4px 6px', fontSize: '12px' }}
                       >

@@ -110,7 +110,7 @@ class TerminalSession:
             return
         try:
             if sys.platform == "win32":
-                self.process.set_size(cols, rows)
+                self.process.setwinsize(rows, cols)
             else:
                 if self.master_fd is not None:
                     import termios
