@@ -27,6 +27,7 @@ import EditProjectModal from './components/modals/EditProjectModal';
 import SettingsModal from './components/modals/SettingsModal';
 import ConfirmModal from './components/modals/ConfirmModal';
 import HardwareModal from './components/modals/HardwareModal';
+import OnboardingModal from './components/modals/OnboardingModal';
 import DirPickerModal from './components/modals/DirPickerModal';
 import DeleteProjectModal from './components/modals/DeleteProjectModal';
 
@@ -103,6 +104,7 @@ export default function App() {
   const [isHardwareModalOpen, setIsHardwareModalOpen] = useState(false);
   const [webSearchConfig, setWebSearchConfig] = useState({ enabled: true, mcp_url: '', mcp_tool: 'web_search' });
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // ── IDE settings ──────────────────────────────────────────────────────────
   const [settingsTab, setSettingsTab] = useState('preferences');
@@ -143,7 +145,21 @@ export default function App() {
   useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight, isTerminalCollapsed });
 
   // ── Effects ───────────────────────────────────────────────────────────────
-  useEffect(() => { fetchProjects(); }, []);
+  useEffect(() => { 
+    fetch('/api/onboarding/status')
+      .then(res => res.json())
+      .then(data => {
+        if (!data.completed) {
+          setShowOnboarding(true);
+        } else {
+          fetchProjects();
+        }
+      })
+      .catch(() => {
+        // Fallback if endpoint fails
+        fetchProjects();
+      });
+  }, []);
 
   useEffect(() => {
     fetch('/api/settings/web-search')
@@ -1376,6 +1392,16 @@ export default function App() {
 
       {isHardwareModalOpen && (
         <HardwareModal onClose={() => setIsHardwareModalOpen(false)} />
+      )}
+
+      {showOnboarding && (
+        <OnboardingModal 
+          onClose={() => setShowOnboarding(false)} 
+          onComplete={() => {
+            setShowOnboarding(false);
+            fetchProjects();
+          }}
+        />
       )}
 
       <ConfirmModal confirmRequest={confirmRequest} onConfirm={sendConfirmResponse} />

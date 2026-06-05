@@ -527,6 +527,20 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
+        # Onboarding / Ollama status endpoints
+        elif path == '/api/onboarding/status' and method == 'GET':
+            from opalacoder.onboarding import is_onboarding_completed
+            self.send_response(writer, 200, json.dumps({"completed": is_onboarding_completed()}).encode('utf-8'), "application/json")
+        elif path == '/api/onboarding/complete' and method == 'POST':
+            from opalacoder.onboarding import complete_onboarding
+            self.send_response(writer, 200, json.dumps({"success": complete_onboarding()}).encode('utf-8'), "application/json")
+        elif path == '/api/ollama/status' and method == 'GET':
+            from opalacoder.ollama_manager import check_ollama_status
+            self.send_response(writer, 200, json.dumps(check_ollama_status()).encode('utf-8'), "application/json")
+        elif path == '/api/ollama/install' and method == 'POST':
+            from opalacoder.ollama_manager import install_ollama_windows
+            self.send_response(writer, 200, json.dumps(install_ollama_windows()).encode('utf-8'), "application/json")
+
         elif path == '/api/models/info' and method == 'GET':
             model_name = query.get('model', [''])[0]
             if not model_name:
@@ -592,7 +606,7 @@ class AsyncHTTPServer:
                 self.send_response(writer, 400, b'{"error":"project_name is required"}', "application/json")
                 return
                 
-            abs_path = os.path.abspath(project_path) if project_path else os.getcwd()
+            abs_path = os.path.abspath(os.path.expanduser(project_path)) if project_path else os.getcwd()
             if os.path.exists(abs_path):
                 if not os.path.isdir(abs_path):
                     self.send_response(writer, 400, json.dumps({"error": f"The path '{project_path}' exists but is not a directory."}).encode('utf-8'), "application/json")
@@ -623,13 +637,25 @@ class AsyncHTTPServer:
                     mode=mode,
                     model=model,
                     project_name=project_name,
-                    project_path=os.path.abspath(project_path),
+                    project_path=abs_path,
                     skills=skills,
                     description=description,
                     api_key=api_key,
                     api_base=api_base,
                     model_params=model_params,
                 )
+                
+                if "piloto" in project_name.lower() or "pilot" in project_name.lower():
+                    from opalacoder.onboarding import PILOT_SKILL_CONTENT
+                    from opalacoder.skills import write_skills_yaml
+                    skill_dir = os.path.join(abs_path, ".opalacoder", "skills", "tutorial_opalacoder")
+                    os.makedirs(skill_dir, exist_ok=True)
+                    with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
+                        f.write(PILOT_SKILL_CONTENT.strip() + "\n")
+                    
+                    # Activate the skill
+                    write_skills_yaml(abs_path, ["tutorial_opalacoder"])
+
                 res_data = {
                     "project_name": project.project_name,
                     "project_path": project.project_path,

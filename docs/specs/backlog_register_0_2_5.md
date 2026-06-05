@@ -89,7 +89,7 @@
 
 7. Inicializar configurações padrão do projeto com um modelo do ollama compatível com a máquina do usuário. ✅
 
-8. Ao executar o software pela primeira vez, sugerir intalar o ollama (executar instalação via comando de instalação -- no window: irm https://ollama.com/install.ps1 | iex); no Linux: curl -fsSL https://ollama.com/install.sh | sh; no macosx:curl -fsSL https://ollama.com/install.sh | sh . se ainda não instalado (verificar complexidade e portabildiade dessa funcionalidade). Seria interessante instruir o usuário ou instalar por ele?
+8. Ao executar o software pela primeira vez, sugerir intalar o ollama (executar instalação via comando de instalação -- no window: irm https://ollama.com/install.ps1 | iex); no Linux: curl -fsSL https://ollama.com/install.sh | sh; no macosx:curl -fsSL https://ollama.com/install.sh | sh . se ainda não instalado (verificar complexidade e portabildiade dessa funcionalidade). Seria interessante instruir o usuário ou instalar por ele? ✅
 
 9. Instalador autocontido para linux e windows.
 
