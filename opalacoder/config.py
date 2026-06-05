@@ -41,7 +41,7 @@ _AGENTS_CONFIG = _load_yaml("agents.yaml")
 _APP_CONFIG = _load_yaml("config.yaml")
 
 # Model used for all agents (can be overridden via CLI --model)
-DEFAULT_MODEL = _AGENTS_CONFIG.get("default", os.getenv("OPALA_MODEL", "ollama/ministral-3:14b"))
+DEFAULT_MODEL = _AGENTS_CONFIG.get("default", os.getenv("OPALA_MODEL", "ollama/gemma4:12b"))
 ALTERNATIVE_MODEL = _AGENTS_CONFIG.get("alternative", "gemini/gemini-3.1-flash-lite")
 
 # Global LLM defaults (temperature, max_tokens, num_ctx) — can be set in agents.yaml
@@ -142,8 +142,15 @@ def get_agent_llm_kwargs(agent_name: str) -> dict:
 
     try:
         from .tools import _PROJECT_SESSION
-        if _PROJECT_SESSION and hasattr(_PROJECT_SESSION, "model_params") and _PROJECT_SESSION.model_params:
-            merged.update(_PROJECT_SESSION.model_params)
+        if _PROJECT_SESSION:
+            if hasattr(_PROJECT_SESSION, "model_params") and _PROJECT_SESSION.model_params:
+                clean_params = {k: v for k, v in _PROJECT_SESSION.model_params.items() if v is not None}
+                merged.update(clean_params)
+            
+            if getattr(_PROJECT_SESSION, "api_base", None):
+                merged["api_base"] = _PROJECT_SESSION.api_base
+            if getattr(_PROJECT_SESSION, "api_key", None):
+                merged["api_key"] = _PROJECT_SESSION.api_key
     except Exception:
         pass
 
@@ -173,11 +180,12 @@ def get_project_agent_params() -> dict:
     """Return agent constructor overrides stored in the current project's model_params.
 
     Only keys that belong to _AGENT_PARAM_KEYS are returned; LiteLLM kwargs are excluded.
+    None values are filtered out so they don't override defaults with None.
     """
     try:
         from .tools import _PROJECT_SESSION
         if _PROJECT_SESSION and hasattr(_PROJECT_SESSION, "model_params") and _PROJECT_SESSION.model_params:
-            return {k: v for k, v in _PROJECT_SESSION.model_params.items() if k in _AGENT_PARAM_KEYS}
+            return {k: v for k, v in _PROJECT_SESSION.model_params.items() if k in _AGENT_PARAM_KEYS and v is not None}
     except Exception:
         pass
     return {}

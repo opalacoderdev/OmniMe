@@ -15,6 +15,14 @@ def _make_llm(name: str, system_prompt: str, model: str | None, disable_lang_rul
 
     # Start from per-agent config, then apply any explicit caller overrides (caller wins)
     merged_kwargs = {**get_agent_llm_kwargs(name), **kwargs.get("model_kwargs", {})}
+    
+    if merged_kwargs.get("api_base"):
+        if resolved_model.startswith("ollama/") or resolved_model.startswith("ollama_chat/"):
+            if merged_kwargs["api_base"].endswith("/v1"):
+                merged_kwargs["api_base"] = merged_kwargs["api_base"][:-3]
+            elif merged_kwargs["api_base"].endswith("/v1/"):
+                merged_kwargs["api_base"] = merged_kwargs["api_base"][:-4]
+                
     kwargs["model_kwargs"] = merged_kwargs
 
     # Apply project-level agent constructor overrides (e.g. max_iterations, debug)

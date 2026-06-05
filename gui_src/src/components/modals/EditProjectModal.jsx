@@ -113,13 +113,14 @@ export default function EditProjectModal({
                 list="edit-models"
                 value={editingProject.model}
                 onChange={e => setEditingProject(p => ({ ...p, model: e.target.value }))}
+                onBlur={() => onLoadModelConfig(true)}
                 placeholder="gemini/gemini-2.5-flash"
               />
               <datalist id="edit-models">
                 <option value="gemini/gemini-2.5-flash" />
                 <option value="gemini/gemini-2.5-pro" />
                 <option value="openai/gpt-4o" />
-                <option value="ollama/ministral-3:14b" />
+                <option value="ollama/gemma4:12b" />
               </datalist>
             </div>
             <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
@@ -134,7 +135,7 @@ export default function EditProjectModal({
 
           {/* Load refined config */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }} onClick={onLoadModelConfig}>
+            <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }} onClick={() => onLoadModelConfig(false)}>
               {t('editProjectModal.loadRefinedConfig')}
             </button>
             <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }} onClick={() => onOpenDirPicker('export-modelconfig', editingProject.project_path || '~')}>

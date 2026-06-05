@@ -203,37 +203,118 @@ class ProjectStore:
             from .skills import write_skills_yaml
             write_skills_yaml(abs_proj_path, ["command-line"])
 
-            # 3. Write API Key and API Base to local .env if provided
-            if api_key or api_base:
-                env_path = os.path.join(abs_proj_path, ".env")
-                env_lines = []
-                if os.path.isfile(env_path):
-                    try:
-                        with open(env_path, "r", encoding="utf-8") as f:
-                            env_lines = f.readlines()
-                    except Exception:
-                        pass
+            # 3. Write API Key and API Base to local .env
+            env_path = os.path.join(abs_proj_path, ".env")
+            env_lines = []
+            if os.path.isfile(env_path):
+                try:
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        env_lines = f.readlines()
+                except Exception:
+                    pass
+            
+            def upsert_env(var_name, val):
+                for i, line in enumerate(env_lines):
+                    if line.strip().startswith(f"{var_name}="):
+                        env_lines[i] = f"{var_name}={val}\n"
+                        return
+                env_lines.append(f"{var_name}={val}\n")
                 
-                def upsert_env(var_name, val):
-                    for i, line in enumerate(env_lines):
-                        if line.strip().startswith(f"{var_name}="):
-                            env_lines[i] = f"{var_name}={val}\n"
-                            return
-                    env_lines.append(f"{var_name}={val}\n")
-                    
-                if api_key:
-                    upsert_env("OPENAI_API_KEY", api_key)
-                if api_base:
-                    upsert_env("OPENAI_API_BASE", api_base)
-                    
-                with open(env_path, "w", encoding="utf-8") as f:
-                    f.writelines(env_lines)
+            if api_key:
+                upsert_env("OPENAI_API_KEY", api_key)
+            if api_base:
+                upsert_env("OPENAI_API_BASE", api_base)
+                
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(env_lines)
 
             # 4. Initialize VCS shadow git
             from .vcs import get_vcs_strategy
             from .config import get_git_strategy
             vcs = get_vcs_strategy(get_git_strategy(), abs_proj_path)
             vcs.setup()
+            
+            # 5. Pre-install all available modelconfigs from the asset store
+            try:
+                from .assetstore import list_assets, install_asset
+                modelconfigs = list_assets(asset_type="modelconfig")
+                for mcfg in modelconfigs:
+                    try:
+                        install_asset(mcfg, abs_proj_path)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # 6. Apply modelconfig for the selected model
+            try:
+                from .assetstore import _model_to_path
+                import yaml
+                import re
+
+                def normalize_for_match(n: str) -> str:
+                    return re.sub(r'[-:_\s]+', '_', n).lower()
+
+                provider_dir, filename = _model_to_path(model)
+                provider_dir_path = os.path.join(abs_proj_path, '.opalacoder', 'modelsconfig', provider_dir)
+                config_path = os.path.join(provider_dir_path, filename)
+                
+                if not os.path.isfile(config_path):
+                    target_norm = normalize_for_match(filename[:-5])
+                    best_match = None
+                    best_len = 0
+                    if os.path.isdir(provider_dir_path):
+                        for f in os.listdir(provider_dir_path):
+                            if not f.endswith('.yaml'): continue
+                            cand_norm = normalize_for_match(f[:-5])
+                            if target_norm.startswith(cand_norm):
+                                if len(cand_norm) > best_len:
+                                    best_len = len(cand_norm)
+                                    best_match = f
+                    if best_match:
+                        config_path = os.path.join(provider_dir_path, best_match)
+
+                if os.path.isfile(config_path):
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config = yaml.safe_load(f) or {}
+                    
+                    if 'provider' in config:
+                        new_provider = config.pop('provider')
+                        if '/' in model:
+                            _, m_name = model.split('/', 1)
+                        else:
+                            m_name = model
+                        model = f"{new_provider}/{m_name}"
+                    
+                    if 'api_base' in config:
+                        config_api_base = config.pop('api_base')
+                        if not api_base: 
+                            api_base = config_api_base
+                            upsert_env("OPENAI_API_BASE", api_base)
+                            
+                    if 'api_key' in config:
+                        config_api_key = config.pop('api_key')
+                        if not api_key: 
+                            api_key = config_api_key
+                            upsert_env("OPENAI_API_KEY", api_key)
+                            
+                    if 'alternative_model' in config:
+                        alt_model = config.pop('alternative_model')
+                        if not alternative_model:
+                            alternative_model = alt_model
+                            
+                    for k, v in config.items():
+                        if v is not None:
+                            # Only set if it's missing or if the current value is empty/None
+                            if k not in _model_params or _model_params[k] in (None, ""):
+                                _model_params[k] = v
+                    
+                    with open(env_path, "w", encoding="utf-8") as f:
+                        f.writelines(env_lines)
+
+            except Exception:
+                pass
+
         except (OSError, PermissionError):
             pass
 

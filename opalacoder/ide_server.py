@@ -335,17 +335,91 @@ class AsyncHTTPServer:
 
             # Normalise model name: ':' → '__'
             yaml_name = model_name.replace(':', '__') + '.yaml'
-            config_path = os.path.join(
+            provider_dir_path = os.path.join(
                 os.path.abspath(project_path),
-                '.opalacoder', 'modelsconfig', provider_dir, yaml_name
+                '.opalacoder', 'modelsconfig', provider_dir
             )
+            config_path = os.path.join(provider_dir_path, yaml_name)
 
             if not os.path.isfile(config_path):
-                self.send_response(writer, 404, json.dumps({
-                    "found": False,
-                    "message": f"--- ainda não temos parâmetros refinados para este modelo"
-                }).encode('utf-8'), "application/json")
-                return
+                import re
+                def normalize_for_match(name: str) -> str:
+                    return re.sub(r'[-:_\s]+', '_', name).lower()
+                
+                target_norm = normalize_for_match(model_name)
+                best_match = None
+                best_len = 0
+                
+                if os.path.isdir(provider_dir_path):
+                    for file in os.listdir(provider_dir_path):
+                        if not file.endswith('.yaml'): continue
+                        cand_name = file[:-5]
+                        cand_norm = normalize_for_match(cand_name)
+                        if target_norm.startswith(cand_norm):
+                            if len(cand_norm) > best_len:
+                                best_len = len(cand_norm)
+                                best_match = file
+                
+                if best_match:
+                    config_path = os.path.join(provider_dir_path, best_match)
+                else:
+                    # Fallback to checking the global assetstore
+                    from opalacoder.assetstore import list_assets
+                    import zipfile
+                    
+                    modelconfigs = list_assets(asset_type="modelconfig")
+                    global_match_meta = None
+                    global_best_len = 0
+                    for mcfg in modelconfigs:
+                        m_id = mcfg.get("model", "")
+                        if not m_id: continue
+                        if '/' in m_id:
+                            _, m_name = m_id.split('/', 1)
+                        else:
+                            m_name = m_id
+                        c_norm = normalize_for_match(m_name)
+                        if target_norm.startswith(c_norm):
+                            if len(c_norm) > global_best_len:
+                                global_best_len = len(c_norm)
+                                global_match_meta = mcfg
+                                
+                    if global_match_meta:
+                        try:
+                            zpath = global_match_meta["_zip"]
+                            import yaml as _yaml
+                            with zipfile.ZipFile(zpath, "r") as zf:
+                                yaml_files = [n for n in zf.namelist() if n.endswith('.yaml')]
+                                if len(yaml_files) == 1:
+                                    with zf.open(yaml_files[0]) as yf:
+                                        config = _yaml.safe_load(yf) or {}
+                                        
+                                        # "Install" this config into the project's local folder
+                                        try:
+                                            os.makedirs(provider_dir_path, exist_ok=True)
+                                            with open(os.path.join(provider_dir_path, yaml_name), "w", encoding="utf-8") as out_f:
+                                                _yaml.dump(config, out_f, allow_unicode=True, default_flow_style=False)
+                                        except Exception:
+                                            pass
+
+                                        new_model = None
+                                        if 'provider' in config:
+                                            new_provider = config.pop('provider')
+                                            new_model = f"{new_provider}/{model_name}"
+                                            
+                                        self.send_response(writer, 200, json.dumps({
+                                            "found": True,
+                                            "model_params": config,
+                                            "model": new_model,
+                                        }).encode('utf-8'), "application/json")
+                                        return
+                        except Exception:
+                            pass
+
+                    self.send_response(writer, 404, json.dumps({
+                        "found": False,
+                        "message": f"--- ainda não temos parâmetros refinados para este modelo"
+                    }).encode('utf-8'), "application/json")
+                    return
 
             try:
                 import yaml as _yaml
@@ -387,42 +461,44 @@ class AsyncHTTPServer:
             try:
                 import yaml as _yaml
                 import tempfile
+                import shutil
                 from opalacoder.assetstore import register_asset
                 
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as tmp:
-                    _yaml.dump(model_params, tmp, allow_unicode=True)
-                    tmp_path = tmp.name
-
-                asset_id = f"{model_name.replace(':', '_')}"
-                metadata = {
-                    "id": asset_id,
-                    "type": "modelconfig",
-                    "model": model_id,
-                    "desc": f"Exported modelconfig for {model_id}"
-                }
-                
-                zip_path = register_asset("modelconfig", tmp_path, metadata)
-                meta_path = str(zip_path).replace('.zip', '.metadata')
-                
-                import shutil
-                dest_zip_file = os.path.join(os.path.abspath(dest_path), f"{asset_id}.zip")
-                dest_meta_file = os.path.join(os.path.abspath(dest_path), f"{asset_id}.metadata")
-                
+                tmp_dir = tempfile.mkdtemp()
                 try:
-                    shutil.copy2(zip_path, dest_zip_file)
-                except shutil.SameFileError:
-                    pass
+                    provider_path = os.path.join(tmp_dir, ".opalacoder", "modelsconfig", provider_dir)
+                    os.makedirs(provider_path, exist_ok=True)
+                    yaml_path = os.path.join(provider_path, yaml_name)
                     
-                try:
-                    shutil.copy2(meta_path, dest_meta_file)
-                except shutil.SameFileError:
-                    pass
-                
-                try:
-                    os.remove(tmp_path)
-                except Exception:
-                    pass
-
+                    with open(yaml_path, 'w', encoding='utf-8') as tmp:
+                        _yaml.dump(model_params, tmp, allow_unicode=True)
+    
+                    asset_id = f"{model_name.replace(':', '_')}"
+                    metadata = {
+                        "id": asset_id,
+                        "type": "modelconfig",
+                        "model": model_id,
+                        "desc": f"Exported modelconfig for {model_id}"
+                    }
+                    
+                    source_path = os.path.join(tmp_dir, ".opalacoder")
+                    dest_zip_file = os.path.join(os.path.abspath(dest_path), f"{asset_id}.zip")
+                    dest_meta_file = os.path.join(os.path.abspath(dest_path), f"{asset_id}.metadata")
+                    
+                    import zipfile
+                    with zipfile.ZipFile(dest_zip_file, "w", zipfile.ZIP_DEFLATED) as zf:
+                        for root, dirs, files in os.walk(tmp_dir):
+                            for f in files:
+                                file_path = os.path.join(root, f)
+                                arcname = os.path.relpath(file_path, tmp_dir)
+                                zf.write(file_path, arcname)
+                                
+                    with open(dest_meta_file, "w", encoding="utf-8") as f:
+                        _yaml.dump(metadata, f, allow_unicode=True, default_flow_style=False)
+                        
+                finally:
+                    shutil.rmtree(tmp_dir)
+                    
                 self.send_response(writer, 200, json.dumps({
                     "success": True,
                     "dest": dest_zip_file

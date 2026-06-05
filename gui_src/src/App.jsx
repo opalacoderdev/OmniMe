@@ -87,7 +87,7 @@ export default function App() {
   const [newProjName, setNewProjName] = useState('');
   const [newProjPath, setNewProjPath] = useState('');
   const [newProjDesc, setNewProjDesc] = useState('');
-  const [newProjModel, setNewProjModel] = useState('gemini/gemini-2.5-flash');
+  const [newProjModel, setNewProjModel] = useState('ollama/gemma4:12b');
   const [newProjMode, setNewProjMode] = useState('auto');
   const [newProjModelParams, setNewProjModelParams] = useState({});
   const [newProjApiKey, setNewProjApiKey] = useState('');
@@ -565,6 +565,7 @@ export default function App() {
   const handleUpdateProject = async (e) => {
     e.preventDefault();
     if (!editingProject) return;
+    
     try {
       const res = await fetch('/api/opalacoder/update-project', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -581,16 +582,32 @@ export default function App() {
   };
 
   // ── Model config ──────────────────────────────────────────────────────────
-  const loadModelConfig = async (projectPath, model, applyFn) => {
-    setModelConfigMsg('');
-    if (!projectPath || !model) { setModelConfigMsg('⚠️ Defina o caminho do projeto e o modelo antes de carregar.'); return; }
+  const loadModelConfig = async (projectPath, model, applyFn, silent = false) => {
+    if (!silent) setModelConfigMsg('');
+    if (!projectPath || !model) { 
+      if (!silent) setModelConfigMsg('⚠️ Defina o caminho do projeto e o modelo antes de carregar.'); 
+      return; 
+    }
     try {
       const res = await fetch('/api/opalacoder/model-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectPath, model }) });
       const data = await res.json();
-      if (!data.found) { setModelConfigMsg(data.message); return; }
+      if (!data.found) { 
+        if (!silent) setModelConfigMsg(data.message); 
+        return; 
+      }
+      if (silent) {
+        const confirmed = window.confirm(`OpalaCoder encontrou configurações pré-definidas para o modelo "${data.model || model}". Deseja aplicar os parâmetros automaticamente?`);
+        if (!confirmed) {
+          setModelConfigMsg('❌ Configuração automática recusada.');
+          return;
+        }
+      }
       applyFn(data);
-      setModelConfigMsg('✅ Configuração refinada carregada.');
-    } catch (e) { setModelConfigMsg(`⚠️ Erro ao carregar: ${e.message}`); }
+      if (!silent) setModelConfigMsg('✅ Configuração refinada carregada.');
+      else setModelConfigMsg('✅ Configuração refinada aplicada automaticamente.');
+    } catch (e) { 
+      if (!silent) setModelConfigMsg(`⚠️ Erro ao carregar: ${e.message}`); 
+    }
   };
 
   // ── Dir picker ────────────────────────────────────────────────────────────
@@ -615,13 +632,37 @@ export default function App() {
     if (!editingProject) return;
     setModelConfigMsg('Exportando...');
     try {
+      const payloadParams = { ...(editingProject.model_params || {}) };
+      
+      const ADVANCED_PARAMS = [
+        'temperature', 'max_tokens', 'num_ctx', 'seed', 'top_p', 
+        'frequency_penalty', 'presence_penalty', 'top_k', 'min_p', 
+        'repetition_penalty', 'reasoning_effort', 'response_mode', 
+        'think', 'stream'
+      ];
+      
+      for (const param of ADVANCED_PARAMS) {
+        if (payloadParams[param] === undefined) {
+          payloadParams[param] = null;
+        }
+      }
+
+      if (editingProject.api_base) payloadParams.api_base = editingProject.api_base;
+      if (editingProject.api_key) payloadParams.api_key = editingProject.api_key;
+      if (editingProject.alternative_model) payloadParams.alternative_model = editingProject.alternative_model;
+
+      if (editingProject.model && editingProject.model.includes('/')) {
+        const [provider] = editingProject.model.split('/');
+        payloadParams.provider = provider;
+      }
+
       const res = await fetch('/api/opalacoder/export-modelconfig', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectPath: editingProject.project_path,
           model: editingProject.model,
-          modelParams: editingProject.model_params,
+          modelParams: payloadParams,
           destPath
         })
       });
@@ -1279,7 +1320,19 @@ export default function App() {
           showAdvancedParams={showAdvancedParams}
           setShowAdvancedParams={setShowAdvancedParams}
           modelConfigMsg={modelConfigMsg}
-          onLoadModelConfig={() => loadModelConfig(editingProject.project_path, editingProject.model, (cfg) => setEditingProject(p => ({ ...p, model_params: cfg.model_params || p.model_params, model: cfg.model || p.model })))}
+          onLoadModelConfig={(silent = false) => loadModelConfig(editingProject.project_path, editingProject.model, (cfg) => setEditingProject(p => {
+            const loaded = cfg.model_params || {};
+            const { api_base, api_key, alternative_model, ...restParams } = loaded;
+            const cleanRestParams = Object.fromEntries(Object.entries(restParams).filter(([_, v]) => v !== null && v !== undefined));
+            return {
+              ...p,
+              model_params: Object.keys(cleanRestParams).length > 0 ? { ...p.model_params, ...cleanRestParams } : p.model_params,
+              model: cfg.model || p.model,
+              api_base: api_base !== undefined ? api_base : p.api_base,
+              api_key: api_key !== undefined ? api_key : p.api_key,
+              alternative_model: alternative_model !== undefined ? alternative_model : p.alternative_model
+            };
+          }), silent)}
           onOpenDirPicker={openDirPicker}
         />
       )}

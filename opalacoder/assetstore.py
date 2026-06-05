@@ -129,15 +129,15 @@ def install_asset(meta: dict, project_path: str) -> str:
         dest_dir = project / ".opalacoder" / "modelsconfig" / provider
         dest_dir.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(zip_path, "r") as zf:
-            names = zf.namelist()
-            if len(names) != 1:
-                raise ValueError(f"modelconfig zip must contain exactly one file, got: {names}")
-            zf.extractall(dest_dir)
-            # Rename to canonical model filename
-            extracted = dest_dir / names[0]
+            yaml_files = [n for n in zf.namelist() if n.endswith('.yaml')]
+            if len(yaml_files) != 1:
+                raise ValueError(f"modelconfig zip must contain exactly one .yaml file, got: {yaml_files}")
+            
+            yaml_name = yaml_files[0]
             target = dest_dir / filename
-            if extracted != target:
-                extracted.rename(target)
+            with zf.open(yaml_name) as source, open(target, "wb") as dest:
+                import shutil
+                shutil.copyfileobj(source, dest)
         return f"modelconfig for '{model}' installed at {target}"
 
     else:

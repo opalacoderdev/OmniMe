@@ -365,6 +365,15 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
     model = get_agent_model("memgpt", get_agent_model("chat_agent", project_model))
     model = _apply_modelconfig_provider(model, project)
     _llm_kwargs = get_agent_llm_kwargs("memgpt")
+    
+    # Strip /v1 from the end because Ollama native providers expect the root URL
+    if _llm_kwargs.get("api_base"):
+        if model.startswith("ollama/") or model.startswith("ollama_chat/"):
+            if _llm_kwargs["api_base"].endswith("/v1"):
+                _llm_kwargs["api_base"] = _llm_kwargs["api_base"][:-3]
+            elif _llm_kwargs["api_base"].endswith("/v1/"):
+                _llm_kwargs["api_base"] = _llm_kwargs["api_base"][:-4]
+                
     _agent_params = get_project_agent_params()
 
     memgpt = MemGPTAgentBlock(

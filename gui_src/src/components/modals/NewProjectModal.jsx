@@ -99,13 +99,14 @@ export default function NewProjectModal({
                 list="default-models"
                 value={newProjModel}
                 onChange={(e) => setNewProjModel(e.target.value)}
+                onBlur={() => onLoadModelConfig(true)}
                 placeholder={t('newProjectModal.modelPlaceholder')}
               />
               <datalist id="default-models">
                 <option value="gemini/gemini-2.5-flash" />
                 <option value="gemini/gemini-2.5-pro" />
                 <option value="openai/gpt-4o" />
-                <option value="ollama/ministral-3:14b" />
+                <option value="ollama/gemma4:12b" />
               </datalist>
             </div>
             <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
