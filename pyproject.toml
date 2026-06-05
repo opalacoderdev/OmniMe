@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opalacoder"
-version = "0.2.4.1"
+version = "0.2.4.2"
 description = "Autonomous coding agent with interactive planning and modular execution"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,7 +18,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "agenticblocks.io>=0.8.37",
+    "agenticblocks.io>=0.9.1",
     "pyyaml>=6.0",
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
