@@ -47,7 +47,6 @@ ALTERNATIVE_MODEL = _AGENTS_CONFIG.get("alternative", "gemini/gemini-3.1-flash-l
 # Global LLM defaults (temperature, max_tokens, num_ctx) — can be set in agents.yaml
 _LLM_DEFAULTS: dict = {
     "temperature": 0.7,
-    "max_tokens": 4096,
     "num_ctx": 8192,
     **_AGENTS_CONFIG.get("llm_defaults", {}),
 }

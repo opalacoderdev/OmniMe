@@ -58,6 +58,40 @@ from .workflow_tools import get_workflow_tools
 
 CHAT_ORCHESTRATOR_SKILL = "chat-orchestrator"
 
+_PROVIDER_ALIASES = {"ollama_chat": "ollama"}
+
+
+def _apply_modelconfig_provider(model: str, project) -> str:
+    """If the project has a modelconfig yaml for *model* that declares a
+    ``provider`` field, return ``<provider>/<model_name>`` instead of *model*.
+
+    This ensures that e.g. ``ollama/gpt-oss:latest`` is transparently remapped
+    to ``ollama_chat/gpt-oss:latest`` when the yaml specifies
+    ``provider: ollama_chat`` — without requiring the user to manually save the
+    project after loading the modelconfig.
+    """
+    if not model or "/" not in model:
+        return model
+    raw_provider, model_name = model.split("/", 1)
+    provider_dir = _PROVIDER_ALIASES.get(raw_provider, raw_provider)
+    project_path = getattr(project, "project_path", None)
+    if not project_path:
+        return model
+    import yaml as _yaml
+    yaml_name = model_name.replace(":", "__") + ".yaml"
+    config_path = os.path.join(project_path, ".opalacoder", "modelsconfig", provider_dir, yaml_name)
+    if not os.path.isfile(config_path):
+        return model
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = _yaml.safe_load(f) or {}
+        new_provider = cfg.get("provider")
+        if new_provider and new_provider != raw_provider:
+            return f"{new_provider}/{model_name}"
+    except Exception:
+        pass
+    return model
+
 
 # ---------------------------------------------------------------------------
 # Model resolution for a skill's sub-agent
@@ -204,6 +238,8 @@ def build_run_skill_tool(
             f"The skill directory is: {skill_dir}\n"
             f"{scripts_hint}"
             f"{request_hint}"
+            f"IMPORTANT: To save any file content (HTML, JSON, code, etc.) ALWAYS use the write_file tool. "
+            f"NEVER use run_command with echo/printf/cat to write file content — shell quoting breaks with multi-line or special characters.\n"
             f"Call send_message once when done, with a clear summary for the user."
         )
 
@@ -327,8 +363,10 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
     )
 
     model = get_agent_model("memgpt", get_agent_model("chat_agent", project_model))
+    model = _apply_modelconfig_provider(model, project)
     _llm_kwargs = get_agent_llm_kwargs("memgpt")
     _agent_params = get_project_agent_params()
+
     memgpt = MemGPTAgentBlock(
         name="chat_orchestrator",
         system_prompt=system_prompt,

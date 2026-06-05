@@ -5,7 +5,6 @@ alternative: ollama/ministral-3:14b
 # Non-agent settings (git_strategy, vector_index, etc.) live in config.yaml
 llm_defaults:
   temperature: 1.0
-  max_tokens: 8128
   num_ctx: 8192
 
 # Per-agent overrides. Only fields listed here are overridden;
@@ -54,7 +53,6 @@ agents:
 
   worker:
     temperature: 1.0
-    max_tokens: 8128
     num_ctx: 16384       # larger context so workers see full files when reading
     reasoning_effort: "none"  # must stay "none": tool_calls field is empty when thinking is on
     debug: false

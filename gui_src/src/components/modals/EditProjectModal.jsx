@@ -207,7 +207,7 @@ export default function EditProjectModal({
                     <ParamNumber label="Temperature" step="0.1" min="0" max="2" placeholder="padrão: 0.7"
                       value={editingProject.model_params?.temperature}
                       onChange={e => setParam('temperature', parseNum(e.target.value, true))} />
-                    <ParamNumber label="Max Tokens" min="1" placeholder="padrão: 4096"
+                    <ParamNumber label="Max Tokens" min="1" placeholder="ilimitado"
                       value={editingProject.model_params?.max_tokens}
                       onChange={e => setParam('max_tokens', parseNum(e.target.value))} />
                     <ParamNumber label="Context Window (num_ctx)" min="1" placeholder="padrão: 8192"
@@ -294,7 +294,7 @@ export default function EditProjectModal({
                     <ParamNumber label="Max Iterations (Worker)" min="1" placeholder="padrão: sem limite"
                       value={editingProject.model_params?.max_iterations}
                       onChange={e => setParam('max_iterations', parseNum(e.target.value))} />
-                    <ParamNumber label="Max Tool Calls (Worker)" min="1" placeholder="padrão: 10"
+                    <ParamNumber label="Max Tool Calls (Worker)" min="1" placeholder="padrão: 40"
                       value={editingProject.model_params?.max_tool_calls}
                       onChange={e => setParam('max_tool_calls', parseNum(e.target.value))} />
 

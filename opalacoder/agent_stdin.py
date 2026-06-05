@@ -102,7 +102,6 @@ from opalacoder.project import ProjectStore, ProjectData
 from opalacoder.agents import make_landscape_planner, make_refinement_agent
 from opalacoder.memgpt_runtime import build_chat_orchestrator
 from agenticblocks.blocks.llm.agent import AgentInput, LLMAgentBlock
-from agenticblocks.core.function_block import as_tool
 
 # Import all tools
 from opalacoder.tools import (

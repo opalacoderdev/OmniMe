@@ -17,6 +17,15 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
   const { t } = useTranslation();
   const inputRef = useRef(null);
   const [value, setValue] = useState('');
+  const [dotCount, setDotCount] = useState(1);
+
+  useEffect(() => {
+    if (!isRunning) { setDotCount(1); return; }
+    const id = setInterval(() => setDotCount(d => (d % 3) + 1), 500);
+    return () => clearInterval(id);
+  }, [isRunning]);
+
+  const animatedDots = '.'.repeat(dotCount);
 
   // Reset value and focus when prompt opens / mode changes
   useEffect(() => {
@@ -33,7 +42,7 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
 
   if (!inlinePrompt) return null;
 
-  const { x, y, startLine, endLine, selectedText, mode } = inlinePrompt;
+  const { startLine, endLine, selectedText, mode } = inlinePrompt;
 
   const modeIcon = {
     refine: <Wand2 size={13} style={{ color: '#4ec9b0' }} />,
@@ -68,17 +77,38 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
     onSubmit(instruction);
   };
 
-  // Clamp position so the overlay stays on-screen
   const overlayWidth = 420;
-  const overlayHeight = 130;
-  const safeX = Math.min(x, window.innerWidth - overlayWidth - 16);
-  const safeY = Math.min(y, window.innerHeight - overlayHeight - 16);
+  const safeX = Math.round((window.innerWidth - overlayWidth) / 2);
+  const safeY = Math.round(window.innerHeight * 0.35);
 
   const latestThought = thinkingLogs?.length > 0 ? thinkingLogs[thinkingLogs.length - 1] : null;
   const isThinking = isRunning && latestThought && (latestThought.type === 'THINKING' || latestThought.type === 'REFLECTION');
 
   return (
     <>
+      <style>{`
+        @keyframes opc-pulse-border {
+          0%, 100% { border-left-color: #007acc; opacity: 1; }
+          50% { border-left-color: #4ec9b0; opacity: 0.7; }
+        }
+        .opc-thinking-block {
+          animation: opc-pulse-border 1.2s ease-in-out infinite;
+        }
+        @keyframes opc-spin {
+          to { transform: rotate(360deg); }
+        }
+        .opc-spinner {
+          display: inline-block;
+          width: 10px;
+          height: 10px;
+          border: 1.5px solid #555;
+          border-top-color: #007acc;
+          border-radius: 50%;
+          animation: opc-spin 0.7s linear infinite;
+          vertical-align: middle;
+          margin-right: 5px;
+        }
+      `}</style>
       {/* Backdrop — clicking outside closes overlay */}
       <div
         style={{
@@ -250,9 +280,9 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
         </div>
 
         {/* Hint */}
-        <span style={{ fontSize: '10px', color: '#444', userSelect: 'none' }}>
-          {isRunning 
-            ? "OpalaCoder is working..." 
+        <span style={{ fontSize: '10px', color: isRunning ? '#888' : '#444', userSelect: 'none', display: 'flex', alignItems: 'center' }}>
+          {isRunning
+            ? <><span className="opc-spinner" />{`OpalaCoder is working${animatedDots}`}</>
             : `Enter ${t('editorPanel.inlinePromptSend').toLowerCase()} · Esc ${t('editorPanel.inlinePromptCancel').toLowerCase()}`
           }
         </span>
@@ -260,6 +290,7 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
         {/* Thinking snippet */}
         {isThinking && (
           <div
+            className="opc-thinking-block"
             style={{
               fontSize: '10px',
               color: '#888',
@@ -271,10 +302,10 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
               whiteSpace: 'pre-wrap',
               fontFamily: 'monospace',
               borderLeft: '2px solid #007acc',
-              marginTop: '4px'
+              marginTop: '4px',
             }}
           >
-            <strong style={{ color: '#007acc', display: 'block', marginBottom: '2px' }}>Thinking...</strong>
+            <strong style={{ color: '#007acc', display: 'block', marginBottom: '2px' }}>Thinking{animatedDots}</strong>
             {latestThought.content}
           </div>
         )}

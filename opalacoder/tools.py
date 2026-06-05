@@ -237,12 +237,37 @@ def read_file(path: str) -> str:
         return f"Error reading {resolved}: {e}"
 
 
-@as_tool(name="write_file", description="Write or overwrite a file inside the project directory. Relative paths are resolved from the project directory. Creates parent directories if needed.")
+def _decode_escape_sequences(s: str) -> str:
+    """Fix content where the model emitted literal \\n \\t \\r instead of real control chars.
+
+    When a model double-escapes inside a JSON tool argument (\\\\n instead of \\n),
+    json.loads produces the two-character sequence backslash-n. We detect this heuristic:
+    the string has no real newlines but does contain literal backslash-n sequences,
+    indicating the entire content is single-line with escaped line breaks.
+
+    We do a simple targeted replacement of the common escape sequences to avoid
+    corrupting multi-byte UTF-8 characters (accents, etc.) that unicode_escape would mangle.
+    """
+    if "\n" in s:
+        return s
+    if r"\n" not in s and r"\t" not in s and r"\r" not in s:
+        return s
+    return (
+        s
+        .replace(r"\n", "\n")
+        .replace(r"\t", "\t")
+        .replace(r"\r", "\r")
+        .replace(r"\\", "\\")
+    )
+
+
+@as_tool(name="write_file", description="Write or overwrite a file inside the project directory. Relative paths are resolved from the project directory. Creates parent directories if needed. ALWAYS use this tool to save file content — never use run_command with echo/printf/cat to write files, as shell quoting will break with multi-line or HTML/JSON content.")
 def write_file(path: str, content: str) -> str:
     resolved = _resolve_path(path)
     AGENT_PROGRESS.update("write_file", f"path={_preview(resolved)}")
     try:
         Path(resolved).parent.mkdir(parents=True, exist_ok=True)
+        content = _decode_escape_sequences(content)
         with open(resolved, "w", encoding="utf-8") as f:
             f.write(content)
         try:
@@ -262,7 +287,7 @@ def write_file(path: str, content: str) -> str:
         return f"Error writing {resolved}: {e}"
 
 
-@as_tool(name="run_command", description="Execute a non-interactive shell command (e.g. ls, mkdir, grep, npm install). Runs inside the project directory. Returns stdout/stderr. NEVER run servers or infinite processes.")
+@as_tool(name="run_command", description="Execute a non-interactive shell command (e.g. ls, mkdir, grep, npm install). Runs inside the project directory. Returns stdout/stderr. NEVER run servers or infinite processes. NEVER use echo/printf/cat to write file content — use write_file instead, since shell quoting breaks with multi-line or HTML/JSON content.")
 def run_command(command: str) -> str:
     AGENT_PROGRESS.update("run_command", f"$ {_preview(command)}")
     cwd = get_project_path()
@@ -288,6 +313,8 @@ def run_command(command: str) -> str:
             output += f"STDOUT:\n{out}\n"
         if err:
             output += f"STDERR:\n{err}\n"
+        if res.returncode != 0:
+            return f"ERROR: Command failed (exit code {res.returncode}).\n{output}Do NOT report success. Fix the error or use a different tool."
         return output if output else "Command executed successfully (no output)."
     except subprocess.TimeoutExpired:
         return "Error: Command timed out after 120 seconds."

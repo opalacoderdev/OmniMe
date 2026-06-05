@@ -5,29 +5,49 @@ description: Executes command-line operations to create, insert text, remove fil
 
 # Command Line Skill
 
-This skill provides the sub-agent with python command-line commands to manipulate files and directories securely and restricted to the project directory.
+This skill provides the sub-agent with tools to manipulate files and directories securely, restricted to the project directory.
 
-## Available Commands
+## IMPORTANT: Creating or writing files
 
-You must execute the script `scripts/command_executor.py` using the `run_command` tool.
-The following commands and arguments are supported:
+**Use `write_file` directly to create or overwrite any file.** Do NOT use `command_executor.py` for writing file content — shell quoting breaks with multi-line, HTML, CSS, or JavaScript content.
 
-### 1. Create File
-Creates a new file with optional content.
-`python3 <command_executor.py_path> --project-path <project_path> create-file <relative_file_path> [--content "<content>"]`
+```
+write_file("<relative_or_absolute_path>", "<full file content>")
+```
 
-### 2. Insert Text
-Inserts text into an existing file (or appends to the end if line is not specified).
-`python3 <command_executor.py_path> --project-path <project_path> insert-text <relative_file_path> --content "<content>" [--line <line_number>]`
+Examples:
+```
+write_file("tictactoe.html", "<!DOCTYPE html>...")
+write_file("src/utils.js", "function foo() {...}")
+```
 
-### 3. Remove File
-Removes an existing file. Only paths inside the project are allowed.
-`python3 <command_executor.py_path> --project-path <project_path> remove-file <relative_file_path>`
+## Available Commands via command_executor.py
 
-### 4. Create Directory
-Creates a new directory.
-`python3 <command_executor.py_path> --project-path <project_path> create-dir <relative_directory_path>`
+Use `run_command` to call `scripts/command_executor.py` **only for structural operations** (insert text at a line, remove files/dirs, create empty directories). The syntax uses subcommands:
 
-### 5. Remove Directory
-Recursively removes an existing directory. Only paths inside the project are allowed.
-`python3 <command_executor.py_path> --project-path <project_path> remove-dir <relative_directory_path>`
+```
+python3 <command_executor.py_path> --project-path <project_path> <subcommand> <args>
+```
+
+### 1. Insert Text
+
+```
+python3 <command_executor.py_path> --project-path <project_path> insert-text <relative_file_path> --content-file /tmp/_opala_content.txt [--line <line_number>]
+```
+
+For multi-line content, write it first with `write_file` to a temp path, then use `--content-file`.
+
+### 2. Remove File
+```
+python3 <command_executor.py_path> --project-path <project_path> remove-file <relative_file_path>
+```
+
+### 3. Create Directory
+```
+python3 <command_executor.py_path> --project-path <project_path> create-dir <relative_directory_path>
+```
+
+### 4. Remove Directory
+```
+python3 <command_executor.py_path> --project-path <project_path> remove-dir <relative_directory_path>
+```

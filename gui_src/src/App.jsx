@@ -848,10 +848,11 @@ export default function App() {
     
     setChatInput('');
     setIsInlineRunning(true);
+    setThinkingLogs([]);
     addLog('info', `Iniciando edição inline: "${instruction}"`);
 
     const systemPrompt = "You are an expert developer performing an inline code edit. " +
-      "CRITICAL: Return ONLY the raw modified code snippet inside a single markdown code block (``` language ... ```). " +
+      "CRITICAL: Do NOT use tools to write files or insert code. Return ONLY the raw modified code snippet inside a single markdown code block (``` language ... ```). " +
       "Do NOT include greetings, conversational filler, explanations, or any other text before or after the code block. " +
       "Be as objective and direct as possible. If you need context, use your read-only memory tools. " +
       "Your entire output must be just the markdown code block containing the final replacement code.";
@@ -866,12 +867,12 @@ export default function App() {
           project_name: activeProject.name,
           project_path: activeProject.project_path,
           system_prompt: systemPrompt,
-          tools: ["read_file", "search_code", "get_file_overview"],
+          tools: [],
           prompt: fullPrompt,
           current_file: selectedFile || '',
           editor_content: fileContent || '',
           selected_text: selectedText || '',
-          model_params: ephemeralParams
+          model_params: { max_tokens: 8192, ...ephemeralParams }
         }),
       });
 
@@ -900,14 +901,18 @@ export default function App() {
             } else if (data.event === 'error') {
               addLog('error', `Inline Agent Error: ${data.message}`);
             } else if (data.event === 'thought' || data.event === 'reflection') {
-              addLog('thought', data.content);
+              let textContent = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+              if (textContent === '{}' || !textContent.trim()) continue;
+              if (textContent.startsWith('{"result":') || textContent.startsWith('{"error":') || textContent.startsWith('{"name":')) continue;
+
+              addLog('thought', textContent);
               setThinkingLogs(prev => {
                 const type = data.event.toUpperCase();
                 if (prev.length > 0 && prev[prev.length - 1].type === type) {
                   const last = prev[prev.length - 1];
-                  return [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
+                  return [...prev.slice(0, -1), { ...last, content: last.content + textContent }];
                 }
-                return [...prev, { timestamp: new Date().toLocaleTimeString(), type, content: data.content }];
+                return [...prev, { timestamp: new Date().toLocaleTimeString(), type, content: textContent }];
               });
             } else if (data.event === 'tool_call') {
               addLog('tool_call', `[Inline] Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`);
@@ -928,10 +933,29 @@ export default function App() {
       }
 
       if (agentResponse && editorRef.current && monacoRef.current) {
+        let rawResponse = agentResponse.trim();
+        rawResponse = rawResponse.replace(/\{"result"\s*:\s*"[^"]*"\}\s*/g, '');
+        rawResponse = rawResponse.replace(/\{"error"\s*:\s*"[^"]*"\}\s*/g, '');
+
+        try {
+          const parsed = JSON.parse(rawResponse);
+          if (parsed && parsed.name && parsed.arguments && parsed.arguments.content) {
+            rawResponse = parsed.arguments.content;
+          }
+        } catch (e) {
+          const contentMatch = rawResponse.match(/"content"\s*:\s*"([\s\S]*)/);
+          if (contentMatch) {
+            let str = contentMatch[1];
+            str = str.replace(/\"\s*\}?\s*\}?\s*$/, '');
+            str = str.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\').replace(/\\t/g, '\t');
+            rawResponse = str;
+          }
+        }
+
         // Extract code block
         const regex = /```(?:\w+)?\n([\s\S]*?)```/;
-        const match = regex.exec(agentResponse);
-        const codeToInsert = match ? match[1].replace(/\n$/, '') : agentResponse.trim();
+        const match = regex.exec(rawResponse);
+        const codeToInsert = match ? match[1].replace(/\n$/, '') : rawResponse;
 
         if (mode === 'generate') {
           const range = new monacoRef.current.Range(startLine, inlinePrompt.cursorCol, startLine, inlinePrompt.cursorCol);
@@ -1113,6 +1137,13 @@ export default function App() {
                 setIsInlineRunning(false);
               }}
               onToggleTerminal={() => {
+                if (isEditorMaximized) {
+                  setIsEditorMaximized(false);
+                  setIsTerminalCollapsed(false);
+                  setActiveBottomTab('terminal');
+                  setBottomPanelHeight(Math.floor(window.innerHeight / 2));
+                  return;
+                }
                 if (isTerminalCollapsed) {
                   setIsTerminalCollapsed(false);
                   setActiveBottomTab('terminal');
@@ -1126,7 +1157,7 @@ export default function App() {
             />
           )}
 
-          {!isEditorMaximized && (
+          <div style={{ display: isEditorMaximized ? 'none' : 'contents' }}>
             <BottomPanel
               activeBottomTab={activeBottomTab}
               setActiveBottomTab={setActiveBottomTab}
@@ -1147,7 +1178,7 @@ export default function App() {
               isBottomMaximized={isBottomMaximized}
               onToggleMaximizeBottom={() => setIsBottomMaximized(!isBottomMaximized)}
             />
-          )}
+          </div>
         </main>
 
         {/* Right resize handle */}

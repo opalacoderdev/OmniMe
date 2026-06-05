@@ -147,13 +147,13 @@ export default function SettingsModal({
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <div className="flex flex-col" style={{ gap: '4px' }}>
                     <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralMaxTokens')}</label>
-                    <input type="number" min="1" className="vscode-settings-input" placeholder="4096"
+                    <input type="number" min="1" className="vscode-settings-input" placeholder="unlimited"
                       value={ephemeralParams?.max_tokens || ''}
                       onChange={e => updateEphemeralParam('max_tokens', e.target.value ? Number(e.target.value) : undefined)} />
                   </div>
                   <div className="flex flex-col" style={{ gap: '4px' }}>
                     <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralContextWindow')}</label>
-                    <input type="number" min="1" className="vscode-settings-input" placeholder="4096"
+                    <input type="number" min="1" className="vscode-settings-input" placeholder="8192"
                       value={ephemeralParams?.num_ctx || ''}
                       onChange={e => updateEphemeralParam('num_ctx', e.target.value ? Number(e.target.value) : undefined)} />
                   </div>
