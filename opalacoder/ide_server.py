@@ -366,6 +366,70 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
+        # 3.9. Export modelconfig package
+        elif path == '/api/opalacoder/export-modelconfig' and method == 'POST':
+            project_path = data.get('projectPath')
+            model_id = data.get('model')
+            dest_path = data.get('destPath')
+            if not project_path or not model_id or not dest_path:
+                self.send_response(writer, 400, b'{"error":"projectPath, model and destPath are required"}', "application/json")
+                return
+
+            _PROVIDER_ALIASES = {"ollama_chat": "ollama"}
+            if '/' in model_id:
+                raw_provider, model_name = model_id.split('/', 1)
+            else:
+                raw_provider, model_name = "", model_id
+            provider_dir = _PROVIDER_ALIASES.get(raw_provider, raw_provider)
+            yaml_name = model_name.replace(':', '__') + '.yaml'
+            model_params = data.get('modelParams') or {}
+
+            try:
+                import yaml as _yaml
+                import tempfile
+                from opalacoder.assetstore import register_asset
+                
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as tmp:
+                    _yaml.dump(model_params, tmp, allow_unicode=True)
+                    tmp_path = tmp.name
+
+                asset_id = f"{model_name.replace(':', '_')}"
+                metadata = {
+                    "id": asset_id,
+                    "type": "modelconfig",
+                    "model": model_id,
+                    "desc": f"Exported modelconfig for {model_id}"
+                }
+                
+                zip_path = register_asset("modelconfig", tmp_path, metadata)
+                meta_path = str(zip_path).replace('.zip', '.metadata')
+                
+                import shutil
+                dest_zip_file = os.path.join(os.path.abspath(dest_path), f"{asset_id}.zip")
+                dest_meta_file = os.path.join(os.path.abspath(dest_path), f"{asset_id}.metadata")
+                
+                try:
+                    shutil.copy2(zip_path, dest_zip_file)
+                except shutil.SameFileError:
+                    pass
+                    
+                try:
+                    shutil.copy2(meta_path, dest_meta_file)
+                except shutil.SameFileError:
+                    pass
+                
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+
+                self.send_response(writer, 200, json.dumps({
+                    "success": True,
+                    "dest": dest_zip_file
+                }).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
         # 4. List Projects
         elif path == '/api/opalacoder/list-projects':
             from opalacoder.config import DEFAULT_DB_PATH

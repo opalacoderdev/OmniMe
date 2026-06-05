@@ -137,6 +137,9 @@ export default function EditProjectModal({
             <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }} onClick={onLoadModelConfig}>
               {t('editProjectModal.loadRefinedConfig')}
             </button>
+            <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }} onClick={() => onOpenDirPicker('export-modelconfig', editingProject.project_path || '~')}>
+              Exportar Modelconfig
+            </button>
             {modelConfigMsg && (
               <span style={{ fontSize: '11px', color: modelConfigMsg.startsWith('✅') ? '#4ec9b0' : '#f48771' }}>
                 {modelConfigMsg}

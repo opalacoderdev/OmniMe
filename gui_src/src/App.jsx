@@ -611,9 +611,37 @@ export default function App() {
     } catch (e) { }
   };
 
+  const exportModelConfig = async (destPath) => {
+    if (!editingProject) return;
+    setModelConfigMsg('Exportando...');
+    try {
+      const res = await fetch('/api/opalacoder/export-modelconfig', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectPath: editingProject.project_path,
+          model: editingProject.model,
+          modelParams: editingProject.model_params,
+          destPath
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setModelConfigMsg(`✅ Exportado para: ${data.dest}`);
+      } else {
+        setModelConfigMsg(`⚠️ Erro na exportação: ${data.error}`);
+      }
+    } catch (err) {
+      setModelConfigMsg(`⚠️ Erro: ${err.message}`);
+    }
+  };
+
   const confirmDirPicker = () => {
     if (!dirPicker) return;
     if (dirPicker.target === 'new') setNewProjPath(dirPicker.current);
+    else if (dirPicker.target === 'export-modelconfig') {
+      exportModelConfig(dirPicker.current);
+    }
     else setEditingProject(p => ({ ...p, project_path: dirPicker.current }));
     setDirPicker(null);
   };

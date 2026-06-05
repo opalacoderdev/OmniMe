@@ -1,4 +1,0 @@
-id: gpt_oss__latest
-type: modelconfig
-desc: "GPT OSS latest model via Ollama"
-model: ollama/gpt-oss:latest
