@@ -1,4 +1,4 @@
-import React from 'react';
+import { useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { Files, RefreshCw, Check, X, Maximize2, Minimize2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -30,8 +30,13 @@ export default function EditorPanel({
   isInlineRunning,
   onInlineCancel,
   onToggleTerminal,
+  thinkingLogs,
 }) {
   const { t } = useTranslation();
+  // Ref so the Monaco command closure always calls the latest callback,
+  // even after React re-renders update isTerminalCollapsed state.
+  const onToggleTerminalRef = useRef(onToggleTerminal);
+  onToggleTerminalRef.current = onToggleTerminal;
 
   // Wrap the external mount handler so we can also register the context-menu
   // actions and the Ctrl+L shortcut ourselves.
@@ -40,7 +45,7 @@ export default function EditorPanel({
     editor.addCommand(
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ,
       () => {
-        if (onToggleTerminal) onToggleTerminal();
+        if (onToggleTerminalRef.current) onToggleTerminalRef.current();
       }
     );
 
@@ -224,6 +229,7 @@ export default function EditorPanel({
           onClose={() => setInlinePrompt(null)}
           onCancel={onInlineCancel}
           isRunning={isInlineRunning}
+          thinkingLogs={thinkingLogs}
         />
       )}
     </div>

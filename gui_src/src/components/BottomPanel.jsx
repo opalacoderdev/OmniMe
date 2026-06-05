@@ -136,13 +136,12 @@ export default function BottomPanel({
           </div>
         </div>
 
-        {/* Panel content */}
-        {!isTerminalCollapsed && (
-          <div
-            ref={contentRef}
-            style={{ height: 'calc(100% - 30px)', width: '100%' }}
-            onContextMenu={onContextMenu}
-          >
+        {/* Panel content — always mounted so xterm is never destroyed on collapse */}
+        <div
+          ref={contentRef}
+          style={{ display: isTerminalCollapsed ? 'none' : 'block', height: 'calc(100% - 30px)', width: '100%' }}
+          onContextMenu={onContextMenu}
+        >
 
             {/* Output tab */}
             {activeBottomTab === 'output' && (
@@ -235,7 +234,6 @@ export default function BottomPanel({
               )}
             </div>
           </div>
-        )}
       </div>
     </>
   );

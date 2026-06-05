@@ -3,10 +3,12 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 
 // Hook that initialises an xterm.js terminal and connects it to the backend SSE stream.
-export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight }) {
-  // Tracks whether the terminal has been made visible at least once after creation.
-  // Used to send a Ctrl+L redraw on first focus so the shell prompt appears correctly.
+export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight, isTerminalCollapsed }) {
   const promptDrawnRef = useRef(false);
+  // Written on every render so the ResizeObserver callback (a closure created
+  // once at mount) always reads the latest value without a stale-closure race.
+  const isCollapsedRef = useRef(isTerminalCollapsed);
+  isCollapsedRef.current = isTerminalCollapsed;
 
   // Initialise / tear-down terminal when the active project changes.
   useEffect(() => {
@@ -75,7 +77,7 @@ export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, f
 
     // Resize observer keeps the terminal sized correctly.
     const resizeObserver = new ResizeObserver(() => {
-      if (fitAddon) {
+      if (fitAddon && !isCollapsedRef.current) {
         try {
           fitAddon.fit();
           const { cols, rows } = term;
@@ -98,9 +100,9 @@ export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, f
     };
   }, [activeProject]);
 
-  // Re-fit the terminal when the terminal tab becomes visible or the panel is resized.
+  // Re-fit the terminal when the terminal tab becomes visible, the panel is expanded, or resized.
   useEffect(() => {
-    if (activeBottomTab === 'terminal' && terminalInstanceRef.current && fitAddonRef.current && activeProject) {
+    if (activeBottomTab === 'terminal' && !isTerminalCollapsed && terminalInstanceRef.current && fitAddonRef.current && activeProject) {
       setTimeout(() => {
         try {
           fitAddonRef.current.fit();
@@ -128,5 +130,5 @@ export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, f
         } catch (e) { /* ignore */ }
       }, 50);
     }
-  }, [activeBottomTab, bottomPanelHeight, activeProject]);
+  }, [activeBottomTab, bottomPanelHeight, activeProject, isTerminalCollapsed]);
 }

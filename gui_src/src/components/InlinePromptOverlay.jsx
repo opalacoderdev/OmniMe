@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
  *   onClose()                     — called when user dismisses
  *   isRunning                     — true if the backend task is currently processing
  */
-export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, onCancel, isRunning }) {
+export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, onCancel, isRunning, thinkingLogs }) {
   const { t } = useTranslation();
   const inputRef = useRef(null);
   const [value, setValue] = useState('');
@@ -69,10 +69,13 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
   };
 
   // Clamp position so the overlay stays on-screen
-  const overlayWidth = 380;
+  const overlayWidth = 420;
   const overlayHeight = 130;
   const safeX = Math.min(x, window.innerWidth - overlayWidth - 16);
   const safeY = Math.min(y, window.innerHeight - overlayHeight - 16);
+
+  const latestThought = thinkingLogs?.length > 0 ? thinkingLogs[thinkingLogs.length - 1] : null;
+  const isThinking = isRunning && latestThought && (latestThought.type === 'THINKING' || latestThought.type === 'REFLECTION');
 
   return (
     <>
@@ -253,6 +256,28 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
             : `Enter ${t('editorPanel.inlinePromptSend').toLowerCase()} · Esc ${t('editorPanel.inlinePromptCancel').toLowerCase()}`
           }
         </span>
+
+        {/* Thinking snippet */}
+        {isThinking && (
+          <div
+            style={{
+              fontSize: '10px',
+              color: '#888',
+              background: 'rgba(0,0,0,0.2)',
+              borderRadius: '4px',
+              padding: '6px',
+              maxHeight: '80px',
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap',
+              fontFamily: 'monospace',
+              borderLeft: '2px solid #007acc',
+              marginTop: '4px'
+            }}
+          >
+            <strong style={{ color: '#007acc', display: 'block', marginBottom: '2px' }}>Thinking...</strong>
+            {latestThought.content}
+          </div>
+        )}
       </div>
     </>
   );

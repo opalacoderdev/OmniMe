@@ -136,7 +136,7 @@ export default function App() {
   // ── Hooks ─────────────────────────────────────────────────────────────────
   const { startResizing } = useResizing({ setSidebarWidth, setChatWidth, setBottomPanelHeight, sidebarWidth, chatWidth, bottomPanelHeight });
 
-  useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight });
+  useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight, isTerminalCollapsed });
 
   // ── Effects ───────────────────────────────────────────────────────────────
   useEffect(() => { fetchProjects(); }, []);
@@ -1122,6 +1122,7 @@ export default function App() {
                   setActiveBottomTab('terminal');
                 }
               }}
+              thinkingLogs={thinkingLogs}
             />
           )}
 
