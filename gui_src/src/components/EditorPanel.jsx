@@ -28,6 +28,7 @@ export default function EditorPanel({
   setInlinePrompt,
   onInlineSubmit,
   isInlineRunning,
+  onInlineCancel,
   onToggleTerminal,
 }) {
   const { t } = useTranslation();
@@ -220,6 +221,7 @@ export default function EditorPanel({
           inlinePrompt={inlinePrompt}
           onSubmit={onInlineSubmit}
           onClose={() => setInlinePrompt(null)}
+          onCancel={onInlineCancel}
           isRunning={isInlineRunning}
         />
       )}

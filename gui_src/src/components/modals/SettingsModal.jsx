@@ -23,6 +23,8 @@ export default function SettingsModal({
   installDepsLog,
   onInstallDeps,
   onLanguageChange,
+  ephemeralParams,
+  setEphemeralParams,
 }) {
   const { t } = useTranslation();
   const [selectedLang, setSelectedLang] = React.useState('');
@@ -33,6 +35,14 @@ export default function SettingsModal({
       .then(cfg => { if (cfg?.lang !== undefined) setSelectedLang(cfg.lang); })
       .catch(() => { });
   }, []);
+
+  const updateEphemeralParam = (key, val) => {
+    const updated = { ...ephemeralParams };
+    if (val === '' || val === undefined) delete updated[key];
+    else updated[key] = val;
+    setEphemeralParams(updated);
+    safeSetLocalStorage('ephemeralParams', JSON.stringify(updated));
+  };
 
   return (
     <div className="vscode-modal-overlay">
@@ -128,6 +138,54 @@ export default function SettingsModal({
                   <option value="on">{t('settingsModal.wordWrapOn')}</option>
                   <option value="off">{t('settingsModal.wordWrapOff')}</option>
                 </select>
+              </div>
+
+              {/* Ephemeral Agent Settings */}
+              <div className="flex flex-col" style={{ gap: '6px', borderTop: '1px solid var(--vscode-border)', paddingTop: '12px', marginTop: '6px' }}>
+                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.ephemeralAgentTitle')}</label>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div className="flex flex-col" style={{ gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralMaxTokens')}</label>
+                    <input type="number" min="1" className="vscode-settings-input" placeholder="1024"
+                      value={ephemeralParams?.max_tokens || ''}
+                      onChange={e => updateEphemeralParam('max_tokens', e.target.value ? Number(e.target.value) : undefined)} />
+                  </div>
+                  <div className="flex flex-col" style={{ gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralContextWindow')}</label>
+                    <input type="number" min="1" className="vscode-settings-input" placeholder="4096"
+                      value={ephemeralParams?.num_ctx || ''}
+                      onChange={e => updateEphemeralParam('num_ctx', e.target.value ? Number(e.target.value) : undefined)} />
+                  </div>
+                  <div className="flex flex-col" style={{ gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralTemperature')}</label>
+                    <input type="number" step="0.1" min="0" max="2" className="vscode-settings-input" placeholder="0.7"
+                      value={ephemeralParams?.temperature ?? ''}
+                      onChange={e => updateEphemeralParam('temperature', e.target.value ? parseFloat(e.target.value) : undefined)} />
+                  </div>
+                  <div className="flex flex-col" style={{ gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralReasoningEffort')}</label>
+                    <select className="vscode-settings-input"
+                      value={ephemeralParams?.reasoning_effort || ''}
+                      onChange={e => updateEphemeralParam('reasoning_effort', e.target.value || undefined)}>
+                      <option value="">{t('settingsModal.ephemeralDefault')}</option>
+                      <option value="none">none</option>
+                      <option value="low">low</option>
+                      <option value="medium">medium</option>
+                      <option value="high">high</option>
+                      <option value="xhigh">xhigh</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col" style={{ gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralResponseMode')}</label>
+                    <select className="vscode-settings-input"
+                      value={ephemeralParams?.response_mode || 'last'}
+                      onChange={e => updateEphemeralParam('response_mode', e.target.value)}>
+                      <option value="last">{t('settingsModal.ephemeralLastDefault')}</option>
+                      <option value="all">all</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               {/* Optional dependencies */}

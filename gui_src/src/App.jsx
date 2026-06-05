@@ -112,6 +112,11 @@ export default function App() {
   const [installDepsStatus, setInstallDepsStatus] = useState('');
   const [installDepsLog, setInstallDepsLog] = useState('');
 
+  // ── Ephemeral Agent Params ────────────────────────────────────────────────
+  const [ephemeralParams, setEphemeralParams] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('ephemeralParams')) || {}; } catch { return {}; }
+  });
+
   // ── Inline prompt (editor Ctrl+L / context-menu actions) ────────────────
   const [inlinePrompt, setInlinePrompt] = useState(null);
   // Stores the Monaco range that should be replaced after an inline agent reply
@@ -863,7 +868,8 @@ export default function App() {
           prompt: fullPrompt,
           current_file: selectedFile || '',
           editor_content: fileContent || '',
-          selected_text: selectedText || ''
+          selected_text: selectedText || '',
+          model_params: ephemeralParams
         }),
       });
 
@@ -962,7 +968,7 @@ export default function App() {
     try {
       const res = await fetch('/api/opalacoder/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: 'run', agent: 'chat_orchestrator', prompt: userText, project_name: activeProject.name, project_path: activeProject.project_path, model: activeProject.model, current_file: selectedFile || '', editor_content: fileContent || '', selected_text: selectedText || '' }),
+        body: JSON.stringify({ command: 'run', agent: 'chat_orchestrator', prompt: userText, project_name: activeProject.name, project_path: activeProject.project_path, model: activeProject.model, current_file: selectedFile || '', editor_content: fileContent || '', selected_text: selectedText || '', model_params: ephemeralParams }),
       });
       if (!res.body) { addLog('error', 'ReadableStream não suportado pelo backend.'); setIsAgentRunning(false); return; }
       const reader = res.body.getReader();
@@ -1076,6 +1082,10 @@ export default function App() {
               setInlinePrompt={setInlinePrompt}
               onInlineSubmit={handleInlineSubmit}
               isInlineRunning={isInlineRunning}
+              onInlineCancel={() => {
+                fetch('/api/opalacoder/interrupt', { method: 'POST' }).catch(() => {});
+                setIsInlineRunning(false);
+              }}
               onToggleTerminal={() => {
                 if (isTerminalCollapsed) {
                   setIsTerminalCollapsed(false);
@@ -1201,6 +1211,8 @@ export default function App() {
           installDepsStatus={installDepsStatus}
           installDepsLog={installDepsLog}
           onInstallDeps={handleInstallOptionalDeps}
+          ephemeralParams={ephemeralParams}
+          setEphemeralParams={setEphemeralParams}
           onLanguageChange={(lang) => {
             fetch('/api/settings/language', {
               method: 'POST',

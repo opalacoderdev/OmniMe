@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
  *   onClose()                     — called when user dismisses
  *   isRunning                     — true if the backend task is currently processing
  */
-export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, isRunning }) {
+export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, onCancel, isRunning }) {
   const { t } = useTranslation();
   const inputRef = useRef(null);
   const [value, setValue] = useState('');
@@ -220,6 +220,30 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, i
             )}
             <span>{isRunning ? '...' : t('editorPanel.inlinePromptSend')}</span>
           </button>
+          
+          {isRunning && (
+            <button
+              onClick={onCancel}
+              style={{
+                background: '#442222',
+                border: '1px solid #ff4444',
+                borderRadius: '5px',
+                color: '#ff8888',
+                cursor: 'pointer',
+                padding: '5px 9px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '11px',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#662222'}
+              onMouseLeave={(e) => e.currentTarget.style.background = '#442222'}
+            >
+              <X size={12} />
+              <span>{t('editorPanel.inlinePromptCancel', 'Cancel')}</span>
+            </button>
+          )}
         </div>
 
         {/* Hint */}
