@@ -27,6 +27,7 @@ import EditProjectModal from './components/modals/EditProjectModal';
 import SettingsModal from './components/modals/SettingsModal';
 import ConfirmModal from './components/modals/ConfirmModal';
 import DirPickerModal from './components/modals/DirPickerModal';
+import DeleteProjectModal from './components/modals/DeleteProjectModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // App
@@ -95,6 +96,7 @@ export default function App() {
   const [newProjError, setNewProjError] = useState('');
 
   const [editingProject, setEditingProject] = useState(null);
+  const [projectToDelete, setProjectToDelete] = useState(null);
   const [confirmRequest, setConfirmRequest] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [webSearchConfig, setWebSearchConfig] = useState({ enabled: true, mcp_url: '', mcp_tool: 'web_search' });
@@ -543,11 +545,18 @@ export default function App() {
     } catch (err) { setNewProjError(err.message || 'Erro ao criar projeto.'); addLog('error', `Erro ao criar: ${err.message}`); }
   };
 
-  const handleDeleteProject = async (projName) => {
-    if (!confirm(`Remover projeto '${projName}'?`)) return;
+  const handleDeleteProject = (projName) => {
+    setProjectToDelete(projName);
+  };
+
+  const confirmDeleteProject = async (deleteDir) => {
+    if (!projectToDelete) return;
+    const projName = projectToDelete;
+    setProjectToDelete(null);
     try {
-      const res = await fetch('/api/opalacoder/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_name: projName }) });
+      const res = await fetch('/api/opalacoder/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_name: projName, delete_dir: deleteDir }) });
       if (res.ok) { addLog('info', `Projeto removido: ${projName}`); if (activeProject?.name === projName) setActiveProject(null); fetchProjects(); }
+      else { const data = await res.json(); addLog('error', `Erro ao excluir: ${data.error}`); }
     } catch (err) { addLog('error', `Erro ao excluir: ${err.message}`); }
   };
 
@@ -1363,6 +1372,12 @@ export default function App() {
       )}
 
       <ConfirmModal confirmRequest={confirmRequest} onConfirm={sendConfirmResponse} />
+
+      <DeleteProjectModal
+        projectToDelete={projectToDelete}
+        onCancel={() => setProjectToDelete(null)}
+        onConfirm={confirmDeleteProject}
+      />
 
       <DirPickerModal
         dirPicker={dirPicker}

@@ -91,8 +91,7 @@
 
 8. Ao executar o software pela primeira vez, sugerir intalar o ollama (executar instalação via comando de instalação -- no window: irm https://ollama.com/install.ps1 | iex); no Linux: curl -fsSL https://ollama.com/install.sh | sh; no macosx:curl -fsSL https://ollama.com/install.sh | sh . se ainda não instalado (verificar complexidade e portabildiade dessa funcionalidade). Seria interessante instruir o usuário ou instalar por ele?
 
-9. Instalador autocontido para linux e windows.
+9. Implementar e disponibilizar uma skill specs (em que o agente é instruído para a leitura das specs). Deve ser disponibilizado na loja, não carregado automaticamente no projeto.
 
-# FROM CURRENT 0.2.5 TO  0.2.6 (NÃO IMPLEMENTAR AGORA):
+10. Instalador autocontido para linux e windows.
 
-1. Implementar e disponibilizar uma skill specs (em que o agente é instruído para a leitura das specs). Deve ser disponibilizado na loja, não carregado automaticamente no projeto.

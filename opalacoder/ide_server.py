@@ -584,12 +584,21 @@ class AsyncHTTPServer:
         elif path == '/api/opalacoder/delete' and method == 'POST':
             from opalacoder.config import DEFAULT_DB_PATH
             from opalacoder.project import ProjectStore
+            import shutil
             store = ProjectStore(db_path=DEFAULT_DB_PATH)
             project_name = data.get("project_name")
+            delete_dir = data.get("delete_dir", False)
             if not project_name:
                 self.send_response(writer, 400, b'{"error":"project_name is required"}', "application/json")
                 return
             if store.exists(project_name):
+                if delete_dir:
+                    proj = store.load(project_name)
+                    if proj and proj.project_path and os.path.exists(proj.project_path):
+                        try:
+                            shutil.rmtree(proj.project_path)
+                        except Exception as e:
+                            print(f"Error deleting project directory: {e}")
                 store.delete(project_name)
                 self.send_response(writer, 200, b'{"success":true}', "application/json")
             else:
