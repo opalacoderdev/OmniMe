@@ -48,7 +48,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
         finishOnboarding({
           project_name: "Projeto Piloto (Ollama)",
           project_path: "~/OpalaCoderPilot",
-          model: "ollama/gemma4:12b",
+          model: ollamaModel,
           mode: "plan"
         });
       } catch (e) {
@@ -71,6 +71,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
 
   const vram = hardware ? parseFloat(hardware.vram_gb) || 0 : 0;
   const isHighEnd = vram >= 8;
+  const ollamaModel = isHighEnd ? "ollama/gemma4:12b" : "ollama/qwen2.5-coder:1.5b";
 
   return (
     <div className="vscode-modal-overlay" style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.85)' }}>
@@ -158,7 +159,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
                   <button className="vscode-button" onClick={() => finishOnboarding({
                     project_name: "Projeto Piloto (Ollama)",
                     project_path: "~/OpalaCoderPilot",
-                    model: "ollama/gemma4:12b",
+                    model: ollamaModel,
                     mode: "plan"
                   })}>
                     {t('onboarding.startPilot')}
@@ -176,7 +177,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
                   <button className="vscode-button" style={{ marginLeft: '12px', backgroundColor: '#3c3c3c' }} onClick={() => finishOnboarding({
                     project_name: "Projeto Piloto (Ollama)",
                     project_path: "~/OpalaCoderPilot",
-                    model: "ollama/gemma4:12b",
+                    model: ollamaModel,
                     mode: "plan"
                   })}>
                     {t('onboarding.ignoreStartBtn')}
@@ -206,7 +207,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
             <button className="vscode-button" onClick={() => finishOnboarding({
               project_name: "Projeto Piloto (Ollama)",
               project_path: "~/OpalaCoderPilot",
-              model: "ollama/gemma4:12b",
+              model: ollamaModel,
               mode: "plan"
             })}>
               {t('onboarding.alreadyInstalledBtn')}

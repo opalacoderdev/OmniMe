@@ -2,6 +2,7 @@ import subprocess
 import json
 import urllib.request
 import platform
+import re
 
 def check_ollama_status():
     """Check if Ollama is installed and running, and get its version."""
@@ -40,18 +41,15 @@ def check_ollama_status():
     # Parse version to check if >= 0.3.5
     if version:
         try:
-            # version might be "0.3.14"
-            parts = [int(x) for x in version.split(".")[:3]]
-            # Pad with 0 if needed
-            while len(parts) < 3:
-                parts.append(0)
-            
-            if parts[0] > 0:
-                is_supported = True
-            elif parts[0] == 0 and parts[1] > 3:
-                is_supported = True
-            elif parts[0] == 0 and parts[1] == 3 and parts[2] >= 5:
-                is_supported = True
+            match = re.search(r'(\d+)\.(\d+)\.(\d+)', version)
+            if match:
+                major, minor, patch = map(int, match.groups())
+                if major > 0:
+                    is_supported = True
+                elif major == 0 and minor > 3:
+                    is_supported = True
+                elif major == 0 and minor == 3 and patch >= 5:
+                    is_supported = True
         except Exception:
             pass
 
