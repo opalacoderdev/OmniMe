@@ -26,6 +26,7 @@ import NewProjectModal from './components/modals/NewProjectModal';
 import EditProjectModal from './components/modals/EditProjectModal';
 import SettingsModal from './components/modals/SettingsModal';
 import ConfirmModal from './components/modals/ConfirmModal';
+import HardwareModal from './components/modals/HardwareModal';
 import DirPickerModal from './components/modals/DirPickerModal';
 import DeleteProjectModal from './components/modals/DeleteProjectModal';
 
@@ -99,6 +100,7 @@ export default function App() {
   const [projectToDelete, setProjectToDelete] = useState(null);
   const [confirmRequest, setConfirmRequest] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHardwareModalOpen, setIsHardwareModalOpen] = useState(false);
   const [webSearchConfig, setWebSearchConfig] = useState({ enabled: true, mcp_url: '', mcp_tool: 'web_search' });
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
@@ -1139,6 +1141,7 @@ export default function App() {
           }}
           gitChangesCount={gitChanges.length}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenHardware={() => setIsHardwareModalOpen(true)}
         />
 
         {/* Left Sidebar */}
@@ -1369,6 +1372,10 @@ export default function App() {
             }).catch(() => { });
           }}
         />
+      )}
+
+      {isHardwareModalOpen && (
+        <HardwareModal onClose={() => setIsHardwareModalOpen(false)} />
       )}
 
       <ConfirmModal confirmRequest={confirmRequest} onConfirm={sendConfirmResponse} />

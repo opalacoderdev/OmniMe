@@ -506,6 +506,65 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
+        # Hardware Inference Endpoints
+        elif path == '/api/hardware' and method == 'GET':
+            from opalacoder.hardware_store import get_or_detect_hardware
+            info = get_or_detect_hardware()
+            self.send_response(writer, 200, json.dumps(info).encode('utf-8'), "application/json")
+
+        elif path == '/api/hardware/detect' and method == 'POST':
+            from opalacoder.hardware_detect import get_hardware_info
+            from opalacoder.hardware_store import save_hardware_info
+            info = get_hardware_info()
+            save_hardware_info(info)
+            self.send_response(writer, 200, json.dumps(info).encode('utf-8'), "application/json")
+
+        elif path == '/api/hardware/save' and method == 'POST':
+            from opalacoder.hardware_store import save_hardware_info
+            try:
+                save_hardware_info(data)
+                self.send_response(writer, 200, b'{"success":true}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
+        elif path == '/api/models/info' and method == 'GET':
+            model_name = query.get('model', [''])[0]
+            if not model_name:
+                self.send_response(writer, 400, b'{"error":"model parameter is required"}', "application/json")
+                return
+            
+            clean_name = model_name
+            if '/' in clean_name:
+                clean_name = clean_name.split('/', 1)[1]
+            
+            try:
+                import urllib.request
+                import json as _json
+                req = urllib.request.Request("http://127.0.0.1:11434/api/tags")
+                with urllib.request.urlopen(req, timeout=2) as response:
+                    data_obj = _json.loads(response.read().decode())
+                    models = data_obj.get("models", [])
+                    
+                    found_model = None
+                    for m in models:
+                        if m.get("name") == clean_name or m.get("name").startswith(clean_name + ":"):
+                            found_model = m
+                            break
+                    
+                    if found_model:
+                        size_bytes = found_model.get("size", 0)
+                        size_gb = size_bytes / (1024**3)
+                        self.send_response(writer, 200, json.dumps({
+                            "found": True,
+                            "size_gb": round(size_gb, 2),
+                            "details": found_model.get("details", {})
+                        }).encode('utf-8'), "application/json")
+                        return
+            except Exception:
+                pass
+                
+            self.send_response(writer, 200, json.dumps({"found": False}).encode('utf-8'), "application/json")
+
         # 4. List Projects
         elif path == '/api/opalacoder/list-projects':
             from opalacoder.config import DEFAULT_DB_PATH

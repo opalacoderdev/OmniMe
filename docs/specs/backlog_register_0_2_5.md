@@ -85,13 +85,11 @@
 
 5. Em refine e generate, é frágil a solução de mostrar os pensamentos do agente m thinking, dado que, tendo tido bloqueio das funções da IDE, muitas vezes (editor maximizado), não é possível olhar para essas subjanelas (thinking, output, etc). ✅
 
-6. Na deleção de projeto, ter um check para escolher deletar pasta também.
+6. Na deleção de projeto, ter um check para escolher deletar pasta também.✅
 
-7. Inicializar configurações padrão do projeto com um modelo do ollama compatível com a máquina do usuário. 
+7. Inicializar configurações padrão do projeto com um modelo do ollama compatível com a máquina do usuário. ✅
 
 8. Ao executar o software pela primeira vez, sugerir intalar o ollama (executar instalação via comando de instalação -- no window: irm https://ollama.com/install.ps1 | iex); no Linux: curl -fsSL https://ollama.com/install.sh | sh; no macosx:curl -fsSL https://ollama.com/install.sh | sh . se ainda não instalado (verificar complexidade e portabildiade dessa funcionalidade). Seria interessante instruir o usuário ou instalar por ele?
 
-9. Implementar e disponibilizar uma skill specs (em que o agente é instruído para a leitura das specs). Deve ser disponibilizado na loja, não carregado automaticamente no projeto.
-
-10. Instalador autocontido para linux e windows.
+9. Instalador autocontido para linux e windows.
 

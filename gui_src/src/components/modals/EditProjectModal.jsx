@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Settings, Check, FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useModelValidation } from './useModelValidation';
 
 // Numeric input helper to avoid repetition in the advanced params grid.
 function ParamNumber({ label, value, onChange, step, min, max, placeholder }) {
@@ -33,6 +34,14 @@ export default function EditProjectModal({
   onOpenDirPicker,
 }) {
   const { t } = useTranslation();
+  const { hardware, modelStatus } = useModelValidation(editingProject?.model);
+
+  const getBorderColor = () => {
+    if (modelStatus === 'green') return '#4ade80';
+    if (modelStatus === 'yellow') return '#facc15';
+    if (modelStatus === 'red') return '#f87171';
+    return undefined;
+  };
 
   if (!editingProject) return null;
 
@@ -115,6 +124,7 @@ export default function EditProjectModal({
                 onChange={e => setEditingProject(p => ({ ...p, model: e.target.value }))}
                 onBlur={() => onLoadModelConfig(true)}
                 placeholder="gemini/gemini-2.5-flash"
+                style={{ borderColor: getBorderColor(), borderWidth: modelStatus !== 'unknown' ? '2px' : '1px' }}
               />
               <datalist id="edit-models">
                 <option value="gemini/gemini-2.5-flash" />
@@ -122,6 +132,10 @@ export default function EditProjectModal({
                 <option value="openai/gpt-4o" />
                 <option value="ollama/gemma4:12b" />
               </datalist>
+              {modelStatus === 'green' && <span style={{ fontSize: '10px', color: '#4ade80' }}>✓ Modelo adequado ao seu hardware.</span>}
+              {modelStatus === 'yellow' && <span style={{ fontSize: '10px', color: '#facc15' }}>⚠ Poderá ficar lento (uso de CPU RAM).</span>}
+              {modelStatus === 'red' && <span style={{ fontSize: '10px', color: '#f87171' }}>❌ Pode exceder a memória da máquina.</span>}
+              {hardware && <span style={{ fontSize: '10px', color: '#a0a0c0' }}>VRAM: {hardware.vram_gb}GB | RAM: {hardware.ram_gb}GB</span>}
             </div>
             <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
               <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.mode')}</label>
