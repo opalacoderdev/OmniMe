@@ -147,7 +147,7 @@ export default function SettingsModal({
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <div className="flex flex-col" style={{ gap: '4px' }}>
                     <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralMaxTokens')}</label>
-                    <input type="number" min="1" className="vscode-settings-input" placeholder="1024"
+                    <input type="number" min="1" className="vscode-settings-input" placeholder="4096"
                       value={ephemeralParams?.max_tokens || ''}
                       onChange={e => updateEphemeralParam('max_tokens', e.target.value ? Number(e.target.value) : undefined)} />
                   </div>
@@ -166,14 +166,24 @@ export default function SettingsModal({
                   <div className="flex flex-col" style={{ gap: '4px' }}>
                     <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralReasoningEffort')}</label>
                     <select className="vscode-settings-input"
-                      value={ephemeralParams?.reasoning_effort || ''}
-                      onChange={e => updateEphemeralParam('reasoning_effort', e.target.value || undefined)}>
-                      <option value="">{t('settingsModal.ephemeralDefault')}</option>
+                      value={ephemeralParams?.reasoning_effort || 'none'}
+                      onChange={e => updateEphemeralParam('reasoning_effort', e.target.value)}>
                       <option value="none">none</option>
                       <option value="low">low</option>
                       <option value="medium">medium</option>
                       <option value="high">high</option>
                       <option value="xhigh">xhigh</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col" style={{ gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralThink')}</label>
+                    <select className="vscode-settings-input"
+                      value={ephemeralParams?.think === undefined ? 'false' : (ephemeralParams.think ? 'true' : 'false')}
+                      onChange={e => {
+                        updateEphemeralParam('think', e.target.value === 'true');
+                      }}>
+                      <option value="true">true</option>
+                      <option value="false">false</option>
                     </select>
                   </div>
                   <div className="flex flex-col" style={{ gap: '4px' }}>
@@ -184,6 +194,18 @@ export default function SettingsModal({
                       <option value="last">{t('settingsModal.ephemeralLastDefault')}</option>
                       <option value="all">all</option>
                     </select>
+                  </div>
+                  <div className="flex flex-col" style={{ gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralMaxIterations')}</label>
+                    <input type="number" min="1" className="vscode-settings-input" placeholder="10"
+                      value={ephemeralParams?.max_iterations || ''}
+                      onChange={e => updateEphemeralParam('max_iterations', e.target.value ? Number(e.target.value) : undefined)} />
+                  </div>
+                  <div className="flex flex-col" style={{ gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralMaxToolCalls')}</label>
+                    <input type="number" min="1" className="vscode-settings-input" placeholder="10"
+                      value={ephemeralParams?.max_tool_calls || ''}
+                      onChange={e => updateEphemeralParam('max_tool_calls', e.target.value ? Number(e.target.value) : undefined)} />
                   </div>
                 </div>
               </div>

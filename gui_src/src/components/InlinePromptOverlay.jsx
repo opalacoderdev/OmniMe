@@ -23,7 +23,7 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
     if (!inlinePrompt) return;
     const defaults = {
       refine: t('editorPanel.inlinePromptRefineDefault'),
-      fix: t('editorPanel.inlinePromptFixDefault'),
+      generate: t('editorPanel.inlinePromptGenerateDefault', 'Generate code here...'),
       free: '',
     };
     setValue(defaults[inlinePrompt.mode] ?? '');
@@ -37,13 +37,13 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
 
   const modeIcon = {
     refine: <Wand2 size={13} style={{ color: '#4ec9b0' }} />,
-    fix: <Wrench size={13} style={{ color: '#f48771' }} />,
+    generate: <MessageSquarePlus size={13} style={{ color: '#f48771' }} />,
     free: <MessageSquarePlus size={13} style={{ color: '#75beff' }} />,
   }[mode] ?? null;
 
   const modeLabel = {
     refine: t('editorPanel.refineSelection'),
-    fix: t('editorPanel.fixSelection'),
+    generate: t('editorPanel.generateCode', 'Generate Code'),
     free: t('editorPanel.inlinePromptTitle'),
   }[mode] ?? '';
 

@@ -1172,7 +1172,9 @@ def start_gui_server(host="127.0.0.1", port=3000):
             icon_path = None
 
         # webview.start() blocks the main thread until the window is closed.
-        webview.start(debug=False, icon=icon_path)
+        storage_path = os.path.expanduser("~/.opalacoder/webview")
+        os.makedirs(storage_path, exist_ok=True)
+        webview.start(debug=False, icon=icon_path, private_mode=False, storage_path=storage_path)
 
     except (ImportError, Exception) as e:
         # Graceful fallback: open in the default web browser

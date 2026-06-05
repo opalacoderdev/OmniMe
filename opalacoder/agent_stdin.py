@@ -498,11 +498,33 @@ async def handle_run(data: dict):
                     else:
                         print_event("error", {"message": f"Tool '{tname}' not found"})
         
+        model_params = data.get("model_params") or {}
+        model_kwargs = {}
+        if model_params.get("max_tokens") is not None:
+            model_kwargs["max_tokens"] = int(model_params["max_tokens"])
+        if model_params.get("num_ctx") is not None:
+            model_kwargs["num_ctx"] = int(model_params["num_ctx"])
+        if model_params.get("temperature") is not None:
+            model_kwargs["temperature"] = float(model_params["temperature"])
+        if model_params.get("reasoning_effort"):
+            model_kwargs["reasoning_effort"] = model_params["reasoning_effort"]
+        
+        # Default think to False if not explicitly passed as True
+        model_kwargs["think"] = bool(model_params.get("think", False))
+
+        agent_kwargs = {}
+        if model_params.get("max_iterations") is not None:
+            agent_kwargs["max_iterations"] = int(model_params["max_iterations"])
+        if model_params.get("max_tool_calls") is not None:
+            agent_kwargs["max_tool_calls"] = int(model_params["max_tool_calls"])
+
         agent = LLMAgentBlock(
             name=agent_type or "custom_agent",
             system_prompt=system_prompt,
             model=model or DEFAULT_MODEL,
             tools=tools_list,
+            model_kwargs=model_kwargs,
+            **agent_kwargs
         )
     
     # Setup message history if provided (for custom/standard LLMAgentBlock)

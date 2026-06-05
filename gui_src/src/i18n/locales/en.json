@@ -56,12 +56,14 @@
     "maximizeEditor": "Maximize Editor",
     "refineSelection": "Refine Selection (OpalaCoder)",
     "fixSelection": "Fix Selection (OpalaCoder)",
+    "generateCode": "Generate Code (OpalaCoder)",
     "inlinePromptTitle": "Inline Edit",
     "inlinePromptPlaceholder": "Ask OpalaCoder...",
     "inlinePromptSend": "Send",
     "inlinePromptCancel": "Cancel",
     "inlinePromptRefineDefault": "Refine the selected code",
-    "inlinePromptFixDefault": "Fix errors in the selected code"
+    "inlinePromptFixDefault": "Fix errors in the selected code",
+    "inlinePromptGenerateDefault": "Generate code here"
   },
   "chatPanel": {
     "header": "OPALA CHAT",
@@ -191,9 +193,12 @@
     "ephemeralContextWindow": "Context Window (num_ctx)",
     "ephemeralTemperature": "Temperature",
     "ephemeralReasoningEffort": "Reasoning Effort",
+    "ephemeralThink": "Think Parameter",
     "ephemeralResponseMode": "Response Mode",
     "ephemeralDefault": "default",
     "ephemeralLastDefault": "last (default)",
+    "ephemeralMaxIterations": "Max Iterations",
+    "ephemeralMaxToolCalls": "Max Tool Calls",
     "optionalDeps": "Optional Dependencies",
     "optionalDepsHint": "Install extra features (Local Embeddings, PyTorch, CUDA, etc.) that optimize offline processing.",
     "installingDeps": "Installing...",

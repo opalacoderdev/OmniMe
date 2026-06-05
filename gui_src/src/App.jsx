@@ -842,17 +842,19 @@ export default function App() {
     const ext = (selectedFile || '').split('.').pop() || '';
     const fence = ext ? `\`\`\`${ext}` : '\`\`\`';
 
-    const fullPrompt = hasSelection
-      ? `${verb}\n\n${fence}\n${selectedText}\n\`\`\``
-      : instruction;
+    const fullPrompt = (hasSelection && mode !== 'generate')
+      ? `Task: ${verb}\n\nFile Context:\n${fence}\n${fileContent}\n\`\`\`\n\nTarget Selection to Replace:\n${fence}\n${selectedText}\n\`\`\``
+      : `Task: ${instruction}\n\nFile Context:\n${fence}\n${fileContent}\n\`\`\`\n\nTarget Position for Insertion: Line ${startLine}, Column ${inlinePrompt.cursorCol}. Please return ONLY the code to be inserted here.`;
+    
     setChatInput('');
     setIsInlineRunning(true);
     addLog('info', `Iniciando edição inline: "${instruction}"`);
 
     const systemPrompt = "You are an expert developer performing an inline code edit. " +
-      "Return ONLY the modified code snippet inside a single markdown code block. " +
-      "Do NOT include greetings, conversational filler, or explanations. " +
-      "If you need context, use your read-only memory tools.";
+      "CRITICAL: Return ONLY the raw modified code snippet inside a single markdown code block (``` language ... ```). " +
+      "Do NOT include greetings, conversational filler, explanations, or any other text before or after the code block. " +
+      "Be as objective and direct as possible. If you need context, use your read-only memory tools. " +
+      "Your entire output must be just the markdown code block containing the final replacement code.";
 
     try {
       const res = await fetch('/api/opalacoder/run', {
@@ -897,6 +899,20 @@ export default function App() {
               agentResponse = data.response;
             } else if (data.event === 'error') {
               addLog('error', `Inline Agent Error: ${data.message}`);
+            } else if (data.event === 'thought' || data.event === 'reflection') {
+              addLog('thought', data.content);
+              setThinkingLogs(prev => {
+                const type = data.event.toUpperCase();
+                if (prev.length > 0 && prev[prev.length - 1].type === type) {
+                  const last = prev[prev.length - 1];
+                  return [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
+                }
+                return [...prev, { timestamp: new Date().toLocaleTimeString(), type, content: data.content }];
+              });
+            } else if (data.event === 'tool_call') {
+              addLog('tool_call', `[Inline] Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`);
+            } else if (data.event === 'tool_result') {
+              addLog('tool_result', `[Inline] Retorno: ${data.tool}`);
             }
           } catch (e) {
             // ignore non-json logs
@@ -911,23 +927,33 @@ export default function App() {
         } catch (e) { }
       }
 
-      if (agentResponse && hasSelection && editorRef.current && monacoRef.current) {
+      if (agentResponse && editorRef.current && monacoRef.current) {
         // Extract code block
         const regex = /```(?:\w+)?\n([\s\S]*?)```/;
         const match = regex.exec(agentResponse);
         const codeToInsert = match ? match[1].replace(/\n$/, '') : agentResponse.trim();
 
-        // Calculate end column dynamically
-        const model = editorRef.current.getModel();
-        const endCol = model ? model.getLineMaxColumn(endLine) : 1;
+        if (mode === 'generate') {
+          const range = new monacoRef.current.Range(startLine, inlinePrompt.cursorCol, startLine, inlinePrompt.cursorCol);
+          editorRef.current.executeEdits('opalacoder_inline', [{
+            range: range,
+            text: codeToInsert,
+            forceMoveMarkers: true,
+          }]);
+          addLog('info', 'Geração inline aplicada com sucesso.');
+        } else if (hasSelection) {
+          // Calculate end column dynamically
+          const model = editorRef.current.getModel();
+          const endCol = model ? model.getLineMaxColumn(endLine) : 1;
 
-        const range = new monacoRef.current.Range(startLine, 1, endLine, endCol);
-        editorRef.current.executeEdits('opalacoder_inline', [{
-          range: range,
-          text: codeToInsert,
-          forceMoveMarkers: true,
-        }]);
-        addLog('info', 'Edição inline aplicada com sucesso.');
+          const range = new monacoRef.current.Range(startLine, 1, endLine, endCol);
+          editorRef.current.executeEdits('opalacoder_inline', [{
+            range: range,
+            text: codeToInsert,
+            forceMoveMarkers: true,
+          }]);
+          addLog('info', 'Edição inline aplicada com sucesso.');
+        }
       }
 
     } catch (err) {

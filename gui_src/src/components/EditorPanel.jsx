@@ -101,30 +101,31 @@ export default function EditorPanel({
       },
     });
 
-    // ── Monaco context menu — Fix Selection ──────────────────────────────────
+    // ── Monaco context menu — Generate Code ──────────────────────────────────
     editor.addAction({
-      id: 'opalacoder.fixSelection',
-      label: t('editorPanel.fixSelection'),
+      id: 'opalacoder.generateCode',
+      label: t('editorPanel.generateCode'),
       contextMenuGroupId: 'opalacoder',
       contextMenuOrder: 2,
-      precondition: 'editorHasSelection',
       run: (ed) => {
         const model = ed.getModel();
-        const sel = ed.getSelection();
-        if (!model || !sel) return;
-        const selectedText = model.getValueInRange(sel);
         const pos = ed.getPosition();
+        if (!model || !pos) return;
+        
+        const sel = ed.getSelection();
+        const selectedText = (sel && !sel.isEmpty()) ? model.getValueInRange(sel) : '';
+
         const coords = ed.getScrolledVisiblePosition(pos);
         const domNode = ed.getDomNode();
         const rect = domNode?.getBoundingClientRect() ?? { left: 200, top: 100 };
         setInlinePrompt({
           x: rect.left + (coords?.left ?? 60) + 20,
           y: rect.top + (coords?.top ?? 40) + 24,
-          startLine: sel.startLineNumber,
-          endLine: sel.endLineNumber,
-          cursorCol: pos?.column ?? 1,
+          startLine: pos.lineNumber,
+          endLine: pos.lineNumber,
+          cursorCol: pos.column,
           selectedText,
-          mode: 'fix',
+          mode: 'generate',
         });
       },
     });

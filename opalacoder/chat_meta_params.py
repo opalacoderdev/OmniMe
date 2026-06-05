@@ -24,7 +24,7 @@ from contextlib import contextmanager
 from typing import Any
 
 # Keys that go into agent.model_kargs (litellm kwargs)
-_LITELLM_KEYS = {"max_tokens", "temperature", "top_k", "top_p", "min_p"}
+_LITELLM_KEYS = {"max_tokens", "temperature", "top_k", "top_p", "min_p", "think"}
 # Keys that are direct attributes on LLMAgentBlock
 _AGENT_ATTR_KEYS = {"system_prompt"}
 _ALLOWED_KEYS = _LITELLM_KEYS | _AGENT_ATTR_KEYS
