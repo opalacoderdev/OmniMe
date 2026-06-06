@@ -42,8 +42,8 @@ MANIFEST
 # --- PyInstaller ---
 *.manifest
 *.spec
-!OpalaCoder.spec
 !LinuxOpalaCoder.spec
+!OpalaCoder.spec
 
 # --- Installer logs ---
 pip-log.txt
