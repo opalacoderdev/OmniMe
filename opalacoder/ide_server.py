@@ -1428,7 +1428,7 @@ def start_gui_server(host="127.0.0.1", port=3000):
             text_select=True,
         )
 
-        print(f"[OpalaCoder] Launching desktop window → {url}")
+        print(f"[OpalaCoder] Launching desktop window -> {url}")
 
         icon_path = os.path.join(os.path.dirname(__file__), "icon.png")
         if not os.path.exists(icon_path):
@@ -1445,9 +1445,17 @@ def start_gui_server(host="127.0.0.1", port=3000):
         # webview.start() blocks the main thread until the window is closed.
         storage_path = os.path.expanduser("~/.opalacoder/webview")
         os.makedirs(storage_path, exist_ok=True)
-        webview.start(debug=False, icon=icon_path, private_mode=False, storage_path=storage_path)
+        
+        gui_engine = 'qt' if getattr(sys, 'frozen', False) and sys.platform == 'win32' else None
+        webview.start(gui=gui_engine, debug=False, icon=icon_path, private_mode=False, storage_path=storage_path)
 
     except (ImportError, Exception) as e:
+        import traceback
+        with open("pywebview_error.log", "w") as f:
+            f.write(f"Error type: {type(e).__name__}\n")
+            f.write(f"Error msg: {e}\n")
+            f.write(traceback.format_exc())
+
         # Graceful fallback: open in the default web browser
         import webbrowser
         print(f"[OpalaCoder] pywebview failed to launch ({type(e).__name__}: {e}) — opening browser at {url}")
@@ -1459,3 +1467,5 @@ def start_gui_server(host="127.0.0.1", port=3000):
             pass
 
     print("\nStopping OpalaCoder IDE Server...")
+    import os
+    os._exit(0)
