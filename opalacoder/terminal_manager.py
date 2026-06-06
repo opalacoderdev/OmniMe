@@ -81,8 +81,11 @@ class TerminalSession:
 
                 if self.loop and self.is_running:
                     self.loop.call_soon_threadsafe(self._forward_data, data)
-        except Exception:
-            pass
+        except Exception as e:
+            import traceback
+            print(f"[Terminal] Read loop error: {e}\n{traceback.format_exc()}")
+            with open("terminal_read_error.log", "a") as f:
+                f.write(f"[Terminal] Read loop error: {e}\n{traceback.format_exc()}\n")
         finally:
             if self.loop:
                 self.loop.call_soon_threadsafe(self.close)

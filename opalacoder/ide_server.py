@@ -939,6 +939,10 @@ class AsyncHTTPServer:
                     self.active_terminal = TerminalSession(project_path)
                     self.active_terminal.start_reading(asyncio.get_running_loop())
                 except Exception as e:
+                    import traceback
+                    print(f"Failed to start terminal: {e}\n{traceback.format_exc()}")
+                    with open("terminal_error.log", "a") as f:
+                        f.write(f"Failed to start terminal: {e}\n{traceback.format_exc()}\n")
                     self.send_response(writer, 500, f'{{"error": "{str(e)}"}}'.encode('utf-8'), "application/json")
                     return
 
@@ -1446,7 +1450,7 @@ def start_gui_server(host="127.0.0.1", port=3000):
         storage_path = os.path.expanduser("~/.opalacoder/webview")
         os.makedirs(storage_path, exist_ok=True)
         
-        gui_engine = 'qt' if getattr(sys, 'frozen', False) and sys.platform == 'win32' else None
+        gui_engine = 'edgechromium' if getattr(sys, 'frozen', False) and sys.platform == 'win32' else None
         webview.start(gui=gui_engine, debug=False, icon=icon_path, private_mode=False, storage_path=storage_path)
 
     except (ImportError, Exception) as e:

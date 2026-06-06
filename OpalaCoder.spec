@@ -1,7 +1,33 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+import sys
+import os
+
+binaries = []
+hiddenimports = ["chromadb", "tiktoken_ext.openai_public", "tiktoken_ext.anthropic"] + collect_submodules('webview')
+
+if sys.platform == 'win32':
+    # Add windows specific binaries
+    try:
+        import winpty
+        winpty_dir = os.path.dirname(winpty.__file__)
+        for filename in os.listdir(winpty_dir):
+            if filename.endswith(".dll") or filename.endswith(".exe"):
+                binaries.append((os.path.join(winpty_dir, filename), "winpty"))
+    except ImportError:
+        pass
+        
+    try:
+        import webview
+        webview_dir = os.path.dirname(webview.__file__)
+        webview2_loader = os.path.join(webview_dir, "lib", "runtimes", "win-x64", "native", "WebView2Loader.dll")
+        if os.path.exists(webview2_loader):
+            binaries.append((webview2_loader, "."))
+    except ImportError:
+        pass
+
+    hiddenimports.extend(["clr", "clr_loader"])
 
 a = Analysis(
     ['main.py'],
@@ -10,15 +36,9 @@ a = Analysis(
         ("config.yaml",       "."),
         ("skills/",           "skills"),
         ("opalacoder/gui/",   "opalacoder/gui"),
-        # recursos do Chromium:
-        ("C:/Users/gilza/AppData/Local/Packages/PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0/LocalCache/local-packages/Python312/site-packages/PyQt6/Qt6/resources/","PyQt6/Qt6/resources"),
-        ("C:/Users/gilza/AppData/Local/Packages/PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0/LocalCache/local-packages/Python312/site-packages/PyQt6/Qt6/translations/qtwebengine_locales/",
-         "PyQt6/Qt6/translations/qtwebengine_locales"),
     ] + collect_data_files('litellm') + collect_data_files('tiktoken'),
-    binaries=[
-        ("C:/Users/gilza/AppData/Local/Packages/PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0/LocalCache/local-packages/Python312/site-packages/PyQt6/Qt6/bin/QtWebEngineProcess.exe", "PyQt6/Qt6/bin"),
-    ],
-    hiddenimports=["PyQt6.QtWebEngineWidgets", "chromadb", "tiktoken_ext.openai_public", "tiktoken_ext.anthropic", "clr", "clr_loader"] + collect_submodules('webview'),
+    binaries=binaries,
+    hiddenimports=hiddenimports,
     pathex=[],
     hookspath=[],
     hooksconfig={},
@@ -56,5 +76,3 @@ coll = COLLECT(
     upx_exclude=[],
     name='OpalaCoder',
 )
-# OpalaCoder.spec
-
