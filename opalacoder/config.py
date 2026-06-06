@@ -37,22 +37,101 @@ def _load_yaml(filename: str) -> dict:
                 print(f"Warning: Failed to parse {config_path}: {e}")
     return {}
 
-_AGENTS_CONFIG = _load_yaml("agents.yaml")
+# Fallback for old imports that might expect a static dict, though they shouldn't.
+_AGENTS_CONFIG = {} 
 _APP_CONFIG = _load_yaml("config.yaml")
 
-# Model used for all agents (can be overridden via CLI --model)
-DEFAULT_MODEL = _AGENTS_CONFIG.get("default", os.getenv("OPALA_MODEL", "ollama/gemma4:12b"))
-ALTERNATIVE_MODEL = _AGENTS_CONFIG.get("alternative", "gemini/gemini-3.1-flash-lite")
-
-# Global LLM defaults (temperature, max_tokens, num_ctx) — can be set in agents.yaml
-_LLM_DEFAULTS: dict = {
-    "temperature": 0.7,
-    "num_ctx": 8192,
-    **_AGENTS_CONFIG.get("llm_defaults", {}),
+# Hardcoded defaults for internal OpalaCoder skills so they work without agents.yaml
+_CORE_AGENT_DEFAULTS = {
+    "memgpt": {
+        "temperature": 1.0,
+        "num_ctx": 16384,
+        "max_heartbeats": 20,
+        "debug": False,
+    },
+    "landscape_planner": {
+        "temperature": 1.0,
+        "num_ctx": 8192,
+        "reasoning_effort": "none",
+    },
+    "refinement_agent": {
+        "temperature": 1.0,
+        "num_ctx": 8192,
+        "reasoning_effort": "none",
+    },
+    "orchestrator": {
+        "temperature": 1.0,
+        "num_ctx": 16384,
+        "max_heartbeats": 20,
+        "debug": False,
+        "strategy": "workflow",
+    },
+    "worker": {
+        "temperature": 1.0,
+        "num_ctx": 16384,
+        "reasoning_effort": "none",
+        "debug": False,
+    }
 }
 
-# Per-agent overrides loaded from agents.yaml
-_AGENT_OVERRIDES: dict[str, dict] = _AGENTS_CONFIG.get("agents", {})
+def _deep_merge(target: dict, source: dict) -> dict:
+    """Recursively merge source dictionary into target."""
+    result = dict(target)
+    for k, v in source.items():
+        if isinstance(v, dict) and k in result and isinstance(result[k], dict):
+            result[k] = _deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
+
+def _get_agents_config() -> dict:
+    """Dynamically load and merge agents.yaml from User Home and Project Path."""
+    # Start with core defaults
+    cfg = {"agents": _deep_merge({}, _CORE_AGENT_DEFAULTS)}
+    
+    # User global
+    user_yaml = pathlib.Path.home() / ".opalacoder" / "agents.yaml"
+    if user_yaml.exists():
+        try:
+            with open(user_yaml, "r", encoding="utf-8") as f:
+                user_cfg = yaml.safe_load(f) or {}
+                cfg = _deep_merge(cfg, user_cfg)
+        except Exception as e:
+            print(f"Warning: Failed to parse {user_yaml}: {e}")
+            
+    # Project local
+    try:
+        from .tools import get_project_path
+        proj_path = get_project_path()
+        proj_yaml = pathlib.Path(proj_path) / ".opalacoder" / "agents.yaml"
+        if not proj_yaml.exists():
+            proj_yaml = pathlib.Path(proj_path) / "agents.yaml"
+            
+        if proj_yaml.exists():
+            with open(proj_yaml, "r", encoding="utf-8") as f:
+                proj_cfg = yaml.safe_load(f) or {}
+                cfg = _deep_merge(cfg, proj_cfg)
+    except Exception as e:
+        pass
+        
+    return cfg
+
+# Model used for all agents (can be overridden via CLI --model)
+# Evaluated at module load to serve as CLI defaults (will read ~/.opalacoder/agents.yaml if present)
+_initial_cfg = _get_agents_config()
+DEFAULT_MODEL = _initial_cfg.get("default", os.getenv("OPALA_MODEL", "ollama/gemma4:12b"))
+ALTERNATIVE_MODEL = _initial_cfg.get("alternative", "gemini/gemini-3.1-flash-lite")
+
+def _get_llm_defaults():
+    cfg = _get_agents_config()
+    return {
+        "temperature": 0.7,
+        "num_ctx": 8192,
+        **cfg.get("llm_defaults", {}),
+    }
+
+def _get_agent_overrides():
+    return _get_agents_config().get("agents", {})
 
 
 # Fields that are agent constructor params, not LiteLLM kwargs — strip before passing to model_kwargs.
@@ -75,11 +154,11 @@ from typing import Union
 
 def get_git_strategy() -> str:
     """Return the git strategy from config.yaml (falls back to agents.yaml for back-compat)."""
-    return _APP_CONFIG.get("git_strategy", _AGENTS_CONFIG.get("git_strategy", "hybrid"))
+    return _APP_CONFIG.get("git_strategy", _get_agents_config().get("git_strategy", "hybrid"))
 
 def get_agent_strategy(agent_name: str) -> str:
     """Return the orchestrator strategy name for *agent_name* from agents.yaml."""
-    return _AGENT_OVERRIDES.get(agent_name, {}).get("strategy", "autonomous")
+    return _get_agent_overrides().get(agent_name, {}).get("strategy", "autonomous")
 
 
 def get_vector_config() -> dict:
@@ -95,7 +174,7 @@ def get_vector_config() -> dict:
 
 def get_agent_max_heartbeats(agent_name: str, default: int) -> Union[int, str]:
     """Return max_heartbeats configured for *agent_name* in agents.yaml (can be 'auto'), or *default*."""
-    val = _AGENT_OVERRIDES.get(agent_name, {}).get("max_heartbeats", default)
+    val = _get_agent_overrides().get(agent_name, {}).get("max_heartbeats", default)
     if val == "auto":
         return "auto"
     return int(val)
@@ -103,27 +182,30 @@ def get_agent_max_heartbeats(agent_name: str, default: int) -> Union[int, str]:
 
 def get_agent_heartbeats_scale_factor(agent_name: str, default: float = 2.0) -> float:
     """Return heartbeats_scale_factor: per-agent override > config.yaml global > default."""
-    global_scale = float(_APP_CONFIG.get("heartbeats_scale_factor", _AGENTS_CONFIG.get("heartbeats_scale_factor", default)))
-    return float(_AGENT_OVERRIDES.get(agent_name, {}).get("heartbeats_scale_factor", global_scale))
+    global_scale = float(_APP_CONFIG.get("heartbeats_scale_factor", _get_agents_config().get("heartbeats_scale_factor", default)))
+    return float(_get_agent_overrides().get(agent_name, {}).get("heartbeats_scale_factor", global_scale))
 
 
 def get_agent_debug(agent_name: str, default: bool = False) -> bool:
     """Return debug flag configured for *agent_name* in agents.yaml, or *default*."""
-    return bool(_AGENT_OVERRIDES.get(agent_name, {}).get("debug", default))
+    return bool(_get_agent_overrides().get(agent_name, {}).get("debug", default))
 
 
 def get_agent_response_mode(agent_name: str, default: str = "last") -> str:
     """Return response_mode for *agent_name*: per-agent override > config.yaml global > default."""
-    global_mode = _APP_CONFIG.get("response_mode", _AGENTS_CONFIG.get("response_mode", default))
-    return str(_AGENT_OVERRIDES.get(agent_name, {}).get("response_mode", global_mode))
+    global_mode = _APP_CONFIG.get("response_mode", _get_agents_config().get("response_mode", default))
+    return str(_get_agent_overrides().get(agent_name, {}).get("response_mode", global_mode))
 
 
 def get_agent_model(agent_name: str, default: str | None = None) -> str:
     """Return the model configured for *agent_name* in agents.yaml, or *default*."""
-    override = _AGENT_OVERRIDES.get(agent_name, {}).get("model")
+    override = _get_agent_overrides().get(agent_name, {}).get("model")
     if override:
         return override
-    return default if default is not None else DEFAULT_MODEL
+    
+    cfg = _get_agents_config()
+    dyn_default = cfg.get("default", DEFAULT_MODEL)
+    return default if default is not None else dyn_default
 
 
 def get_agent_llm_kwargs(agent_name: str) -> dict:
@@ -137,8 +219,8 @@ def get_agent_llm_kwargs(agent_name: str) -> dict:
 
     Non-litellm fields (model, max_heartbeats) are excluded.
     """
-    merged = dict(_LLM_DEFAULTS)
-    merged.update(_AGENT_OVERRIDES.get(agent_name, {}))
+    merged = dict(_get_llm_defaults())
+    merged.update(_get_agent_overrides().get(agent_name, {}))
 
     try:
         from .tools import _PROJECT_SESSION
@@ -233,7 +315,7 @@ def _get_system_lang() -> str:
 DEFAULT_LANG = _get_system_lang()
 
 # Default litellm kwargs applied to all local model calls (kept for back-compat)
-LITELLM_DEFAULTS: dict = {"num_ctx": _LLM_DEFAULTS["num_ctx"]}
+LITELLM_DEFAULTS: dict = {"num_ctx": _get_llm_defaults()["num_ctx"]}
 
 # Sensitive operations that require user approval in "edit" mode
 SENSITIVE_OPS = {

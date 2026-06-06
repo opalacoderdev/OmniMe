@@ -1,4 +1,0 @@
-desc: Exported modelconfig for ollama_chat/nemotron-3-nano:4b
-id: nemotron-3-nano_4b
-model: ollama_chat/nemotron-3-nano:4b
-type: modelconfig

@@ -23,9 +23,8 @@ a = Analysis(
     ["main.py"],
     pathex=["."],
     datas=[
-        ("agents.yaml",       "."),
         ("config.yaml",       "."),
-        ("skills/",           "skills"),
+        ("skills/*",          "skills"),
         ("opalacoder/gui/",   "opalacoder/gui"),
         # QtWebEngine Chromium resources
         (os.path.join(PYQT6, "Qt6", "resources"),

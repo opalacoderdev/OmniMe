@@ -90,7 +90,7 @@ export default function App() {
   const [newProjName, setNewProjName] = useState('');
   const [newProjPath, setNewProjPath] = useState('');
   const [newProjDesc, setNewProjDesc] = useState('');
-  const [newProjModel, setNewProjModel] = useState('ollama/gemma4:12b');
+  const [newProjModel, setNewProjModel] = useState('ollama/gemma4:31b-cloud');
   const [newProjMode, setNewProjMode] = useState('auto');
   const [newProjModelParams, setNewProjModelParams] = useState({});
   const [newProjApiKey, setNewProjApiKey] = useState('');
@@ -580,13 +580,21 @@ export default function App() {
 
   const openEditModal = async (e, proj) => {
     e.stopPropagation();
+    console.log("[DEBUG APP] Abrindo Configurações para projeto:", proj.name);
     let fresh = proj;
     try {
       const res = await fetch('/api/opalacoder/list-projects');
-      if (res.ok) { const { projects: list } = await res.json(); const found = list.find(p => p.name === proj.name); if (found) fresh = found; }
+      if (res.ok) { 
+        const { projects: list } = await res.json(); 
+        const found = list.find(p => p.name === proj.name); 
+        console.log("[DEBUG APP] list-projects retornou para este projeto:", found);
+        if (found) fresh = found; 
+      }
     } catch (_) { }
     setModelConfigMsg('');
-    setEditingProject({ name: fresh.name, project_name: fresh.project_name || fresh.name, project_path: fresh.project_path || '', model: fresh.model || '', alternative_model: fresh.alternative_model || '', mode: fresh.mode || 'auto', description: fresh.description || '', model_params: fresh.model_params || {}, api_key: fresh.api_key || '', api_base: fresh.api_base || '' });
+    const newState = { name: fresh.name, project_name: fresh.project_name || fresh.name, project_path: fresh.project_path || '', model: fresh.model || '', alternative_model: fresh.alternative_model || '', mode: fresh.mode || 'auto', description: fresh.description || '', model_params: fresh.model_params || {}, api_key: fresh.api_key || '', api_base: fresh.api_base || '' };
+    console.log("[DEBUG APP] Estado editingProject final que vai para a Modal:", newState);
+    setEditingProject(newState);
   };
 
   const handleUpdateProject = async (e) => {
@@ -675,7 +683,6 @@ export default function App() {
       }
 
       if (editingProject.api_base) payloadParams.api_base = editingProject.api_base;
-      if (editingProject.api_key) payloadParams.api_key = editingProject.api_key;
       if (editingProject.alternative_model) payloadParams.alternative_model = editingProject.alternative_model;
 
       if (editingProject.model && editingProject.model.includes('/')) {
@@ -1334,7 +1341,18 @@ export default function App() {
           newProjApiBase={newProjApiBase} setNewProjApiBase={setNewProjApiBase}
           newProjError={newProjError}
           modelConfigMsg={modelConfigMsg}
-          onLoadModelConfig={() => loadModelConfig(newProjPath, newProjModel, (cfg) => { if (cfg.model_params) setNewProjModelParams(cfg.model_params); if (cfg.model) setNewProjModel(cfg.model); })}
+          onLoadModelConfig={() => loadModelConfig(newProjPath, newProjModel, (cfg) => { 
+            if (cfg.model_params) {
+              const loaded = { ...cfg.model_params };
+              if (loaded.api_base !== undefined) {
+                setNewProjApiBase(loaded.api_base);
+                delete loaded.api_base;
+              }
+              delete loaded.api_key;
+              setNewProjModelParams(loaded);
+            }
+            if (cfg.model) setNewProjModel(cfg.model); 
+          })}
           onOpenDirPicker={openDirPicker}
         />
       )}
@@ -1356,8 +1374,8 @@ export default function App() {
               ...p,
               model_params: Object.keys(cleanRestParams).length > 0 ? { ...p.model_params, ...cleanRestParams } : p.model_params,
               model: cfg.model || p.model,
-              api_base: api_base !== undefined ? api_base : p.api_base,
-              api_key: api_key !== undefined ? api_key : p.api_key,
+              api_base: (api_base !== undefined && api_base !== "") ? api_base : p.api_base,
+              api_key: (api_key !== undefined && api_key !== "") ? api_key : p.api_key,
               alternative_model: alternative_model !== undefined ? alternative_model : p.alternative_model
             };
           }), silent)}

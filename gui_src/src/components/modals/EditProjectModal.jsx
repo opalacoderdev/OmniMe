@@ -127,10 +127,10 @@ export default function EditProjectModal({
                 style={{ borderColor: getBorderColor(), borderWidth: modelStatus !== 'unknown' ? '2px' : '1px' }}
               />
               <datalist id="edit-models">
-                <option value="gemini/gemini-2.5-flash" />
-                <option value="gemini/gemini-2.5-pro" />
+                <option value="gemini/gemini-flash-lite-latest" />
+                <option value="anthropic/claude-3-5-sonnet-latest" />
                 <option value="openai/gpt-4o" />
-                <option value="ollama/gemma4:12b" />
+                <option value="ollama/gemma4:31b-cloud" />
               </datalist>
               {modelStatus === 'green' && <span style={{ fontSize: '10px', color: '#4ade80' }}>✓ Modelo adequado ao seu hardware.</span>}
               {modelStatus === 'yellow' && <span style={{ fontSize: '10px', color: '#facc15' }}>⚠ Poderá ficar lento (uso de CPU RAM).</span>}
@@ -173,9 +173,9 @@ export default function EditProjectModal({
               placeholder={t('editProjectModal.altModelPlaceholder')}
             />
             <datalist id="edit-alt-models">
-              <option value="gemini/gemini-2.5-flash" />
-              <option value="openai/gpt-4o-mini" />
-              <option value="ollama/gemma3:4b" />
+              <option value="gemini/gemini-flash-lite-latest" />
+              <option value="anthropic/claude-3-5-sonnet-latest" />
+              <option value="ollama/gemma4:31b-cloud" />
             </datalist>
           </div>
 

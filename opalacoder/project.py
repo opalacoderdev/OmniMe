@@ -144,19 +144,23 @@ class ProjectStore:
                 d["api_key"] = ""
                 d["api_base"] = ""
                 proj_path = d.get("project_path")
-                if proj_path and os.path.isdir(proj_path):
-                    env_path = os.path.join(proj_path, ".env")
-                    if os.path.isfile(env_path):
-                        try:
-                            with open(env_path, "r", encoding="utf-8") as f:
-                                for line in f:
-                                    line = line.strip()
-                                    if line.startswith("OPENAI_API_KEY="):
-                                        d["api_key"] = line.split("=", 1)[1].strip().strip('"').strip("'")
-                                    elif line.startswith("OPENAI_API_BASE="):
-                                        d["api_base"] = line.split("=", 1)[1].strip().strip('"').strip("'")
-                        except Exception:
-                            pass
+                if proj_path:
+                    abs_proj_path = os.path.expanduser(proj_path)
+                    if os.path.isdir(abs_proj_path):
+                        env_path = os.path.join(abs_proj_path, ".env")
+                        if os.path.isfile(env_path):
+                            try:
+                                with open(env_path, "r", encoding="utf-8") as f:
+                                    print(f"[DEBUG BACKEND] list_projects LENDO DO ARQUIVO: {env_path}", flush=True)
+                                    for line in f:
+                                        line = line.strip()
+                                        if line.startswith("OPENAI_API_KEY="):
+                                            d["api_key"] = line.split("=", 1)[1].strip().strip('"').strip("'")
+                                        elif line.startswith("OPENAI_API_BASE="):
+                                            d["api_base"] = line.split("=", 1)[1].strip().strip('"').strip("'")
+                                            print(f"[DEBUG BACKEND] list_projects lido do .env -> api_base: '{d['api_base']}'", flush=True)
+                            except Exception:
+                                pass
                 
                 res.append(d)
             return res
@@ -308,10 +312,15 @@ class ProjectStore:
                             # Only set if it's missing or if the current value is empty/None
                             if k not in _model_params or _model_params[k] in (None, ""):
                                 _model_params[k] = v
-                    
-                    with open(env_path, "w", encoding="utf-8") as f:
-                        f.writelines(env_lines)
-
+                                
+            except Exception:
+                pass
+                
+            try:
+                with open(env_path, "w", encoding="utf-8") as f:
+                    print(f"[DEBUG BACKEND] store.create ESCREVENDO NO ARQUIVO: {env_path}", flush=True)
+                    print(f"[DEBUG BACKEND] store.create CONTEÚDO: {env_lines}", flush=True)
+                    f.writelines(env_lines)
             except Exception:
                 pass
 
@@ -323,7 +332,7 @@ class ProjectStore:
                 "INSERT INTO projects (name, created_at, updated_at, mode, model, alternative_model, project_name, project_path, skills, description, core_memory, model_params) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (name, now, now, mode, model, alternative_model, project_name, abs_proj_path, json.dumps(_skills), description, "", json.dumps(_model_params)),
             )
-        return ProjectData(name=name, mode=mode, model=model, alternative_model=alternative_model, project_name=project_name, project_path=abs_proj_path, skills=_skills, description=description, core_memory="", model_params=_model_params)
+        return ProjectData(name=name, mode=mode, model=model, alternative_model=alternative_model, project_name=project_name, project_path=abs_proj_path, skills=_skills, description=description, core_memory="", model_params=_model_params, api_key=api_key or "", api_base=api_base or "")
 
     def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "", model_params: dict = None) -> ProjectData:
         self.delete(name)

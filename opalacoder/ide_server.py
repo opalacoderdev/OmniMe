@@ -601,6 +601,7 @@ class AsyncHTTPServer:
             skills = data.get("skills", [])
             api_key = data.get("api_key")
             api_base = data.get("api_base")
+            print(f"[DEBUG BACKEND] /create-project recebido payload. api_key='{api_key}', api_base='{api_base}'", flush=True)
             
             if not project_name:
                 self.send_response(writer, 400, b'{"error":"project_name is required"}', "application/json")
@@ -657,12 +658,18 @@ class AsyncHTTPServer:
                     threading.Thread(target=pull_model, daemon=True).start()
                 
                 if "piloto" in project_name.lower() or "pilot" in project_name.lower():
-                    from opalacoder.onboarding import PILOT_SKILL_CONTENT
+                    from opalacoder.onboarding import PILOT_SKILL_CONTENT_PT, PILOT_SKILL_CONTENT_EN
+                    from opalacoder.ui_settings import load_ui_settings
                     from opalacoder.skills import write_skills_yaml
+                    
+                    cfg = load_ui_settings()
+                    lang = cfg.get("lang", "pt")
+                    skill_content = PILOT_SKILL_CONTENT_EN if lang.startswith("en") else PILOT_SKILL_CONTENT_PT
+                    
                     skill_dir = os.path.join(abs_path, ".opalacoder", "skills", "tutorial_opalacoder")
                     os.makedirs(skill_dir, exist_ok=True)
                     with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
-                        f.write(PILOT_SKILL_CONTENT.strip() + "\n")
+                        f.write(skill_content.strip() + "\n")
                     
                     # Activate the skill without overwriting command-line
                     from opalacoder.skills import read_skills_yaml

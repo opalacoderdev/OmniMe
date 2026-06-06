@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Monitor, Cloud, Terminal, CheckCircle } from 'lucide-react';
+import { Loader2, Monitor, Cloud, Terminal, CheckCircle, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export default function OnboardingModal({ onClose, onComplete }) {
@@ -9,8 +9,9 @@ export default function OnboardingModal({ onClose, onComplete }) {
   const [ollamaStatus, setOllamaStatus] = useState(null);
   const [isInstalling, setIsInstalling] = useState(false);
 
-  const [apiProvider, setApiProvider] = useState('gemini/gemini-2.5-flash');
+  const [apiProvider, setApiProvider] = useState('gemini/gemini-flash-lite-latest');
   const [apiKey, setApiKey] = useState('');
+  const [apiBase, setApiBase] = useState('');
 
   useEffect(() => {
     fetch('/api/hardware')
@@ -39,6 +40,13 @@ export default function OnboardingModal({ onClose, onComplete }) {
     }
   };
 
+  const handleClose = async () => {
+    try {
+      await fetch('/api/onboarding/complete', { method: 'POST' });
+    } catch (e) {}
+    onComplete();
+  };
+
   const handleInstallOllama = async () => {
     if (navigator.userAgent.indexOf("Win") !== -1) {
       setIsInstalling(true);
@@ -60,22 +68,32 @@ export default function OnboardingModal({ onClose, onComplete }) {
   };
 
   const handleCreateCloudProject = () => {
-    finishOnboarding({
+    const config = {
       project_name: "Projeto Piloto (API)",
       project_path: "~/OpalaCoderPilot",
       model: apiProvider,
-      api_key: apiKey,
       mode: "plan"
-    });
+    };
+    if (apiKey) config.api_key = apiKey;
+    if (apiBase) config.api_base = apiBase;
+    finishOnboarding(config);
   };
 
   const vram = hardware ? parseFloat(hardware.vram_gb) || 0 : 0;
   const isHighEnd = vram >= 8;
-  const ollamaModel = isHighEnd ? "ollama/gemma4:12b" : "ollama/qwen2.5-coder:3b";
+  const ollamaModel = "ollama/gemma4:31b-cloud";
 
   return (
     <div className="vscode-modal-overlay" style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.85)' }}>
-      <div className="vscode-modal" style={{ maxWidth: '600px', width: '90%', padding: '32px', borderRadius: '12px', border: '1px solid #3c3c3c', backgroundColor: '#1e1e1e' }}>
+      <div className="vscode-modal" style={{ maxWidth: '600px', width: '90%', padding: '32px', borderRadius: '12px', border: '1px solid #3c3c3c', backgroundColor: '#1e1e1e', position: 'relative' }}>
+        
+        <button 
+          onClick={handleClose}
+          style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
+          title={t('newProjectModal.cancel')}
+        >
+          <X size={20} />
+        </button>
         
         {step === 1 && (
           <div style={{ textAlign: 'center' }}>
@@ -222,9 +240,9 @@ export default function OnboardingModal({ onClose, onComplete }) {
               <div className="flex flex-col" style={{ gap: '4px' }}>
                 <label style={{ fontSize: '12px', color: '#ccc' }}>{t('onboarding.recommendedProvider')}</label>
                 <select className="vscode-settings-input" value={apiProvider} onChange={(e) => setApiProvider(e.target.value)} style={{ width: '100%' }}>
-                  <option value="gemini/gemini-2.5-flash">{t('onboarding.providerGemini')}</option>
-                  <option value="openai/gpt-4o">{t('onboarding.providerOpenAI')}</option>
-                  <option value="anthropic/claude-3-5-sonnet-20241022">{t('onboarding.providerAnthropic')}</option>
+                  <option value="gemini/gemini-flash-lite-latest">{t('onboarding.providerGemini')}</option>
+                  <option value="anthropic/claude-3-5-sonnet-latest">{t('onboarding.providerAnthropic')}</option>
+                  <option value="ollama/gemma4:31b-cloud">{t('onboarding.providerOllamaCloud')}</option>
                 </select>
               </div>
               <div className="flex flex-col" style={{ gap: '4px' }}>
@@ -237,17 +255,46 @@ export default function OnboardingModal({ onClose, onComplete }) {
                   style={{ width: '100%', boxSizing: 'border-box' }}
                 />
               </div>
+              {apiProvider.startsWith('ollama/') && (
+                <div className="flex flex-col" style={{ gap: '4px' }}>
+                  <label style={{ fontSize: '12px', color: '#ccc' }}>URL BASE DA API (Opcional para Nuvem Customizada)</label>
+                  <input 
+                    type="text" 
+                    value={apiBase} 
+                    onChange={(e) => setApiBase(e.target.value)} 
+                    placeholder="Ex: https://meu-ollama.nuvem.com/v1" 
+                    className="vscode-settings-input"
+                    style={{ width: '100%', boxSizing: 'border-box' }}
+                  />
+                </div>
+              )}
             </div>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button className="vscode-button" style={{ backgroundColor: '#3c3c3c' }} onClick={() => finishOnboarding({
-                project_name: "Projeto Piloto",
-                project_path: "~/OpalaCoderPilot",
-                model: apiProvider,
-                mode: "plan"
-              })}>
+              <button className="vscode-button" style={{ backgroundColor: '#3c3c3c' }} onClick={() => {
+                const config = {
+                  project_name: "Projeto Piloto",
+                  project_path: "~/OpalaCoderPilot",
+                  model: apiProvider,
+                  mode: "plan"
+                };
+                if (apiBase) config.api_base = apiBase;
+                console.log("[DEBUG ONBOARDING] Botão 'Pular Chave' clicado. Config gerada:", config);
+                finishOnboarding(config);
+              }}>
                 {t('onboarding.skipKeyBtn')}
               </button>
-              <button className="vscode-button" onClick={handleCreateCloudProject}>
+              <button className="vscode-button" onClick={() => {
+                const config = {
+                  project_name: "Projeto Piloto (API)",
+                  project_path: "~/OpalaCoderPilot",
+                  model: apiProvider,
+                  mode: "plan"
+                };
+                if (apiKey) config.api_key = apiKey;
+                if (apiBase) config.api_base = apiBase;
+                console.log("[DEBUG ONBOARDING] Botão 'Criar Projeto' clicado. Config gerada:", config);
+                finishOnboarding(config);
+              }}>
                 {t('onboarding.createPilotBtn')}
               </button>
             </div>

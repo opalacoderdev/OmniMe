@@ -50,5 +50,5 @@ opalacoder = "opalacoder.cli:main"
 packages = ["opalacoder"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"agents.yaml" = "opalacoder/agents.yaml"
+"config.yaml" = "opalacoder/config.yaml"
 "skills" = "opalacoder/skills"

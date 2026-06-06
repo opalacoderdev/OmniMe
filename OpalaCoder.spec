@@ -32,9 +32,8 @@ if sys.platform == 'win32':
 a = Analysis(
     ['main.py'],
     datas=[
-        ("agents.yaml",       "."),
         ("config.yaml",       "."),
-        ("skills/",           "skills"),
+        ("skills/*",          "skills"),
         ("opalacoder/gui/",   "opalacoder/gui"),
     ] + collect_data_files('litellm') + collect_data_files('tiktoken'),
     binaries=binaries,
