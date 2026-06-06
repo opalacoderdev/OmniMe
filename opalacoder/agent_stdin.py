@@ -43,6 +43,11 @@ def _friendly_llm_error(exc: Exception, project=None) -> str:
     if "invalid value for" in low or "invalid_request_error" in low or "badrequest" in low:
         return f"The model rejected a parameter value: {msg}"
 
+    if "not found" in low or "pull" in low or "try pulling it first" in low:
+        if model.startswith("ollama/"):
+            return f"O modelo `{model.replace('ollama/', '')}` não foi encontrado localmente ou ainda está sendo baixado em segundo plano pelo Ollama. Por favor, aguarde alguns instantes até o fim do download e tente enviar a mensagem novamente!"
+        return f"Model {model} not found or needs to be pulled. Please check if it exists."
+
     if "connection" in low or "connect" in low:
         return f"Could not connect to {model}. Check that Ollama/the API server is running."
 

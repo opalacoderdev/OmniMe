@@ -645,6 +645,17 @@ class AsyncHTTPServer:
                     model_params=model_params,
                 )
                 
+                if model and model.startswith("ollama/"):
+                    m_name = model.split("ollama/", 1)[1]
+                    import threading
+                    import subprocess
+                    def pull_model():
+                        try:
+                            subprocess.run(["ollama", "pull", m_name], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        except Exception:
+                            pass
+                    threading.Thread(target=pull_model, daemon=True).start()
+                
                 if "piloto" in project_name.lower() or "pilot" in project_name.lower():
                     from opalacoder.onboarding import PILOT_SKILL_CONTENT
                     from opalacoder.skills import write_skills_yaml
@@ -751,6 +762,17 @@ class AsyncHTTPServer:
                 project.api_base = data["api_base"]
 
             store.save(project)
+            
+            if project.model and project.model.startswith("ollama/"):
+                m_name = project.model.split("ollama/", 1)[1]
+                import threading
+                import subprocess
+                def pull_model_update():
+                    try:
+                        subprocess.run(["ollama", "pull", m_name], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    except Exception:
+                        pass
+                threading.Thread(target=pull_model_update, daemon=True).start()
             
             # Propagate updated project settings to in-memory state and rebuild orchestrator
             import opalacoder.agent_stdin as agent_stdin

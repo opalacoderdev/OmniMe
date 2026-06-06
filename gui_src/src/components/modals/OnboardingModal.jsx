@@ -71,7 +71,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
 
   const vram = hardware ? parseFloat(hardware.vram_gb) || 0 : 0;
   const isHighEnd = vram >= 8;
-  const ollamaModel = isHighEnd ? "ollama/gemma4:12b" : "ollama/qwen2.5-coder:1.5b";
+  const ollamaModel = isHighEnd ? "ollama/gemma4:12b" : "ollama/qwen2.5-coder:3b";
 
   return (
     <div className="vscode-modal-overlay" style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.85)' }}>
