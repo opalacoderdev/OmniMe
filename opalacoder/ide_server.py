@@ -1467,5 +1467,4 @@ def start_gui_server(host="127.0.0.1", port=3000):
             pass
 
     print("\nStopping OpalaCoder IDE Server...")
-    import os
     os._exit(0)
