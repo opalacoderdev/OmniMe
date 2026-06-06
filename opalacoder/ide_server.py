@@ -664,8 +664,16 @@ class AsyncHTTPServer:
                     with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
                         f.write(PILOT_SKILL_CONTENT.strip() + "\n")
                     
-                    # Activate the skill
-                    write_skills_yaml(abs_path, ["tutorial_opalacoder"])
+                    # Activate the skill without overwriting command-line
+                    from opalacoder.skills import read_skills_yaml
+                    existing_skills = read_skills_yaml(abs_path)
+                    if "tutorial_opalacoder" not in existing_skills:
+                        existing_skills.append("tutorial_opalacoder")
+                    write_skills_yaml(abs_path, existing_skills)
+                    
+                    if "tutorial_opalacoder" not in project.skills:
+                        project.skills.append("tutorial_opalacoder")
+                        store.save(project)
 
                 res_data = {
                     "project_name": project.project_name,
