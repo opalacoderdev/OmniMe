@@ -7,10 +7,23 @@ def detect_ram():
     ram_gb = 0.0
     try:
         if sys.platform == "win32":
-            output = subprocess.check_output("wmic ComputerSystem get TotalPhysicalMemory", shell=True).decode()
-            bytes_str = "".join([c for c in output if c.isdigit()])
-            if bytes_str:
-                ram_gb = int(bytes_str) / (1024**3)
+            import ctypes
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            ram_gb = stat.ullTotalPhys / (1024**3)
         elif sys.platform == "darwin":
             output = subprocess.check_output(["sysctl", "-n", "hw.memsize"]).decode().strip()
             ram_gb = int(output) / (1024**3)

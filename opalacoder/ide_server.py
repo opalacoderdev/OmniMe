@@ -681,7 +681,14 @@ class AsyncHTTPServer:
                     proj = store.load(project_name)
                     if proj and proj.project_path and os.path.exists(proj.project_path):
                         try:
-                            shutil.rmtree(proj.project_path)
+                            import stat
+                            def remove_readonly(func, path, excinfo):
+                                try:
+                                    os.chmod(path, stat.S_IWRITE)
+                                    func(path)
+                                except Exception:
+                                    pass
+                            shutil.rmtree(proj.project_path, onerror=remove_readonly)
                         except Exception as e:
                             print(f"Error deleting project directory: {e}")
                 store.delete(project_name)

@@ -90,4 +90,5 @@ def clear_archival(project_name: str):
         except ValueError:
             pass
     except Exception as e:
-        print(f"Error clearing archival memory: {e}")
+        if "does not exist" not in str(e).lower() and "not found" not in str(e).lower():
+            print(f"Error clearing archival memory: {e}")
