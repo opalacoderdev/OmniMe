@@ -272,7 +272,7 @@
     "ollamaInstalledCompatible": "Ollama is already installed (v{{version}}) and compatible!",
     "startPilot": "Start Pilot Project",
     "updateRequired": "Update Required",
-    "updateMessage": "We detected Ollama (v{{version}}), but OpalaCoder requires version 0.3.5 or higher to fully support tool calls.",
+    "updateMessage": "We detected Ollama (v{{version}}), but OpalaCoder requires version 0.30.5 or higher to fully support tool calls.",
     "downloadUpdateBtn": "Download and Update Ollama",
     "ignoreStartBtn": "Ignore and Start Anyway",
     "installInstructions": "We will install Ollama on your machine. Please follow the instructions in the installer that will pop up.",

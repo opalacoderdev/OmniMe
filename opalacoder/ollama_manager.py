@@ -46,9 +46,9 @@ def check_ollama_status():
                 major, minor, patch = map(int, match.groups())
                 if major > 0:
                     is_supported = True
-                elif major == 0 and minor > 3:
+                elif major == 0 and minor > 30:
                     is_supported = True
-                elif major == 0 and minor == 3 and patch >= 5:
+                elif major == 0 and minor == 30 and patch >= 5:
                     is_supported = True
         except Exception:
             pass
