@@ -84,7 +84,7 @@ class TerminalSession:
         except Exception as e:
             import traceback
             print(f"[Terminal] Read loop error: {e}\n{traceback.format_exc()}")
-            with open("terminal_read_error.log", "a") as f:
+            with open("terminal_read_error.log", "a", encoding="utf-8") as f:
                 f.write(f"[Terminal] Read loop error: {e}\n{traceback.format_exc()}\n")
         finally:
             if self.loop:

@@ -941,7 +941,7 @@ class AsyncHTTPServer:
                 except Exception as e:
                     import traceback
                     print(f"Failed to start terminal: {e}\n{traceback.format_exc()}")
-                    with open("terminal_error.log", "a") as f:
+                    with open("terminal_error.log", "a", encoding="utf-8") as f:
                         f.write(f"Failed to start terminal: {e}\n{traceback.format_exc()}\n")
                     self.send_response(writer, 500, f'{{"error": "{str(e)}"}}'.encode('utf-8'), "application/json")
                     return
@@ -1455,7 +1455,7 @@ def start_gui_server(host="127.0.0.1", port=3000):
 
     except (ImportError, Exception) as e:
         import traceback
-        with open("pywebview_error.log", "w") as f:
+        with open("pywebview_error.log", "w", encoding="utf-8") as f:
             f.write(f"Error type: {type(e).__name__}\n")
             f.write(f"Error msg: {e}\n")
             f.write(traceback.format_exc())
