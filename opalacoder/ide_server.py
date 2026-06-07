@@ -1459,15 +1459,19 @@ def start_gui_server(host="127.0.0.1", port=3000):
     try:
         import webview  # pywebview
 
-        # Monkey-patch pywebview's Qt backend to use proper PyQt6 enum values
-        # instead of raw ints for setFeaturePermission. PyQt6 no longer accepts
-        # int in place of PermissionPolicy, causing a TypeError + crash on copy.
+        # Monkey-patch pywebview's Qt backend to use proper Qt enum values
+        # instead of raw ints for setFeaturePermission. Modern Qt wrappers (PyQt6/PySide6)
+        # no longer accept int in place of PermissionPolicy, causing a TypeError + crash.
         try:
             from webview.platforms import qt as _wv_qt
-            from PyQt6.QtWebEngineCore import QWebEnginePage as _QWP
+            _QWP = _wv_qt.QWebPage
 
-            _granted = _QWP.PermissionPolicy.PermissionGrantedByUser
-            _denied = _QWP.PermissionPolicy.PermissionDeniedByUser
+            if hasattr(_QWP, "PermissionPolicy"):
+                _granted = _QWP.PermissionPolicy.PermissionGrantedByUser
+                _denied = _QWP.PermissionPolicy.PermissionDeniedByUser
+            else:
+                _granted = 1
+                _denied = 2
 
             def _onFeaturePermissionRequested(self, url, feature):
                 if feature in (
@@ -1483,11 +1487,8 @@ def start_gui_server(host="127.0.0.1", port=3000):
             import inspect as _inspect
             _src = _inspect.getsource(_wv_qt)
             if "setFeaturePermission(url, feature, 2)" in _src:
-                # Find the BrowserView class and replace the method
-                for _cls in vars(_wv_qt).values():
-                    if isinstance(_cls, type) and hasattr(_cls, "onFeaturePermissionRequested"):
-                        _cls.onFeaturePermissionRequested = _onFeaturePermissionRequested
-                        break
+                if hasattr(_wv_qt, "BrowserView") and hasattr(_wv_qt.BrowserView, "WebPage"):
+                    _wv_qt.BrowserView.WebPage.onFeaturePermissionRequested = _onFeaturePermissionRequested
         except Exception:
             pass
 
