@@ -6,7 +6,7 @@ import sys
 def main():
     parser = argparse.ArgumentParser(description="Inspect current editor state (file name, selection, full content).")
     parser.add_argument("--project-path", default=".", help="Path to the active project folder.")
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()
 
     project_path = os.path.abspath(args.project_path)
     state_file = os.path.join(project_path, ".opalacoder", "_editor_state.json")

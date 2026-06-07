@@ -92,7 +92,7 @@ async def _run(args) -> str:
     # side-effect). Importing the registry first resolves the cycle — the same
     # order cli.py uses.
     import opalacoder.orchestrator  # noqa: F401
-    from opalacoder.workflow_orchestrator import WorkflowOrchestratorStrategy
+    from workflow_orchestrator import WorkflowOrchestratorStrategy
 
     model = _resolve_model(args.model)
     session, store = _load_session(args)

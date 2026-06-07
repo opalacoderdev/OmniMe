@@ -151,14 +151,14 @@ class ProjectStore:
                         if os.path.isfile(env_path):
                             try:
                                 with open(env_path, "r", encoding="utf-8") as f:
-                                    print(f"[DEBUG BACKEND] list_projects LENDO DO ARQUIVO: {env_path}", flush=True)
+
                                     for line in f:
                                         line = line.strip()
                                         if line.startswith("OPENAI_API_KEY="):
                                             d["api_key"] = line.split("=", 1)[1].strip().strip('"').strip("'")
                                         elif line.startswith("OPENAI_API_BASE="):
                                             d["api_base"] = line.split("=", 1)[1].strip().strip('"').strip("'")
-                                            print(f"[DEBUG BACKEND] list_projects lido do .env -> api_base: '{d['api_base']}'", flush=True)
+
                             except Exception:
                                 pass
                 
@@ -318,8 +318,7 @@ class ProjectStore:
                 
             try:
                 with open(env_path, "w", encoding="utf-8") as f:
-                    print(f"[DEBUG BACKEND] store.create ESCREVENDO NO ARQUIVO: {env_path}", flush=True)
-                    print(f"[DEBUG BACKEND] store.create CONTEÚDO: {env_lines}", flush=True)
+
                     f.writelines(env_lines)
             except Exception:
                 pass

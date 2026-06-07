@@ -53,8 +53,8 @@ from .skills import (
     parse_skill_md,
     MANDATORY_SKILLS,
 )
-from .workflow_tools import get_workflow_tools
 
+from .tools import get_available_tools
 
 CHAT_ORCHESTRATOR_SKILL = "chat-orchestrator"
 
@@ -246,12 +246,20 @@ def build_run_skill_tool(
         # Tools: the workflow tool set, but with the intercepted send_message so the
         # sub-agent's messages reach the user AND the MemGPT memory.
         tools = [
-            t for t in get_workflow_tools()
-            if (getattr(t, "name", None) != "send_message")
+            t for t in get_available_tools()
+            if t.name not in ["send_message"]
         ]
         tools.append(make_intercepted_send_message(memgpt, skill_name))
 
         worker_kwargs = get_agent_llm_kwargs("worker")
+        
+        # Strip /v1 from the end because Ollama native providers expect the root URL
+        if worker_kwargs.get("api_base"):
+            if model.startswith("ollama/") or model.startswith("ollama_chat/"):
+                if worker_kwargs["api_base"].endswith("/v1"):
+                    worker_kwargs["api_base"] = worker_kwargs["api_base"][:-3]
+                elif worker_kwargs["api_base"].endswith("/v1/"):
+                    worker_kwargs["api_base"] = worker_kwargs["api_base"][:-4]
         sub_agent = LLMAgentBlock(
             name=f"skill_{skill_name}",
             system_prompt=system,

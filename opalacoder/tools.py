@@ -199,42 +199,31 @@ def _preview(value: object, max_len: int = 60) -> str:
     return s[:max_len] + "…" if len(s) > max_len else s
 
 
-def _auto_lint(resolved_path: str) -> str:
-    """Run a quick syntax check and return the output, or empty string if clean."""
-    ext = os.path.splitext(resolved_path)[1].lower()
-    if ext == ".py":
-        res = subprocess.run(
-            ["python", "-m", "py_compile", resolved_path],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        return (res.stdout + res.stderr).strip()
-    if ext in {".js", ".ts", ".jsx", ".tsx"}:
-        try:
-            res = subprocess.run(
-                ["node", "--check", resolved_path],
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-            return (res.stdout + res.stderr).strip()
-        except FileNotFoundError:
-            return ""
-    return ""
-
-
 # ─── Tools ───────────────────────────────────────────────────────────────────
 
 @as_tool(name="read_file", description="Read the contents of a file in the project workspace. Relative paths are resolved from the project directory.")
 def read_file(path: str) -> str:
-    resolved = _resolve_path(path)
+    try:
+        resolved = _resolve_path(path)
+    except Exception as e:
+        raise ValueError(f"Error resolving path: {e}")
+
     AGENT_PROGRESS.update("read_file", f"path={_preview(resolved)}")
+    
+    try:
+        if os.path.isdir(resolved):
+            raise ValueError(f"Error: '{_preview(resolved)}' is a directory, not a file. Use run_command with 'ls' or get_project_overview() to view contents.")
+        if not os.path.exists(resolved):
+            raise ValueError(f"Error: file not found: {_preview(resolved)}. If you are trying to write code, use 'write_file' instead.")
+    except OSError as e:
+        # Catch cases like [Errno 36] File name too long if path contains code
+        raise ValueError(f"Error: invalid path argument ({e.strerror}). 'read_file' expects a file path, not file contents.")
+
     try:
         with open(resolved, "r", encoding="utf-8") as f:
             return f.read()
     except Exception as e:
-        return f"Error reading {resolved}: {e}"
+        raise ValueError(f"Error reading {_preview(resolved)}: {e}")
 
 
 def _decode_escape_sequences(s: str) -> str:
@@ -263,10 +252,21 @@ def _decode_escape_sequences(s: str) -> str:
 
 @as_tool(name="write_file", description="Write or overwrite a file inside the project directory. Relative paths are resolved from the project directory. Creates parent directories if needed. ALWAYS use this tool to save file content — never use run_command with echo/printf/cat to write files, as shell quoting will break with multi-line or HTML/JSON content.")
 def write_file(path: str, content: str) -> str:
-    resolved = _resolve_path(path)
-    AGENT_PROGRESS.update("write_file", f"path={_preview(resolved)}")
     try:
+        resolved = _resolve_path(path)
+    except Exception as e:
+        raise ValueError(f"Error resolving path: {e}")
+
+    AGENT_PROGRESS.update("write_file", f"path={_preview(resolved)}")
+    
+    try:
+        if os.path.isdir(resolved):
+            raise ValueError(f"Error: '{_preview(resolved)}' is a directory. Cannot write to a directory.")
         Path(resolved).parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise ValueError(f"Error: invalid path argument ({e.strerror}).")
+
+    try:
         content = _decode_escape_sequences(content)
         with open(resolved, "w", encoding="utf-8") as f:
             f.write(content)
@@ -275,16 +275,9 @@ def write_file(path: str, content: str) -> str:
             CODE_INDEX.rebuild_file(resolved)
         except Exception:
             pass
-        lint_output = _auto_lint(resolved)
-        if lint_output:
-            AGENT_PROGRESS.record_lint_error(resolved)
-            return (
-                f"Successfully wrote to {resolved}, but lint check found errors:\n"
-                f"{lint_output}\n\nPlease fix the syntax errors."
-            )
-        return f"Successfully wrote to {resolved}."
+        return f"Successfully wrote to {_preview(resolved)}."
     except Exception as e:
-        return f"Error writing {resolved}: {e}"
+        raise ValueError(f"Error writing {_preview(resolved)}: {e}")
 
 
 @as_tool(name="run_command", description="Execute a non-interactive shell command (e.g. ls, mkdir, grep, npm install). Runs inside the project directory. Returns stdout/stderr. NEVER run servers or infinite processes. NEVER use echo/printf/cat to write file content — use write_file instead, since shell quoting breaks with multi-line or HTML/JSON content.")
@@ -314,12 +307,12 @@ def run_command(command: str) -> str:
         if err:
             output += f"STDERR:\n{err}\n"
         if res.returncode != 0:
-            return f"ERROR: Command failed (exit code {res.returncode}).\n{output}Do NOT report success. Fix the error or use a different tool."
+            raise ValueError(f"ERROR: Command failed (exit code {res.returncode}).\n{output}Do NOT report success. Fix the error or use a different tool.")
         return output if output else "Command executed successfully (no output)."
     except subprocess.TimeoutExpired:
-        return "Error: Command timed out after 120 seconds."
+        raise ValueError("Error: Command timed out after 120 seconds.")
     except Exception as e:
-        return f"Error running command: {e}"
+        raise ValueError(f"Error running command: {e}")
 
 
 @as_tool(name="run_interactive_command", description="Run a command that requires user interaction (e.g. npm create, interactive scripts, prompts). The terminal control will be temporarily handed over to the user. Use this ONLY when a command needs human choices.")
@@ -341,7 +334,7 @@ def run_interactive_command(command: str) -> str:
         )
         return "Interactive command completed. The user interacted with it successfully."
     except Exception as e:
-        return f"Error running interactive command: {e}"
+        raise ValueError(f"Error running interactive command: {e}")
     finally:
         # Resume live context
         if getattr(AGENT_PROGRESS, "live_context", None):
@@ -350,11 +343,15 @@ def run_interactive_command(command: str) -> str:
 
 @as_tool(name="search_code", description="Search for a specific string across all files using grep. Searches inside the project directory by default.")
 def search_code(query: str, path: str = ".") -> str:
-    resolved = _resolve_path(path)
+    try:
+        resolved = _resolve_path(path)
+    except Exception as e:
+        raise ValueError(f"Error resolving path: {e}")
+
     AGENT_PROGRESS.update("search_code", f"query={_preview(query)} path={_preview(resolved)}")
     try:
         res = subprocess.run(
-            f"grep -rn '{query}' {resolved}",
+            f"grep -rnI --exclude-dir='.git' --exclude-dir='node_modules' --exclude-dir='__pycache__' '{query}' {resolved}",
             shell=True,
             capture_output=True,
             text=True,
@@ -363,7 +360,7 @@ def search_code(query: str, path: str = ".") -> str:
         )
         return res.stdout if res.stdout else "No matches."
     except Exception as e:
-        return f"Error searching code: {e}"
+        raise ValueError(f"Error searching code in {_preview(resolved)}: {e}")
 
 
 @as_tool(
@@ -476,8 +473,21 @@ def get_project_overview() -> str:
     )
 )
 def get_file_overview(path: str) -> str:
-    resolved = _resolve_path(path)
+    try:
+        resolved = _resolve_path(path)
+    except Exception as e:
+        raise ValueError(f"Error resolving path: {e}")
+
     AGENT_PROGRESS.update("get_file_overview", f"path={_preview(resolved)}")
+    
+    try:
+        if os.path.isdir(resolved):
+            raise ValueError(f"Error: '{_preview(resolved)}' is a directory, not a file.")
+        if not os.path.exists(resolved):
+            raise ValueError(f"Error: file not found: {_preview(resolved)}.")
+    except OSError as e:
+        raise ValueError(f"Error: invalid path argument ({e.strerror}).")
+
     try:
         # Try index-backed overview first (works for any language)
         try:
@@ -486,7 +496,7 @@ def get_file_overview(path: str) -> str:
             rel = os.path.relpath(resolved, project_root)
             syms = CODE_INDEX.symbols_in_file(rel)
             if syms:
-                overview = [f"File: {path}"]
+                overview = [f"File: {_preview(path)}"]
                 for sym in syms:
                     prefix = "  " if sym.kind == "method" else ""
                     overview.append(f"{prefix}{sym.kind} '{sym.name}' (line {sym.line})")
@@ -500,10 +510,10 @@ def get_file_overview(path: str) -> str:
         if not path.endswith(".py"):
             lines = content.splitlines()
             preview = "\n".join(lines[:100])
-            return f"Overview for {path} (non-Python):\n{preview}" + ("\n... [TRUNCATED]" if len(lines) > 100 else "")
+            return f"Overview for {_preview(path)} (non-Python):\n{preview}" + ("\n... [TRUNCATED]" if len(lines) > 100 else "")
 
         tree = ast.parse(content)
-        overview = [f"File: {path}"]
+        overview = [f"File: {_preview(path)}"]
 
         for node in ast.iter_child_nodes(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -523,7 +533,7 @@ def get_file_overview(path: str) -> str:
 
         return "\n".join(overview)
     except Exception as e:
-        return f"Error generating overview for {resolved}: {e}"
+        raise ValueError(f"Error generating overview for {_preview(resolved)}: {e}")
 
 @as_tool(
     name="write_content_pos",
@@ -533,8 +543,21 @@ def get_file_overview(path: str) -> str:
     )
 )
 def write_content_pos(path: str, content: str, pos: int) -> str:
-    resolved = _resolve_path(path)
+    try:
+        resolved = _resolve_path(path)
+    except Exception as e:
+        raise ValueError(f"Error resolving path: {e}")
+
     AGENT_PROGRESS.update("write_content_pos", f"path={_preview(resolved)} pos={pos}")
+    
+    try:
+        if os.path.isdir(resolved):
+            raise ValueError(f"Error: '{_preview(resolved)}' is a directory. Cannot write to a directory.")
+        if not os.path.exists(resolved):
+            raise ValueError(f"Error: file not found: {_preview(resolved)}.")
+    except OSError as e:
+        raise ValueError(f"Error: invalid path argument ({e.strerror}).")
+
     try:
         with open(resolved, "r", encoding="utf-8") as f:
             lines = f.readlines()
@@ -549,11 +572,9 @@ def write_content_pos(path: str, content: str, pos: int) -> str:
         with open(resolved, "w", encoding="utf-8") as f:
             f.writelines(lines)
             
-        return f"Successfully inserted content at line {pos} in {resolved}."
-    except FileNotFoundError:
-        return f"Error: File {resolved} not found."
+        return f"Successfully inserted content at line {pos} in {_preview(resolved)}."
     except Exception as e:
-        return f"Error writing to {resolved}: {e}"
+        raise ValueError(f"Error writing to {_preview(resolved)}: {e}")
 
 @as_tool(
     name="read_content_pos",
@@ -563,8 +584,21 @@ def write_content_pos(path: str, content: str, pos: int) -> str:
     )
 )
 def read_content_pos(path: str, start_pos: int, end_pos: int) -> str:
-    resolved = _resolve_path(path)
+    try:
+        resolved = _resolve_path(path)
+    except Exception as e:
+        raise ValueError(f"Error resolving path: {e}")
+
     AGENT_PROGRESS.update("read_content_pos", f"path={_preview(resolved)} lines={start_pos}-{end_pos}")
+    
+    try:
+        if os.path.isdir(resolved):
+            raise ValueError(f"Error: '{_preview(resolved)}' is a directory, not a file.")
+        if not os.path.exists(resolved):
+            raise ValueError(f"Error: file not found: {_preview(resolved)}.")
+    except OSError as e:
+        raise ValueError(f"Error: invalid path argument ({e.strerror}).")
+
     try:
         with open(resolved, "r", encoding="utf-8") as f:
             lines = f.readlines()
@@ -573,14 +607,12 @@ def read_content_pos(path: str, start_pos: int, end_pos: int) -> str:
         end_idx = min(len(lines), end_pos)
         
         if start_idx >= len(lines):
-            return f"Error: start_pos {start_pos} is beyond the end of the file (total lines: {len(lines)})."
+            raise ValueError(f"Error: start_pos {start_pos} is beyond the end of the file (total lines: {len(lines)}).")
             
         selected_lines = lines[start_idx:end_idx]
         return "".join(selected_lines)
-    except FileNotFoundError:
-        return f"Error: File {resolved} not found."
     except Exception as e:
-        return f"Error reading {resolved}: {e}"
+        raise ValueError(f"Error reading {_preview(resolved)}: {e}")
 
 # ─── Bug Detection ────────────────────────────────────────────────────────────
 
@@ -960,7 +992,7 @@ def append_core_memory(content: str) -> str:
         _PROJECT_STORE.save(_PROJECT_SESSION)
         return "Successfully appended to Core Memory."
     except Exception as e:
-        return f"Error saving Core Memory: {e}"
+        raise ValueError(f"Error saving Core Memory: {e}")
 
 @as_tool(name="search_conversation_history", description="Search through the past conversations of this project using semantic search (RAG) to remember previous context, decisions, or user instructions. Use this when you need context about past tasks.")
 def search_conversation_history(query: str, limit: int = 5) -> str:
@@ -979,7 +1011,7 @@ def search_conversation_history(query: str, limit: int = 5) -> str:
             out.append(f"[{r['timestamp']} | {r['role'].upper()}] {r['content']}")
         return "\n".join(out)
     except Exception as e:
-        return f"Error searching Archival Memory: {e}"
+        raise ValueError(f"Error searching Archival Memory: {e}")
 
 
 @as_tool(

@@ -601,7 +601,7 @@ class AsyncHTTPServer:
             skills = data.get("skills", [])
             api_key = data.get("api_key")
             api_base = data.get("api_base")
-            print(f"[DEBUG BACKEND] /create-project recebido payload. api_key='{api_key}', api_base='{api_base}'", flush=True)
+
             
             if not project_name:
                 self.send_response(writer, 400, b'{"error":"project_name is required"}', "application/json")

@@ -1,7 +1,6 @@
 """Orchestrator registry, base class, and shared UI helpers.
 
-Each concrete strategy lives in its own module:
-  - workflow_orchestrator.py    → WorkflowOrchestratorStrategy     ("workflow")
+# Each concrete strategy lives in its own module.
 
 Importing this module triggers registration of all bundled strategies via the
 side-effect imports at the bottom of the file.
@@ -162,4 +161,4 @@ def _deduplicate_response(text: str) -> str:
 # Each module decorates its class with @register_orchestrator, so importing it
 # is enough to populate _REGISTRY.
 
-from .workflow_orchestrator import WorkflowOrchestratorStrategy      # noqa: F401
+# (Strategy registration for workflow has been moved to its own skill)

@@ -45,6 +45,21 @@ class VersionControlStrategy(ABC):
         """Undo the last change in the VCS."""
         pass
 
+    @abstractmethod
+    def list_checkpoints(self) -> tuple[bool, str]:
+        """List all checkpoints."""
+        pass
+
+    @abstractmethod
+    def restore_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
+        """Restore the project to a specific checkpoint."""
+        pass
+
+    @abstractmethod
+    def remove_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
+        """Remove a specific checkpoint."""
+        pass
+
 
 # ─── Shadow Git Helper ────────────────────────────────────────────────────────
 
@@ -151,6 +166,26 @@ class AutoGitStrategy(VersionControlStrategy):
         _run_shadow_git("clean -fd", self.project_path)
         return True, "Last change undone."
 
+    def list_checkpoints(self) -> tuple[bool, str]:
+        res = _run_shadow_git("log --oneline", self.project_path)
+        if res.returncode == 0:
+            return True, res.stdout
+        return False, res.stderr
+
+    def restore_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
+        res = _run_shadow_git(f"reset --hard {checkpoint_id}", self.project_path)
+        if res.returncode == 0:
+            _run_shadow_git("clean -fd", self.project_path)
+            return True, f"Restored to checkpoint {checkpoint_id}."
+        return False, f"Failed to restore checkpoint {checkpoint_id}: {res.stderr}"
+
+    def remove_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
+        res = _run_shadow_git(f"rebase --onto {checkpoint_id}^ {checkpoint_id} HEAD", self.project_path)
+        if res.returncode == 0:
+            return True, f"Checkpoint {checkpoint_id} removed successfully."
+        _run_shadow_git("rebase --abort", self.project_path)
+        return False, f"Failed to remove checkpoint {checkpoint_id} (likely conflicts). Stderr: {res.stderr}"
+
 
 class HybridGitStrategy(VersionControlStrategy):
     """Hybrid mode: Shadow Git initialized, agent has tools, orchestrator ensures safety checkpoints."""
@@ -183,6 +218,26 @@ class HybridGitStrategy(VersionControlStrategy):
         _run_shadow_git("clean -fd", self.project_path)
         return True, "Last change undone."
 
+    def list_checkpoints(self) -> tuple[bool, str]:
+        res = _run_shadow_git("log --oneline", self.project_path)
+        if res.returncode == 0:
+            return True, res.stdout
+        return False, res.stderr
+
+    def restore_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
+        res = _run_shadow_git(f"reset --hard {checkpoint_id}", self.project_path)
+        if res.returncode == 0:
+            _run_shadow_git("clean -fd", self.project_path)
+            return True, f"Restored to checkpoint {checkpoint_id}."
+        return False, f"Failed to restore checkpoint {checkpoint_id}: {res.stderr}"
+
+    def remove_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
+        res = _run_shadow_git(f"rebase --onto {checkpoint_id}^ {checkpoint_id} HEAD", self.project_path)
+        if res.returncode == 0:
+            return True, f"Checkpoint {checkpoint_id} removed successfully."
+        _run_shadow_git("rebase --abort", self.project_path)
+        return False, f"Failed to remove checkpoint {checkpoint_id} (likely conflicts). Stderr: {res.stderr}"
+
 
 class AgentDrivenGitStrategy(VersionControlStrategy):
     """Agent-driven mode: Orchestrator does nothing automatically. Agent gets tools and decides when to use them."""
@@ -214,6 +269,26 @@ class AgentDrivenGitStrategy(VersionControlStrategy):
         _run_shadow_git("clean -fd", self.project_path)
         return True, "Last change undone."
 
+    def list_checkpoints(self) -> tuple[bool, str]:
+        res = _run_shadow_git("log --oneline", self.project_path)
+        if res.returncode == 0:
+            return True, res.stdout
+        return False, res.stderr
+
+    def restore_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
+        res = _run_shadow_git(f"reset --hard {checkpoint_id}", self.project_path)
+        if res.returncode == 0:
+            _run_shadow_git("clean -fd", self.project_path)
+            return True, f"Restored to checkpoint {checkpoint_id}."
+        return False, f"Failed to restore checkpoint {checkpoint_id}: {res.stderr}"
+
+    def remove_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
+        res = _run_shadow_git(f"rebase --onto {checkpoint_id}^ {checkpoint_id} HEAD", self.project_path)
+        if res.returncode == 0:
+            return True, f"Checkpoint {checkpoint_id} removed successfully."
+        _run_shadow_git("rebase --abort", self.project_path)
+        return False, f"Failed to remove checkpoint {checkpoint_id} (likely conflicts). Stderr: {res.stderr}"
+
 
 class NoGitStrategy(VersionControlStrategy):
     """Null strategy: No version control at all."""
@@ -234,6 +309,15 @@ class NoGitStrategy(VersionControlStrategy):
         return False, "VCS is disabled."
 
     def undo_last(self) -> tuple[bool, str]:
+        return False, "VCS is disabled."
+
+    def list_checkpoints(self) -> tuple[bool, str]:
+        return False, "VCS is disabled."
+
+    def restore_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
+        return False, "VCS is disabled."
+
+    def remove_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
         return False, "VCS is disabled."
 
 

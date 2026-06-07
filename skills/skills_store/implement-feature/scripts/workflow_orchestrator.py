@@ -29,7 +29,7 @@ from rich.live import Live
 
 from agenticblocks.blocks.llm.agent import AgentInput, LLMAgentBlock, _get_shared_router as _llm_router
 
-from .config import (
+from opalacoder.config import (
     get_agent_debug,
     get_agent_heartbeats_scale_factor,
     get_agent_llm_kwargs,
@@ -37,18 +37,18 @@ from .config import (
     get_agent_model,
     DEFAULT_MODEL,
 )
-from .code_index import CODE_INDEX
-from .tools import AGENT_PROGRESS, get_project_path
-from .workflow_tools import get_workflow_tools
-from .orchestrator import (
+from opalacoder.code_index import CODE_INDEX
+from opalacoder.tools import AGENT_PROGRESS, get_project_path
+from workflow_tools import get_workflow_tools
+from opalacoder.orchestrator import (
     BaseOrchestratorStrategy,
     register_orchestrator,
     _build_progress_panel,
     _deduplicate_response,
 )
-from . import terminal as T
-from .i18n import _
-from .planner import generate_panorama, refine_plan
+from opalacoder import terminal as T
+from opalacoder.i18n import _
+from opalacoder.planner import generate_panorama, refine_plan
 
 
 # ---------------------------------------------------------------------------
@@ -726,8 +726,8 @@ Correction task schema:
             # specs3 #4 — escalate on failure signals
             if any(s in result.lower() for s in _failure):
                 try:
-                    from .config import ALTERNATIVE_MODEL
-                    from .api_keys import ensure_api_key
+                    from opalacoder.config import ALTERNATIVE_MODEL
+                    from opalacoder.api_keys import ensure_api_key
                     if self.model != ALTERNATIVE_MODEL and ensure_api_key(ALTERNATIVE_MODEL):
                         AGENT_PROGRESS.last_tool = f"Escalating → {ALTERNATIVE_MODEL[:20]}"
                         alt = await _run_command(cmd_index, command, ALTERNATIVE_MODEL)
@@ -777,7 +777,7 @@ Correction task schema:
         worker_debug = get_agent_debug("worker", debug)
 
         # Set project context early so get_project_path() is correct for VCS and workers
-        from .tools import set_project_context
+        from opalacoder.tools import set_project_context
         if session and store:
             set_project_context(session, store)
 
@@ -810,8 +810,8 @@ Correction task schema:
         # _vcs is kept alive so per-task checkpoints can be created inside the loop.
         _vcs = None
         try:
-            from .vcs import get_vcs_strategy
-            from .config import get_git_strategy
+            from opalacoder.vcs import get_vcs_strategy
+            from opalacoder.config import get_git_strategy
             _vcs = get_vcs_strategy(get_git_strategy(), get_project_path())
             _vcs.setup()
             _vcs.manual_commit("auto-checkpoint before plan execution")
@@ -953,7 +953,7 @@ Correction task schema:
             """
             if _vcs is None:
                 return []
-            from .vcs import _run_shadow_git
+            from opalacoder.vcs import _run_shadow_git
             res = _run_shadow_git("status --porcelain")
             if res.returncode != 0:
                 return []
@@ -1166,8 +1166,8 @@ Correction task schema:
             vector_chunk_section = ""
             if _is_bugfix:
                 try:
-                    from .vector_index import set_vector_project
-                    from .config import get_vector_config
+                    from opalacoder.vector_index import set_vector_project
+                    from opalacoder.config import get_vector_config
                     vcfg = get_vector_config()
                     vidx = set_vector_project(get_project_path())
                     T.debug_oracle("vector_index", 0, "Building vector index…")

@@ -461,6 +461,70 @@ async def cmd_commit(state: REPLState, args: list[str]) -> str | None:
     return "continue"
 
 
+@_registry.register("/checkpoints", description="List all checkpoints (commits) in the shadow git")
+async def cmd_checkpoints(state: REPLState, _args: list[str]) -> str | None:
+    from .vcs import get_vcs_strategy
+    from .config import get_git_strategy
+    vcs = get_vcs_strategy(get_git_strategy(), state.project.project_path)
+    try:
+        vcs.setup()
+    except Exception as e:
+        T.error(f"Failed to setup VCS: {e}")
+    success, msg = vcs.list_checkpoints()
+    if success:
+        T.info("Checkpoints:")
+        T.console.print(msg)
+    else:
+        T.error(f"Failed to list checkpoints: {msg}")
+    return "continue"
+
+
+@_registry.register("/restoreckp", usage="<checkpoint_id>", description="Restore the project to a specific checkpoint")
+async def cmd_restoreckp(state: REPLState, args: list[str]) -> str | None:
+    if not args:
+        T.error("Usage: /restoreckp <checkpoint_id>")
+        return "continue"
+    checkpoint_id = args[0].strip()
+    from .vcs import get_vcs_strategy
+    from .config import get_git_strategy
+    vcs = get_vcs_strategy(get_git_strategy(), state.project.project_path)
+    try:
+        vcs.setup()
+    except Exception as e:
+        T.error(f"Failed to setup VCS: {e}")
+        
+    if await T.aconfirm(f"Are you sure you want to restore to checkpoint '{checkpoint_id}'? This will discard all current changes.", default=False):
+        success, msg = vcs.restore_checkpoint(checkpoint_id)
+        if success:
+            T.success(msg)
+        else:
+            T.error(msg)
+    return "continue"
+
+
+@_registry.register("/removechk", usage="<checkpoint_id>", description="Remove a specific checkpoint from history")
+async def cmd_removechk(state: REPLState, args: list[str]) -> str | None:
+    if not args:
+        T.error("Usage: /removechk <checkpoint_id>")
+        return "continue"
+    checkpoint_id = args[0].strip()
+    from .vcs import get_vcs_strategy
+    from .config import get_git_strategy
+    vcs = get_vcs_strategy(get_git_strategy(), state.project.project_path)
+    try:
+        vcs.setup()
+    except Exception as e:
+        T.error(f"Failed to setup VCS: {e}")
+        
+    if await T.aconfirm(f"Are you sure you want to remove checkpoint '{checkpoint_id}'?", default=False):
+        success, msg = vcs.remove_checkpoint(checkpoint_id)
+        if success:
+            T.success(msg)
+        else:
+            T.error(msg)
+    return "continue"
+
+
 @_registry.register("/exit", "/quit", description=_("exit_desc"))
 async def cmd_exit(_state: REPLState, _args: list[str]) -> str:
     T.info(_("exiting"))

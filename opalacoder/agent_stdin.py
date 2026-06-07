@@ -124,20 +124,10 @@ from opalacoder.tools import (
     set_project_context,
     web_search,
 )
-from opalacoder.workflow_tools import (
-    read_file as raw_read_file_workflow,
-    edit_file,
-    replace_lines,
-    find_symbol,
-    find_callers,
-    send_message,
-    get_workflow_tools,
-)
 
 # Global map of available tools by name
 ALL_TOOLS_MAP = {
-    "read_file": raw_read_file_workflow,
-    "read_file_base": raw_read_file_base,
+    "read_file": raw_read_file_base,
     "write_file": write_file,
     "run_command": run_command,
     "run_interactive_command": run_interactive_command,
@@ -149,11 +139,6 @@ ALL_TOOLS_MAP = {
     "read_content_pos": read_content_pos,
     "search_bugs": search_bugs,
     "web_search": web_search,
-    "edit_file": edit_file,
-    "replace_lines": replace_lines,
-    "find_symbol": find_symbol,
-    "find_callers": find_callers,
-    "send_message": send_message,
 }
 
 # State for persistent session
@@ -192,10 +177,6 @@ def wrap_tool(original_tool):
                 res_val = result.result
             else:
                 res_val = result.model_dump()
-            
-            res_str = str(res_val)
-            if "STDERR:" in res_str or "Error" in res_str:
-                print_event("problem", {"tool": name, "message": res_str, "severity": "error"})
         except Exception as e:
             res_val = f"Error: {e}"
             print_event("problem", {"tool": name, "message": str(e), "severity": "error"})
@@ -209,17 +190,19 @@ def wrap_tool(original_tool):
 
 
 
-# Monkey-patch get_workflow_tools to automatically wrap tools returned to sub-agents
-original_get_workflow_tools = get_workflow_tools
+from opalacoder.tools import get_available_tools
 
-def patched_get_workflow_tools(skill_tools=None):
-    tools = original_get_workflow_tools(skill_tools=skill_tools)
+# Monkey-patch get_available_tools to automatically wrap tools returned to sub-agents
+original_get_available_tools = get_available_tools
+
+def patched_get_available_tools():
+    tools = original_get_available_tools()
     return [wrap_tool(t) for t in tools]
 
-import opalacoder.workflow_tools
+import opalacoder.tools
 import opalacoder.memgpt_runtime
-opalacoder.workflow_tools.get_workflow_tools = patched_get_workflow_tools
-opalacoder.memgpt_runtime.get_workflow_tools = patched_get_workflow_tools
+opalacoder.tools.get_available_tools = patched_get_available_tools
+opalacoder.memgpt_runtime.get_available_tools = patched_get_available_tools
 
 async def handle_load_project(data: dict):
     global current_project, current_store, current_memgpt

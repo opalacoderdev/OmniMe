@@ -145,7 +145,7 @@ export default function App() {
   useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight, isTerminalCollapsed });
 
   // ── Effects ───────────────────────────────────────────────────────────────
-  useEffect(() => { 
+  useEffect(() => {
     fetch('/api/onboarding/status')
       .then(res => res.json())
       .then(data => {
@@ -321,7 +321,13 @@ export default function App() {
     if (!activeProject) return;
     try {
       const res = await fetch(`/api/opalacoder/problems?projectPath=${encodeURIComponent(activeProject.project_path)}`);
-      if (res.ok) { const data = await res.json(); setProblems(data.problems || []); }
+      if (res.ok) {
+        const data = await res.json();
+        setProblems(prev => {
+          const nonLinter = prev.filter(p => p.tool !== 'python-linter');
+          return [...nonLinter, ...(data.problems || [])];
+        });
+      }
     } catch (err) { console.error('Failed to fetch problems', err); }
   };
 
@@ -584,11 +590,11 @@ export default function App() {
     let fresh = proj;
     try {
       const res = await fetch('/api/opalacoder/list-projects');
-      if (res.ok) { 
-        const { projects: list } = await res.json(); 
-        const found = list.find(p => p.name === proj.name); 
+      if (res.ok) {
+        const { projects: list } = await res.json();
+        const found = list.find(p => p.name === proj.name);
         console.log("[DEBUG APP] list-projects retornou para este projeto:", found);
-        if (found) fresh = found; 
+        if (found) fresh = found;
       }
     } catch (_) { }
     setModelConfigMsg('');
@@ -600,7 +606,7 @@ export default function App() {
   const handleUpdateProject = async (e) => {
     e.preventDefault();
     if (!editingProject) return;
-    
+
     try {
       const res = await fetch('/api/opalacoder/update-project', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -619,29 +625,36 @@ export default function App() {
   // ── Model config ──────────────────────────────────────────────────────────
   const loadModelConfig = async (projectPath, model, applyFn, silent = false) => {
     if (!silent) setModelConfigMsg('');
-    if (!projectPath || !model) { 
-      if (!silent) setModelConfigMsg('⚠️ Defina o caminho do projeto e o modelo antes de carregar.'); 
-      return; 
+    if (!projectPath || !model) {
+      if (!silent) setModelConfigMsg('⚠️ Defina o caminho do projeto e o modelo antes de carregar.');
+      return;
     }
     try {
       const res = await fetch('/api/opalacoder/model-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectPath, model }) });
       const data = await res.json();
-      if (!data.found) { 
-        if (!silent) setModelConfigMsg(data.message); 
-        return; 
+      if (!data.found) {
+        if (!silent) setModelConfigMsg(data.message);
+        return;
       }
       if (silent) {
-        const confirmed = window.confirm(`OpalaCoder encontrou configurações pré-definidas para o modelo "${data.model || model}". Deseja aplicar os parâmetros automaticamente?`);
-        if (!confirmed) {
-          setModelConfigMsg('❌ Configuração automática recusada.');
-          return;
-        }
+        setConfirmRequest({
+          id: 'local-confirm',
+          prompt: `OpalaCoder encontrou configurações pré-definidas para o modelo "${data.model || model}". Deseja aplicar os parâmetros automaticamente?`,
+          callback: (value) => {
+            if (value === 'yes') {
+              applyFn(data);
+              setModelConfigMsg('✅ Configuração refinada aplicada automaticamente.');
+            } else {
+              setModelConfigMsg('❌ Configuração automática recusada.');
+            }
+          }
+        });
+        return; // Execution continues in the callback
       }
       applyFn(data);
       if (!silent) setModelConfigMsg('✅ Configuração refinada carregada.');
-      else setModelConfigMsg('✅ Configuração refinada aplicada automaticamente.');
-    } catch (e) { 
-      if (!silent) setModelConfigMsg(`⚠️ Erro ao carregar: ${e.message}`); 
+    } catch (e) {
+      if (!silent) setModelConfigMsg(`⚠️ Erro ao carregar: ${e.message}`);
     }
   };
 
@@ -668,14 +681,14 @@ export default function App() {
     setModelConfigMsg('Exportando...');
     try {
       const payloadParams = { ...(editingProject.model_params || {}) };
-      
+
       const ADVANCED_PARAMS = [
-        'temperature', 'max_tokens', 'num_ctx', 'seed', 'top_p', 
-        'frequency_penalty', 'presence_penalty', 'top_k', 'min_p', 
-        'repetition_penalty', 'reasoning_effort', 'response_mode', 
+        'temperature', 'max_tokens', 'num_ctx', 'seed', 'top_p',
+        'frequency_penalty', 'presence_penalty', 'top_k', 'min_p',
+        'repetition_penalty', 'reasoning_effort', 'response_mode',
         'think', 'stream'
       ];
-      
+
       for (const param of ADVANCED_PARAMS) {
         if (payloadParams[param] === undefined) {
           payloadParams[param] = null;
@@ -891,14 +904,24 @@ export default function App() {
 
   const sendConfirmResponse = async (value) => {
     if (!confirmRequest) return;
-    const { id, prompt, isSlashCommand } = confirmRequest;
+    const { id, prompt, isSlashCommand, callback } = confirmRequest;
     setConfirmRequest(null);
+
+    if (callback) {
+      callback(value);
+      return;
+    }
+
     addLog('info', `✅ Confirmação: "${prompt}" → ${value}`);
     try {
       if (isSlashCommand) {
         const res = await fetch('/api/opalacoder/slash-command/continue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, value }) });
         const result = await res.json();
-        if (result.status === 'done') setChatMessages(prev => [...prev, { role: 'assistant', content: (result.messages || []).join('\n') || 'Comando executado.' }]);
+        if (result.status === 'done') {
+          setChatMessages(prev => [...prev, { role: 'assistant', content: (result.messages || []).join('\n') || 'Comando executado.' }]);
+          fetchFiles();
+          fetchGitStatus();
+        }
       } else {
         await fetch('/api/opalacoder/input_response', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, value }) });
       }
@@ -948,7 +971,7 @@ export default function App() {
     const fullPrompt = (hasSelection && mode !== 'generate')
       ? `Task: ${verb}\n\nFile Context:\n${fence}\n${fileContent}\n\`\`\`\n\nTarget Selection to Replace:\n${fence}\n${selectedText}\n\`\`\``
       : `Task: ${instruction}\n\nFile Context:\n${fence}\n${fileContent}\n\`\`\`\n\nTarget Position for Insertion: Line ${startLine}, Column ${inlinePrompt.cursorCol}. Please return ONLY the code to be inserted here.`;
-    
+
     setChatInput('');
     setIsInlineRunning(true);
     setThinkingLogs([]);
@@ -1237,7 +1260,7 @@ export default function App() {
               onInlineSubmit={handleInlineSubmit}
               isInlineRunning={isInlineRunning}
               onInlineCancel={() => {
-                fetch('/api/opalacoder/interrupt', { method: 'POST' }).catch(() => {});
+                fetch('/api/opalacoder/interrupt', { method: 'POST' }).catch(() => { });
                 setIsInlineRunning(false);
               }}
               onToggleTerminal={() => {
@@ -1341,7 +1364,7 @@ export default function App() {
           newProjApiBase={newProjApiBase} setNewProjApiBase={setNewProjApiBase}
           newProjError={newProjError}
           modelConfigMsg={modelConfigMsg}
-          onLoadModelConfig={() => loadModelConfig(newProjPath, newProjModel, (cfg) => { 
+          onLoadModelConfig={() => loadModelConfig(newProjPath, newProjModel, (cfg) => {
             if (cfg.model_params) {
               const loaded = { ...cfg.model_params };
               if (loaded.api_base !== undefined) {
@@ -1351,7 +1374,7 @@ export default function App() {
               delete loaded.api_key;
               setNewProjModelParams(loaded);
             }
-            if (cfg.model) setNewProjModel(cfg.model); 
+            if (cfg.model) setNewProjModel(cfg.model);
           })}
           onOpenDirPicker={openDirPicker}
         />
@@ -1413,8 +1436,8 @@ export default function App() {
       )}
 
       {showOnboarding && (
-        <OnboardingModal 
-          onClose={() => setShowOnboarding(false)} 
+        <OnboardingModal
+          onClose={() => setShowOnboarding(false)}
           onComplete={() => {
             setShowOnboarding(false);
             fetchProjects();

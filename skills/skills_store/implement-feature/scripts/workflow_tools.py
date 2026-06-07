@@ -7,8 +7,8 @@ from pathlib import Path
 
 from agenticblocks.core.function_block import as_tool
 
-from .code_index import CODE_INDEX
-from .tools import AGENT_PROGRESS, _auto_lint, _preview, _resolve_path, get_file_overview, get_project_path
+from opalacoder.code_index import CODE_INDEX
+from opalacoder.tools import AGENT_PROGRESS, _preview, _resolve_path, get_file_overview, get_project_path
 
 # Failure counter per file path (specs3 decompose-on-failure)
 _fail_counts: dict[str, int] = {}
@@ -24,7 +24,7 @@ _DECOMPOSE_HINT = (
 @as_tool(
     name="edit_file",
     description=(
-        "Atomic find-replace inside a file, followed by an automatic syntax/lint check. "
+        "Atomic find-replace inside a file. "
         "Provide the exact text to replace (old_str) and its replacement (new_str). "
         "To DELETE a line entirely, set new_str to an empty string and old_str to the full line content "
         "(including the newline if needed), and use the `line` parameter to target the right occurrence. "
@@ -34,20 +34,30 @@ _DECOMPOSE_HINT = (
     ),
 )
 def edit_file(path: str, old_str: str, new_str: str, line: int = 0) -> str:
-    resolved = _resolve_path(path)
+    try:
+        resolved = _resolve_path(path)
+    except Exception as e:
+        raise ValueError(f"Error resolving path: {e}")
+
     AGENT_PROGRESS.update("edit_file", f"path={_preview(resolved)}")
+
+    try:
+        if os.path.isdir(resolved):
+            raise ValueError(f"Error: '{_preview(resolved)}' is a directory, not a file.")
+        if not os.path.exists(resolved):
+            raise ValueError(f"Error: file not found: {_preview(resolved)}.")
+    except OSError as e:
+        raise ValueError(f"Error: invalid path argument ({e.strerror}).")
 
     try:
         with open(resolved, "r", encoding="utf-8") as f:
             content = f.read()
-    except FileNotFoundError:
-        return f"Error: file not found: {resolved}"
     except Exception as e:
-        return f"Error reading {resolved}: {e}"
+        raise ValueError(f"Error reading {_preview(resolved)}: {e}")
 
     count = content.count(old_str)
     if count == 0:
-        return f"Error: old_str not found in {path}. Double-check the exact text to replace."
+        raise ValueError(f"Error: old_str not found in {path}. Double-check the exact text to replace.")
 
     if count > 1:
         if line <= 0:
@@ -85,50 +95,55 @@ def edit_file(path: str, old_str: str, new_str: str, line: int = 0) -> str:
         with open(resolved, "w", encoding="utf-8") as f:
             f.write(new_content)
     except Exception as e:
-        return f"Error writing {resolved}: {e}"
+        raise ValueError(f"Error writing {_preview(resolved)}: {e}")
 
-    lint_output = _auto_lint(resolved)
-    if lint_output:
-        _fail_counts[resolved] = _fail_counts.get(resolved, 0) + 1
-        AGENT_PROGRESS.record_lint_error(resolved)
-        msg = f"Edit applied but lint check failed:\n{lint_output}"
-        if _fail_counts[resolved] >= 2:
-            msg += _DECOMPOSE_HINT
-        return msg
-
-    _fail_counts[resolved] = 0
     try:
         CODE_INDEX.rebuild_file(resolved)
     except Exception:
         pass
-    return f"Edit applied successfully to {path}. Lint check passed."
+
+    # Record edit occurrence in progress tracker
+    if hasattr(AGENT_PROGRESS, 'record_edit'):
+        AGENT_PROGRESS.record_edit(resolved)
+        
+    return f"Edit applied successfully to {path}."
 
 
 @as_tool(
     name="replace_lines",
     description=(
-        "Replace a specific range of lines in a file with new content, followed by an automatic syntax/lint check. "
+        "Replace a specific range of lines in a file with new content. "
         "Provide the 1-based start_line and end_line, and the new_str to replace them with. "
         "Use this instead of edit_file when you want to be precise or if edit_file fails with old_str not found."
     ),
 )
 def replace_lines(path: str, start_line: int, end_line: int, new_str: str) -> str:
-    resolved = _resolve_path(path)
+    try:
+        resolved = _resolve_path(path)
+    except Exception as e:
+        raise ValueError(f"Error resolving path: {e}")
+
     AGENT_PROGRESS.update("replace_lines", f"path={_preview(resolved)} lines={start_line}-{end_line}")
 
     if start_line <= 0 or end_line < start_line:
-        return "Error: Invalid line range. start_line must be > 0 and end_line >= start_line."
+        raise ValueError("Error: Invalid line range. start_line must be > 0 and end_line >= start_line.")
+
+    try:
+        if os.path.isdir(resolved):
+            raise ValueError(f"Error: '{_preview(resolved)}' is a directory, not a file.")
+        if not os.path.exists(resolved):
+            raise ValueError(f"Error: file not found: {_preview(resolved)}.")
+    except OSError as e:
+        raise ValueError(f"Error: invalid path argument ({e.strerror}).")
 
     try:
         with open(resolved, "r", encoding="utf-8") as f:
             lines = f.read().splitlines(keepends=True)
-    except FileNotFoundError:
-        return f"Error: file not found: {resolved}"
     except Exception as e:
-        return f"Error reading {resolved}: {e}"
+        raise ValueError(f"Error reading {_preview(resolved)}: {e}")
 
     if start_line > len(lines):
-        return f"Error: start_line ({start_line}) is beyond the end of the file ({len(lines)} lines)."
+        raise ValueError(f"Error: start_line ({start_line}) is beyond the end of the file ({len(lines)} lines).")
 
     # Replace lines [start_line-1 : end_line]
     # new_str might not have a trailing newline, so we add one if the original block had it.
@@ -144,23 +159,18 @@ def replace_lines(path: str, start_line: int, end_line: int, new_str: str) -> st
         with open(resolved, "w", encoding="utf-8") as f:
             f.write(new_content)
     except Exception as e:
-        return f"Error writing {resolved}: {e}"
+        raise ValueError(f"Error writing {_preview(resolved)}: {e}")
 
-    lint_output = _auto_lint(resolved)
-    if lint_output:
-        _fail_counts[resolved] = _fail_counts.get(resolved, 0) + 1
-        AGENT_PROGRESS.record_lint_error(resolved)
-        msg = f"Edit applied but lint check failed:\n{lint_output}"
-        if _fail_counts[resolved] >= 2:
-            msg += _DECOMPOSE_HINT
-        return msg
-
-    _fail_counts[resolved] = 0
     try:
         CODE_INDEX.rebuild_file(resolved)
     except Exception:
         pass
-    return f"Lines {start_line}-{end_line} replaced successfully in {path}. Lint check passed."
+        
+    # Record edit occurrence in progress tracker
+    if hasattr(AGENT_PROGRESS, 'record_edit'):
+        AGENT_PROGRESS.record_edit(resolved)
+
+    return f"Successfully replaced lines {start_line}-{end_line} in {path}."
 
 
 @as_tool(
@@ -265,16 +275,27 @@ def find_callers(symbol_name: str) -> str:
     ),
 )
 def read_file(path: str, max_lines: int = 150) -> str:
-    resolved = _resolve_path(path)
+    try:
+        resolved = _resolve_path(path)
+    except Exception as e:
+        raise ValueError(f"Error resolving path: {e}")
+
     AGENT_PROGRESS.update("read_file", f"path={_preview(resolved)}")
+    
+    try:
+        if os.path.isdir(resolved):
+            raise ValueError(f"Error: '{_preview(resolved)}' is a directory, not a file. Use run_command with 'ls -la' or get_project_overview() to view contents.")
+        if not os.path.exists(resolved):
+            raise ValueError(f"Error: file not found: {_preview(resolved)}. If you are trying to write code, use 'write_file' or 'edit_file' instead.")
+    except OSError as e:
+        # Catch cases like [Errno 36] File name too long if path contains code
+        raise ValueError(f"Error: invalid path argument ({e.strerror}). 'read_file' expects a file path, not file contents.")
 
     try:
         with open(resolved, "r", encoding="utf-8") as f:
             content = f.read()
-    except FileNotFoundError:
-        return f"Error: file not found: {resolved}"
     except Exception as e:
-        return f"Error reading {resolved}: {e}"
+        raise ValueError(f"Error reading {_preview(resolved)}: {e}")
 
     lines = content.splitlines()
     n = len(lines)
@@ -315,7 +336,7 @@ def get_workflow_tools(skill_tools: list = None) -> list:
     Intentionally small — large tool lists confuse small models.
     Workers execute atomic commands; they read, edit, write, run, and signal done.
     """
-    from .tools import write_file, run_command, search_code, read_content_pos, web_search
+    from opalacoder.tools import write_file, run_command, search_code, read_content_pos, web_search
     base = [
         read_file,        # token-aware read (workflow_tools version)
         read_content_pos, # read specific line range of large files

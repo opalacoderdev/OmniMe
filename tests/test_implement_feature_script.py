@@ -13,7 +13,7 @@ import sys
 import pytest
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_SCRIPT = os.path.join(_REPO, "skills", "implement-feature", "scripts", "run_workflow.py")
+_SCRIPT = os.path.join(_REPO, "skills", "skills_store", "implement-feature", "scripts", "run_workflow.py")
 
 
 def _load_script_module():
