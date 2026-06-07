@@ -333,6 +333,40 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
+        # 3.4.5. Copy File/Directory
+        elif path == '/api/file/copy' and method == 'POST':
+            project_path = data.get('projectPath')
+            source_path = data.get('sourcePath')
+            target_path = data.get('targetPath')
+            if not project_path or not source_path or not target_path:
+                self.send_response(writer, 400, b'{"error":"projectPath, sourcePath and targetPath are required"}', "application/json")
+                return
+            full_source = os.path.abspath(os.path.join(project_path, source_path))
+            full_target = os.path.abspath(os.path.join(project_path, target_path))
+            if not full_source.startswith(os.path.abspath(project_path)) or not full_target.startswith(os.path.abspath(project_path)):
+                self.send_response(writer, 403, b'{"error":"Forbidden: Path traversal detected"}', "application/json")
+                return
+            try:
+                if not os.path.exists(full_source):
+                    self.send_response(writer, 404, b'{"error":"Source file not found"}', "application/json")
+                    return
+                import shutil
+                if os.path.exists(full_target):
+                    base, ext = os.path.splitext(full_target)
+                    counter = 1
+                    while os.path.exists(full_target):
+                        full_target = f"{base}_copy{counter if counter > 1 else ''}{ext}"
+                        counter += 1
+                
+                os.makedirs(os.path.dirname(full_target), exist_ok=True)
+                if os.path.isdir(full_source):
+                    shutil.copytree(full_source, full_target)
+                else:
+                    shutil.copy2(full_source, full_target)
+                self.send_response(writer, 200, b'{"success":true}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
         # 3.5. Delete File
         elif path == '/api/file/delete' and method == 'POST':
             project_path = data.get('projectPath')

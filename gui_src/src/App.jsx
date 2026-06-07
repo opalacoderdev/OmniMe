@@ -65,6 +65,7 @@ export default function App() {
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [activeSidebarTab, setActiveSidebarTab] = useState('explorer');
   const [contextMenu, setContextMenu] = useState(null);
+  const [clipboardNode, setClipboardNode] = useState(null);
   const [showAdvancedParams, setShowAdvancedParams] = useState(false);
   const [modelConfigMsg, setModelConfigMsg] = useState('');
   const [dirPicker, setDirPicker] = useState(null);
@@ -747,6 +748,36 @@ export default function App() {
     e.preventDefault(); e.stopPropagation();
     setRightClickedNode(node);
     setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleCopyNode = (node) => {
+    setClipboardNode(node);
+    setContextMenu(null);
+  };
+
+  const handlePasteNode = async (parentPath) => {
+    setContextMenu(null);
+    if (!clipboardNode || !activeProject) return;
+    try {
+      const targetName = clipboardNode.name;
+      const targetPath = parentPath ? `${parentPath}/${targetName}` : targetName;
+      const res = await fetch('/api/file/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectPath: activeProject.project_path,
+          sourcePath: clipboardNode.path,
+          targetPath: targetPath,
+        }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to paste');
+      }
+      fetchFiles();
+    } catch (err) {
+      addLog('error', `Erro ao colar: ${err.message}`);
+    }
   };
 
   // ── Agent ─────────────────────────────────────────────────────────────────
@@ -1467,6 +1498,9 @@ export default function App() {
         handleCreateNewDir={handleCreateNewDir}
         handleRenameNode={handleRenameNode}
         handleDeleteNode={handleDeleteNode}
+        handleCopyNode={handleCopyNode}
+        handlePasteNode={handlePasteNode}
+        clipboardNode={clipboardNode}
       />
     </div>
   );

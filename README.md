@@ -166,13 +166,6 @@ agents:
     num_ctx: 16384
     max_heartbeats: 20
 
-  # drives the plan→execute→review loop inside the implement-feature skill
-  orchestrator:
-    temperature: 1.0
-    num_ctx: 16384
-    max_heartbeats: 20
-    strategy: workflow
-
   # executes each task command with code editing tools
   worker:
     temperature: 0.7

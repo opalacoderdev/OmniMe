@@ -231,6 +231,13 @@ def build_run_skill_tool(
                 f"(do NOT type the request text into the command — use the file).\n"
                 f"The intent is: {intent} (pass it as --intent {intent}).\n"
             )
+        json_formatting_instruction = (
+            "\nCRITICAL: When calling tools (like write_file), you must format your response as a valid JSON block. "
+            "Ensure that all double quotes inside JSON string arguments are properly escaped as \\\". "
+            "Do NOT write literal backslash-n ('\\n') strings in the code; write the code structure normally "
+            "within the JSON string and ensure the JSON format is valid.\n"
+        )
+
         system = (
             f"{meta['body']}\n\n"
             f"You are executing the '{skill_name}' skill. "
@@ -240,6 +247,7 @@ def build_run_skill_tool(
             f"{request_hint}"
             f"IMPORTANT: To save any file content (HTML, JSON, code, etc.) ALWAYS use the write_file tool. "
             f"NEVER use run_command with echo/printf/cat to write file content — shell quoting breaks with multi-line or special characters.\n"
+            f"{json_formatting_instruction}"
             f"Call send_message once when done, with a clear summary for the user."
         )
 

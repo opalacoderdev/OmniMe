@@ -1,6 +1,7 @@
 """Version Control System (VCS) strategies for OpalaCoder."""
 
 import os
+import shutil
 import subprocess
 from abc import ABC, abstractmethod
 from typing import List, Callable
@@ -67,7 +68,7 @@ def _run_shadow_git(command: str, project_path: str | None = None) -> subprocess
     """Run a Git command using the internal shadow git directory."""
     if project_path is None:
         project_path = get_project_path()
-    shadow_dir = os.path.join(project_path, ".opalacoder", ".git")
+    shadow_dir = os.path.join(project_path, ".opalacoder", ".shadowgit")
     full_cmd = f"git --git-dir={shadow_dir} --work-tree={project_path} {command}"
     return subprocess.run(
         full_cmd,
@@ -80,10 +81,15 @@ def _run_shadow_git(command: str, project_path: str | None = None) -> subprocess
 def _init_shadow_git(project_path: str):
     """Initialize the shadow git repository if it doesn't exist."""
     shadow_base = os.path.join(project_path, ".opalacoder")
-    shadow_dir = os.path.join(shadow_base, ".git")
+    shadow_dir = os.path.join(shadow_base, ".shadowgit")
+    old_shadow_dir = os.path.join(shadow_base, ".git")
     gitignore_path = os.path.join(shadow_base, ".gitignore")
     
     os.makedirs(shadow_base, exist_ok=True)
+
+    # Migrate existing projects from .git to .shadowgit
+    if os.path.exists(old_shadow_dir) and not os.path.exists(shadow_dir):
+        shutil.move(old_shadow_dir, shadow_dir)
 
     if not os.path.exists(shadow_dir):
         # Init repo

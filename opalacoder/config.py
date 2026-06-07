@@ -44,30 +44,25 @@ _APP_CONFIG = _load_yaml("config.yaml")
 # Hardcoded defaults for internal OpalaCoder skills so they work without agents.yaml
 _CORE_AGENT_DEFAULTS = {
     "memgpt": {
-        "temperature": 1.0,
         "num_ctx": 16384,
         "max_heartbeats": 20,
         "debug": False,
     },
     "landscape_planner": {
-        "temperature": 1.0,
         "num_ctx": 8192,
         "reasoning_effort": "none",
     },
     "refinement_agent": {
-        "temperature": 1.0,
         "num_ctx": 8192,
         "reasoning_effort": "none",
     },
     "orchestrator": {
-        "temperature": 1.0,
         "num_ctx": 16384,
         "max_heartbeats": 20,
         "debug": False,
         "strategy": "workflow",
     },
     "worker": {
-        "temperature": 1.0,
         "num_ctx": 16384,
         "reasoning_effort": "none",
         "debug": False,
@@ -409,6 +404,8 @@ def setup_debug_logging():
 
         lines.append(SEP)
         logger.debug("\n".join(lines))
+        for handler in logger.handlers:
+            handler.flush()
 
     litellm.success_callback = [_llm_callback]
     litellm.failure_callback = [_llm_callback]
