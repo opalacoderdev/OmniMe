@@ -90,7 +90,7 @@ export default function App() {
   const [newProjName, setNewProjName] = useState('');
   const [newProjPath, setNewProjPath] = useState('');
   const [newProjDesc, setNewProjDesc] = useState('');
-  const [newProjModel, setNewProjModel] = useState('ollama/gemma4:31b-cloud');
+  const [newProjModel, setNewProjModel] = useState('ollama/gemma4:12b');
   const [newProjMode, setNewProjMode] = useState('auto');
   const [newProjModelParams, setNewProjModelParams] = useState({});
   const [newProjApiKey, setNewProjApiKey] = useState('');

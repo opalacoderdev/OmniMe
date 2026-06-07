@@ -52,14 +52,42 @@ export default function EditProjectModal({
       if (value === undefined || value === '') {
         delete n[key];
       } else {
-        n[key] = value;
+        let clampedValue = value;
+        const limits = {
+          temperature: { min: 0, max: 2 },
+          top_p: { min: 0, max: 1 },
+          frequency_penalty: { min: -2, max: 2 },
+          presence_penalty: { min: -2, max: 2 },
+          min_p: { min: 0, max: 1 },
+          eviction_threshold: { min: 0, max: 1 },
+          memory_pressure_threshold: { min: 0, max: 1 },
+          max_tokens: { min: 1 },
+          num_ctx: { min: 1 },
+          seed: { min: 0 },
+          top_k: { min: 1 },
+          repetition_penalty: { min: 0 },
+          max_heartbeats: { min: 1 },
+          max_context_tokens: { min: 1 },
+          max_iterations: { min: 1 },
+          max_tool_calls: { min: 1 }
+        };
+        if (limits[key] && typeof clampedValue === 'number') {
+          const { min, max } = limits[key];
+          if (min !== undefined && clampedValue < min) clampedValue = min;
+          if (max !== undefined && clampedValue > max) clampedValue = max;
+        }
+        n[key] = clampedValue;
       }
       return { ...p, model_params: n };
     });
   };
 
-  const parseNum = (str, asFloat = false) =>
-    str === '' ? undefined : asFloat ? parseFloat(str) : parseInt(str, 10);
+  const parseNum = (str, asFloat = false) => {
+    if (str === '' || str === undefined || str === null) return undefined;
+    const cleanStr = String(str).replace(',', '.');
+    const val = asFloat ? parseFloat(cleanStr) : parseInt(cleanStr, 10);
+    return isNaN(val) ? undefined : val;
+  };
 
   return (
     <div className="vscode-modal-overlay">
@@ -130,6 +158,7 @@ export default function EditProjectModal({
                 <option value="gemini/gemini-flash-lite-latest" />
                 <option value="anthropic/claude-3-5-sonnet-latest" />
                 <option value="openai/gpt-4o" />
+                <option value="ollama/gemma4:12b" />
                 <option value="ollama/gemma4:31b-cloud" />
               </datalist>
               {modelStatus === 'green' && <span style={{ fontSize: '10px', color: '#4ade80' }}>✓ Modelo adequado ao seu hardware.</span>}
@@ -175,6 +204,7 @@ export default function EditProjectModal({
             <datalist id="edit-alt-models">
               <option value="gemini/gemini-flash-lite-latest" />
               <option value="anthropic/claude-3-5-sonnet-latest" />
+              <option value="ollama/gemma4:12b" />
               <option value="ollama/gemma4:31b-cloud" />
             </datalist>
           </div>

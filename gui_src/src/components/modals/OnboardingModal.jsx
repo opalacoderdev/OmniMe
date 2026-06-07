@@ -9,9 +9,9 @@ export default function OnboardingModal({ onClose, onComplete }) {
   const [ollamaStatus, setOllamaStatus] = useState(null);
   const [isInstalling, setIsInstalling] = useState(false);
 
-  const [apiProvider, setApiProvider] = useState('gemini/gemini-flash-lite-latest');
+  const [apiProvider, setApiProvider] = useState('ollama/gemma4:31b-cloud');
   const [apiKey, setApiKey] = useState('');
-  const [apiBase, setApiBase] = useState('');
+  const [apiBase, setApiBase] = useState('https://ollama.com');
 
   useEffect(() => {
     fetch('/api/hardware')
@@ -57,7 +57,8 @@ export default function OnboardingModal({ onClose, onComplete }) {
           project_name: "Projeto Piloto (Ollama)",
           project_path: "~/OpalaCoderPilot",
           model: ollamaModel,
-          mode: "plan"
+          mode: "plan",
+          api_base: "http://localhost:11434/v1"
         });
       } catch (e) {
         setIsInstalling(false);
@@ -81,7 +82,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
 
   const vram = hardware ? parseFloat(hardware.vram_gb) || 0 : 0;
   const isHighEnd = vram >= 8;
-  const ollamaModel = "ollama/gemma4:31b-cloud";
+  const ollamaModel = "ollama/gemma4:12b";
 
   return (
     <div className="vscode-modal-overlay" style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.85)' }}>
@@ -178,7 +179,8 @@ export default function OnboardingModal({ onClose, onComplete }) {
                     project_name: "Projeto Piloto (Ollama)",
                     project_path: "~/OpalaCoderPilot",
                     model: ollamaModel,
-                    mode: "plan"
+                    mode: "plan",
+                    api_base: "http://localhost:11434/v1"
                   })}>
                     {t('onboarding.startPilot')}
                   </button>
@@ -196,7 +198,8 @@ export default function OnboardingModal({ onClose, onComplete }) {
                     project_name: "Projeto Piloto (Ollama)",
                     project_path: "~/OpalaCoderPilot",
                     model: ollamaModel,
-                    mode: "plan"
+                    mode: "plan",
+                    api_base: "http://localhost:11434/v1"
                   })}>
                     {t('onboarding.ignoreStartBtn')}
                   </button>
@@ -226,7 +229,8 @@ export default function OnboardingModal({ onClose, onComplete }) {
               project_name: "Projeto Piloto (Ollama)",
               project_path: "~/OpalaCoderPilot",
               model: ollamaModel,
-              mode: "plan"
+              mode: "plan",
+              api_base: "http://localhost:11434/v1"
             })}>
               {t('onboarding.alreadyInstalledBtn')}
             </button>
@@ -239,10 +243,18 @@ export default function OnboardingModal({ onClose, onComplete }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
               <div className="flex flex-col" style={{ gap: '4px' }}>
                 <label style={{ fontSize: '12px', color: '#ccc' }}>{t('onboarding.recommendedProvider')}</label>
-                <select className="vscode-settings-input" value={apiProvider} onChange={(e) => setApiProvider(e.target.value)} style={{ width: '100%' }}>
+                <select className="vscode-settings-input" value={apiProvider} onChange={(e) => {
+                  const val = e.target.value;
+                  setApiProvider(val);
+                  if (val === 'ollama/gemma4:31b-cloud') {
+                    setApiBase('https://ollama.com');
+                  } else {
+                    setApiBase('');
+                  }
+                }} style={{ width: '100%' }}>
+                  <option value="ollama/gemma4:31b-cloud">{t('onboarding.providerOllamaCloud')}</option>
                   <option value="gemini/gemini-flash-lite-latest">{t('onboarding.providerGemini')}</option>
                   <option value="anthropic/claude-3-5-sonnet-latest">{t('onboarding.providerAnthropic')}</option>
-                  <option value="ollama/gemma4:31b-cloud">{t('onboarding.providerOllamaCloud')}</option>
                 </select>
               </div>
               <div className="flex flex-col" style={{ gap: '4px' }}>

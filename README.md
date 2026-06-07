@@ -1,6 +1,8 @@
-# OpalaCoder
+# OpalaCoder IDE
 
-**OpalaCoder** is an autonomous coding agent built on the **[AgenticBlocks.IO](https://github.com/gilzamir/agenticblocks)** framework. It features a project-centric context model and a modular, skills-oriented architecture optimized to run efficiently with local LLMs.
+**OpalaCoder IDE** is a streamlined, local-first AI coding editor and testbed optimized for open-source LLMs. Built on the **[AgenticBlocks.IO](https://github.com/gilzamir/agenticblocks)** framework, it features a project-centric context model and a modular, skills-oriented architecture designed to run efficiently with local LLMs. 
+
+Rather than serving as a full replacement for primary production setups, OpalaCoder provides a lightweight, developer-focused interface to test, run, and develop with local LLMs (such as `gemma4:12b` or `gpt-oss:20b`) and cloud models (such as `gemma4:31b-cloud` via Ollama).
 
 ---
 
@@ -12,7 +14,7 @@ All operations happen within a named project mapped to a fixed directory. This g
 ### 2. MemGPT Chat Orchestrator
 The main entry point is a persistent **MemGPT Chat Orchestrator** (`MemGPTAgentBlock`). Rather than running a static intent classifier, the orchestrator converses with the user, manages long-term memory, and dynamically routes complex tasks by invoking active skills via tool-calling (`run_skill`).
 
-### 3. Skills-Oriented Design (Anthropic Standard)
+### 3. Skills-Oriented Design
 Capabilities are defined as modular **skills** (defined via `SKILL.md` declarations and optional Level 3 python/bash scripts).
 - **Opt-in Activation**: Projects declare active skills in a local `skills.yaml` file.
 - **Ephemeral Sub-Agents**: When a skill is invoked, the orchestrator spawns a focused sub-agent (`LLMAgentBlock`) dedicated to executing that skill's workflow.
@@ -24,13 +26,12 @@ Software development and bug-fixing tasks are handled by the default `implement-
 - **Shadow Git Checkout**: Automatically checkpoints code to an isolated repository (`.opalacoder/.git`) before plan execution, allowing instant rollback via `/undo`.
 - **Auto-Linting**: Validates changes using syntax checkers (`node --check`, `py_compile`) after each file edit, letting the worker self-correct syntax errors autonomously.
 
-### 5. Web-Based IDE GUI (Cross-Platform)
+### 5. Web-Based IDE GUI
 OpalaCoder features an integrated desktop GUI built using React, Vite, and `pywebview`:
 - **Cross-Platform Support**: Works seamlessly on Linux and Windows. If `pywebview` is not available, it automatically falls back to hosting a local web server and launching the interface in your default browser.
 - **Integrated Terminal**: Includes a real-time xterm.js terminal with shell/PTY integration for running and inspecting commands natively.
 - **Git Source Control Sidebar**: A dedicated panel that tracks file modifications (color-coded as Modified/Untracked/Deleted) and provides a commit interface.
 - **Global Settings Panel**: Customize the editor font size, tab size, and word wrapping, with dynamic toggle support for Light and Dark themes.
-- **About Tab**: Version tracking (currently `0.1.26 alfa`), licensing, and developer details in the settings panel.
 
 ### 6. Persistent Projects and CLI Commands
 
@@ -75,14 +76,13 @@ opalacoder/
 - **[agenticblocks](https://github.com/gilzamir/agenticblocks)** (install from source)
 - **Local SQLite support** (standard in python)
 - **Local LLM Engine (Recommended: Ollama 0.24.0+)** with models available:
-  - **Default & Alternative models**: `ministral-3:14b` (or `gemma4:latest`, `mistral-nemo:latest`)
+  - **Default local model**: `gemma4:12b`
+  - **Alternative local model**: `gpt-oss:20b`
   - Any model supported by [litellm](https://docs.litellm.ai) works.
 
 > [!TIP]
 > **Hardware Acceleration & GPU Drivers:**
-> To run large models (like `gemma4` or `ministral-3:14b`) efficiently on local backends (such as Ollama), it is highly recommended to use GPU hardware acceleration.
-> - **NVIDIA GPUs**: Ensure you have official **NVIDIA Drivers** and the **CUDA Toolkit** installed so that Ollama can offload model layers to GPU VRAM.
-> - **AMD & Apple Silicon**: Ollama also supports ROCm (AMD) and Metal (Apple Silicon) natively. Make sure your local setup is utilizing GPU acceleration to avoid slow CPU execution times.
+> To run large models (like `gemma4:12b` or `gpt-oss:20b`) efficiently on local backends (such as Ollama), it is highly recommended to use GPU hardware acceleration. Ensure you have official GPU drivers and the appropriate CUDA/ROCm/Metal environment configured.
 
 ### 2. Web IDE / GUI Requirements
 - **Desktop Window Mode (Optional)**: Launches a native app window using `pywebview`.
@@ -95,32 +95,27 @@ opalacoder/
 
 ## Installation
 
-Try:
+You can install it directly via pip:
 
 ```bash
 pip install opalacoder
 ```
 
+Or build and run it from source:
+
 ```bash
-git clone https://github.com/gilzamir/OpalaCoder
+git clone https://github.com/opalacoderdev/OpalaCoder
 cd OpalaCoder
 
 python -m venv .env
 source .env/bin/activate          # Linux/macOS
 # .env\Scripts\activate           # Windows
 
-# Install agenticblocks from source first
+# Install agenticblocks from source
 pip install -e /path/to/agenticblocks
 
 # Install OpalaCoder dependencies
 pip install -r requirements.txt
-```
-
-### Environment Variables (Optional)
-
-```env
-# Override default model (any litellm-supported string)
-OPALA_MODEL=ollama/ministral-3:14b
 ```
 
 ---
@@ -133,22 +128,14 @@ OpalaCoder supports three main execution modes:
 Launches the integrated React desktop application. It opens as a local app window (via `pywebview`) or falls back to your web browser:
 ```bash
 source .env/bin/activate
-python main.py                        # Launches GUI by default
-# or explicitly:
-python main.py --gui
+python main.py
 ```
 
 ### 2. Interactive CLI REPL
 Starts the standard CLI terminal planner/execution loop:
 ```bash
 source .env/bin/activate
-python main.py --cli                  # Activates CLI REPL mode
-python main.py --cli --mode auto      # run without interruptions
-python main.py --cli --mode edit      # confirm sensitive operations
-python main.py --cli --model ollama/gemma4  # override model
-python main.py --db /path/to/db       # custom database path
-python main.py --version
-python main.py --help
+python main.py --cli
 ```
 
 ### 3. Stdin/Stdout JSON Protocol Server
@@ -160,52 +147,16 @@ python main.py --stdin
 
 ---
 
-## Compiling Frontend GUI (Optional)
-
-If you are developing or making changes to the React GUI, you can recompile the assets:
-```bash
-cd gui_src
-npm install
-npm run build
-```
-This builds the SPA bundle and saves it directly into the Python package distribution at `opalacoder/gui/`.
-
-## Project Flow
-
-```text
-main() or `--gui` (server mode)
-  │
-  ├── startup_menu() ───────── Load/Create project, discover skills (via skills.yaml)
-  │
-  └── repl_loop() ──────────── Instantiate MemGPT chat-orchestrator
-        │
-        ├── User enters command (e.g. `/help`, `/undo`) ── Dispatched to CLI commands
-        │
-        └── User enters demand ────────────────────────── MemGPT.run(user_input)
-              │
-              ├── Direct chat (greetings, project status, general questions)
-              │
-              └── Request matches active skill ───────────── run_skill(name, context)
-                    │
-                    ├── Instantiate ephemeral sub-agent (LLMAgentBlock)
-                    ├── Sub-agent loads SKILL.md and Level 3 scripts (e.g. implement-feature)
-                    ├── Sub-agent executes with tools, talks to user (dialogue interceptor)
-                    └── Return result to MemGPT orchestrator
-```
-
----
-
 ## Configuration (`agents.yaml`)
 
-The main configuration file. Key fields and role overrides:
+Configure model mappings and agent parameters inside `~/.opalacoder/agents.yaml`:
 
 ```yaml
-default: ollama/ministral-3:14b      # default model for all agents
-alternative: ollama/ministral-3:14b  # model for complex tasks
+default: ollama/gemma4:12b      # default local model
+alternative: gemini/gemini-3.1-flash-lite  # fallback model for complex tasks
 
 llm_defaults:
-  temperature: 1.0
-  max_tokens: 8128
+  temperature: 0.7
   num_ctx: 8192
 
 agents:
@@ -224,29 +175,10 @@ agents:
 
   # executes each task command with code editing tools
   worker:
-    temperature: 1.0
-    max_tokens: 8128
+    temperature: 0.7
     num_ctx: 16384
     reasoning_effort: "none"  # Must stay "none" for tool-calling integration
 ```
-
-Full per-agent overrides for `temperature`, `max_tokens`, `num_ctx`, `reasoning_effort`, and `debug` are supported for every agent role.
-
----
-
-## Benchmark
-
-A JS bug-fix benchmark is included in `scripts/`:
-
-```bash
-# Collect instances from GitHub (requires gh CLI authenticated)
-python scripts/collect_jsbench.py --limit 50 --out datasets/jsbench
-
-# Evaluate OpalaCoder on collected instances
-python scripts/eval_jsbench.py --limit 10
-```
-
-Results are written to `datasets/jsbench_results.json` with per-instance pass/fail and a summary fix rate.
 
 ---
 
@@ -258,6 +190,8 @@ python -m pytest tests/ -q
 
 ---
 
-## License
+## License & Feedback
 
-MIT
+OpalaCoder IDE is open source and available under the **MIT** license.
+
+*   **Repository**: [https://github.com/opalacoderdev/OpalaCoder](https://github.com/opalacoderdev/OpalaCoder)

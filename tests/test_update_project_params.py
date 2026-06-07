@@ -209,3 +209,25 @@ class TestUpdateProjectPersistence:
                 f"MemGPT model_kargs['{key}']: expected {expected!r}, "
                 f"got {memgpt.model_kargs.get(key)!r}"
             )
+
+    def test_sanitize_and_clamp_model_params(self):
+        """Verify that sanitize_model_params correctly handles string numbers with commas, and clamps out of bounds values."""
+        from opalacoder.ide_server import sanitize_model_params
+        
+        raw_params = {
+            "temperature": "-0.5",  # below min 0.0
+            "presence_penalty": "0,8",  # string comma float
+            "frequency_penalty": 3.5,  # above max 2.0
+            "num_ctx": "4096",  # string int
+            "think": "true",  # string bool
+            "invalid_param": "some_value"  # not in schema
+        }
+        
+        sanitized = sanitize_model_params(raw_params)
+        
+        assert sanitized["temperature"] == 0.0
+        assert sanitized["presence_penalty"] == 0.8
+        assert sanitized["frequency_penalty"] == 2.0
+        assert sanitized["num_ctx"] == 4096
+        assert sanitized["think"] is True
+        assert "invalid_param" not in sanitized

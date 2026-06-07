@@ -41,6 +41,91 @@ def get_file_tree(dir_path, root_path=None):
     files.sort(key=lambda x: (not x["isDirectory"], x["name"].lower()))
     return files
 
+_MODEL_PARAMS_SCHEMA = {
+    "temperature": {"type": float, "min": 0.0, "max": 2.0},
+    "max_tokens": {"type": int, "min": 1},
+    "num_ctx": {"type": int, "min": 1},
+    "seed": {"type": int, "min": 0},
+    "top_p": {"type": float, "min": 0.0, "max": 1.0},
+    "frequency_penalty": {"type": float, "min": -2.0, "max": 2.0},
+    "presence_penalty": {"type": float, "min": -2.0, "max": 2.0},
+    "top_k": {"type": int, "min": 1},
+    "min_p": {"type": float, "min": 0.0, "max": 1.0},
+    "repetition_penalty": {"type": float, "min": 0.0},
+    "think": {"type": bool},
+    "stream": {"type": bool},
+    
+    "max_heartbeats": {"type": int, "min": 1},
+    "max_context_tokens": {"type": int, "min": 1},
+    "eviction_threshold": {"type": float, "min": 0.0, "max": 1.0},
+    "memory_pressure_threshold": {"type": float, "min": 0.0, "max": 1.0},
+    "max_iterations": {"type": int, "min": 1},
+    "max_tool_calls": {"type": int, "min": 1},
+    "response_mode": {"type": str, "choices": ["last", "all"]},
+    "debug": {"type": bool},
+}
+
+def sanitize_model_params(params: dict) -> dict:
+    """Sanitize and validate model_params to prevent invalid inputs breaking Ollama/LiteLLM."""
+    if not isinstance(params, dict):
+        return {}
+    
+    sanitized = {}
+    for k, v in params.items():
+        if k not in _MODEL_PARAMS_SCHEMA:
+            continue
+            
+        if v is None or v == "":
+            continue
+            
+        spec = _MODEL_PARAMS_SCHEMA[k]
+        t = spec["type"]
+        
+        # Parse string representation
+        if isinstance(v, str):
+            v_str = v.strip()
+            if t is bool:
+                v = v_str.lower() in ("true", "1", "yes", "on", "checked")
+            elif t is float:
+                v_str = v_str.replace(",", ".")
+                try:
+                    v = float(v_str)
+                except ValueError:
+                    continue
+            elif t is int:
+                try:
+                    v = int(v_str)
+                except ValueError:
+                    continue
+            elif t is str:
+                v = v_str
+        
+        # Coerce types
+        try:
+            if t is float:
+                v = float(v)
+            elif t is int:
+                v = int(v)
+            elif t is bool:
+                v = bool(v)
+            elif t is str:
+                v = str(v)
+                if "choices" in spec and v not in spec["choices"]:
+                    continue
+        except (ValueError, TypeError):
+            continue
+            
+        # Clamp bounds
+        if t in (float, int):
+            if "min" in spec and v < spec["min"]:
+                v = spec["min"]
+            if "max" in spec and v > spec["max"]:
+                v = spec["max"]
+                
+        sanitized[k] = v
+        
+    return sanitized
+
 class AsyncHTTPServer:
     def __init__(self, host="127.0.0.1", port=3000, static_dir=None):
         self.host = host
@@ -626,7 +711,7 @@ class AsyncHTTPServer:
                     return
                 
             model_params_raw = data.get("model_params")
-            model_params = model_params_raw if isinstance(model_params_raw, dict) else None
+            model_params = sanitize_model_params(model_params_raw) if isinstance(model_params_raw, dict) else None
 
             db_key = project_name.replace(" ", "_").lower()
             if store.exists(db_key):
@@ -758,18 +843,13 @@ class AsyncHTTPServer:
                 if not isinstance(params, dict):
                     self.send_response(writer, 400, b'{"error":"model_params must be a JSON object"}', "application/json")
                     return
-                # Accept any key/value pair; values already typed by JSON decode.
                 # Reject keys with invalid characters (not letters/digits/underscores/hyphens).
                 import re as _re
-                validated = {}
-                for k, v in params.items():
+                for k in params.keys():
                     if not k or not _re.fullmatch(r'[A-Za-z0-9_-]+', k):
                         self.send_response(writer, 400, f'{{"error":"invalid parameter name: {k}"}}'.encode('utf-8'), "application/json")
                         return
-                    if v is None or v == "":
-                        continue
-                    validated[k] = v
-                project.model_params = validated
+                project.model_params = sanitize_model_params(params)
 
             if "api_key" in data:
                 project.api_key = data["api_key"]
