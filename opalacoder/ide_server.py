@@ -1171,8 +1171,13 @@ class AsyncHTTPServer:
                 # Add all changes
                 subprocess.run(["git", "add", "."], cwd=project_path, check=True)
                 # Commit with message
-                subprocess.run(["git", "commit", "-m", message], cwd=project_path, check=True)
-                self.send_response(writer, 200, b'{"success":true}', "application/json")
+                res = subprocess.run(["git", "commit", "-m", message], cwd=project_path, capture_output=True, text=True)
+                if res.returncode == 0:
+                    self.send_response(writer, 200, b'{"success":true}', "application/json")
+                elif "nothing to commit" in res.stdout or "nothing added to commit" in res.stdout:
+                    self.send_response(writer, 400, b'{"error":"Nada para commitar (Nenhuma mudan\u00e7a encontrada)."}', "application/json")
+                else:
+                    raise Exception(res.stderr or res.stdout or "Git commit failed")
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
         # 7g. Git diff (single file or full)
