@@ -167,32 +167,33 @@ def _qt_invoke(fn):
 
 
 def _read_clipboard() -> str:
-    """Read system clipboard via Qt main thread (thread-safe).
-
-    pywebview on Linux uses the Qt backend (gi is not in the venv), so
-    QApplication.instance() always exists.  Accessing QClipboard from the
-    asyncio background thread requires marshalling to the main thread.
-    """
-    result = _qt_invoke(lambda: QApplication.instance().clipboard().text())  # noqa: F821 — resolved inside _qt_invoke
+    # 1. In-process Qt (GNOME/Wayland): marshal to main thread so QClipboard is
+    #    accessed safely from the asyncio background thread.
+    result = _qt_invoke(lambda: __import__('PyQt6.QtWidgets', fromlist=['QApplication'])
+                        .QApplication.instance().clipboard().text())
     if result is not None:
         return result
 
-    # Direct fallback: if already on main thread or _qt_invoke failed
+    # 2. Subprocess PyQt6 (Cinnamon/X11): a fresh QApplication in a subprocess
+    #    can reach the X11 clipboard without needing the main-thread instance.
     try:
-        from PyQt6.QtWidgets import QApplication
-        app = QApplication.instance()
-        if app is not None:
-            return app.clipboard().text()
+        import subprocess, sys, os
+        r = subprocess.run(
+            [sys.executable, '-c',
+             'from PyQt6.QtWidgets import QApplication; app=QApplication([]);'
+             ' print(app.clipboard().text(), end="")'],
+            capture_output=True, text=True, timeout=3, env=os.environ.copy(),
+        )
+        if r.returncode == 0:
+            return r.stdout
     except Exception:
         pass
+
     return ''
 
 
 def _write_clipboard(text: str):
-    """Write text to system clipboard via Qt main thread (thread-safe).
-
-    Returns (ok: bool, error: str).
-    """
+    # 1. In-process Qt (GNOME/Wayland)
     def _do_write():
         from PyQt6.QtWidgets import QApplication
         app = QApplication.instance()
@@ -201,18 +202,22 @@ def _write_clipboard(text: str):
             return True
         return False
 
-    result = _qt_invoke(_do_write)
-    if result:
+    if _qt_invoke(_do_write):
         return True, ''
 
-    # Direct fallback
+    # 2. Subprocess PyQt6 (Cinnamon/X11)
     try:
-        from PyQt6.QtWidgets import QApplication
-        app = QApplication.instance()
-        if app is not None:
-            app.clipboard().setText(text)
+        import subprocess, sys, os
+        escaped = text.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+        r = subprocess.run(
+            [sys.executable, '-c',
+             f'from PyQt6.QtWidgets import QApplication; app=QApplication([]);'
+             f' app.clipboard().setText("{escaped}"); app.processEvents()'],
+            capture_output=True, text=True, timeout=3, env=os.environ.copy(),
+        )
+        if r.returncode == 0:
             return True, ''
-        return False, 'No QApplication instance'
+        return False, r.stderr or 'subprocess write failed'
     except Exception as e:
         return False, str(e)
 
