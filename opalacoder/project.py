@@ -350,9 +350,9 @@ class ProjectStore:
             )
         return ProjectData(name=name, mode=mode, model=model, alternative_model=alternative_model, project_name=project_name, project_path=abs_proj_path, skills=_skills, description=description, core_memory="", model_params=_model_params, api_key=api_key or "", api_base=api_base or "")
 
-    def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "", model_params: dict = None) -> ProjectData:
+    def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "", api_key: str = None, api_base: str = None, model_params: dict = None) -> ProjectData:
         self.delete(name)
-        return self.create(name, mode, model, project_name, project_path, skills, description, alternative_model, model_params=model_params)
+        return self.create(name, mode, model, project_name, project_path, skills, description, alternative_model, api_key=api_key, api_base=api_base, model_params=model_params)
 
     def delete(self, name: str) -> None:
         with _conn(self.db_path) as conn:

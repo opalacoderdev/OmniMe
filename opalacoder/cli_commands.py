@@ -73,6 +73,9 @@ async def cmd_clear(state: REPLState, _args: list[str]) -> None:
             state.project.project_name, state.project.project_path,
             state.project.skills, state.project.description,
             alternative_model=state.project.alternative_model,
+            api_key=state.project.api_key,
+            api_base=state.project.api_base,
+            model_params=state.project.model_params,
         )
         from .memgpt_runtime import build_chat_orchestrator
         state.memgpt = build_chat_orchestrator(state.project, state.store)

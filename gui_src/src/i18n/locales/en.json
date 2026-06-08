@@ -95,7 +95,7 @@
   "bottomPanel": {
     "outputTab": "OUTPUT (OPALACODER)",
     "problemsTab": "PROBLEMS",
-    "thinkingTab": "THINKING",
+    "thinkingTab": "THINKING/STREAM",
     "terminalTab": "TERMINAL",
     "clearOutput": "Clear Output",
     "clearProblems": "Clear Problems",

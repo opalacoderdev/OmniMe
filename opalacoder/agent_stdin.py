@@ -526,6 +526,9 @@ async def handle_run(data: dict):
     def _on_thinking(chunk: str) -> None:
         print_event("thought", {"content": chunk})
 
+    def _on_chunk(chunk: str) -> None:
+        print_event("stream_chunk", {"content": chunk})
+
     def _on_iteration(_step: int, messages: list) -> None:
         last = messages[-1] if messages else {}
         content = last.get("content") or ""
@@ -536,6 +539,11 @@ async def handle_run(data: dict):
         agent.on_thinking = _on_thinking
     elif hasattr(agent, "agent") and hasattr(agent.agent, "on_thinking"):
         agent.agent.on_thinking = _on_thinking
+
+    if hasattr(agent, "on_chunk"):
+        agent.on_chunk = _on_chunk
+    elif hasattr(agent, "agent") and hasattr(agent.agent, "on_chunk"):
+        agent.agent.on_chunk = _on_chunk
 
     if hasattr(agent, "on_iteration"):
         agent.on_iteration = _on_iteration

@@ -831,6 +831,18 @@ export default function App() {
           return [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'REFLECTION', content: data.content }];
         });
         break;
+      case 'stream_chunk':
+        addLog('thought', data.content);
+        setThinkingLogs(prev => {
+          if (prev.length > 0) {
+            const last = prev[prev.length - 1];
+            if (last.type === 'STREAM') {
+              return [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
+            }
+          }
+          return [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'STREAM', content: data.content }];
+        });
+        break;
       case 'cancelled': addLog('warning', data.message || 'Execução cancelada.'); setChatMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Interrompido: ${data.message || 'A execução do agente foi parada.'}` }]); break;
       case 'tool_call':
         addLog('tool_call', `Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`);
@@ -1118,14 +1130,14 @@ export default function App() {
               agentResponse = data.response;
             } else if (data.event === 'error') {
               addLog('error', `Inline Agent Error: ${data.message}`);
-            } else if (data.event === 'thought' || data.event === 'reflection') {
+            } else if (data.event === 'thought' || data.event === 'reflection' || data.event === 'stream_chunk') {
               let textContent = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
               if (textContent === '{}' || !textContent.trim()) continue;
               if (textContent.startsWith('{"result":') || textContent.startsWith('{"error":') || textContent.startsWith('{"name":')) continue;
 
               addLog('thought', textContent);
               setThinkingLogs(prev => {
-                const type = data.event.toUpperCase();
+                const type = data.event === 'stream_chunk' ? 'STREAM' : data.event.toUpperCase();
                 if (prev.length > 0 && prev[prev.length - 1].type === type) {
                   const last = prev[prev.length - 1];
                   return [...prev.slice(0, -1), { ...last, content: last.content + textContent }];
