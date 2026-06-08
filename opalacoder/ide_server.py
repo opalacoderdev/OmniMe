@@ -126,6 +126,42 @@ def sanitize_model_params(params: dict) -> dict:
         
     return sanitized
 
+def _read_clipboard() -> str:
+    """Read system clipboard using the QApplication already running in this process.
+
+    pywebview on Linux uses the Qt backend, so a QApplication instance exists in
+    the main thread by the time any HTTP request arrives.  Reading from that
+    instance works on both X11 and Wayland without any extra packages or
+    subprocesses — a new QApplication in a subprocess has no compositor connection
+    and always returns an empty string on Wayland.
+    """
+    try:
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is not None:
+            return app.clipboard().text()
+    except Exception:
+        pass
+    return ''
+
+
+def _write_clipboard(text: str):
+    """Write text to system clipboard. Returns (ok: bool, error: str).
+
+    Uses the QApplication already running in this process (see _read_clipboard).
+    """
+    try:
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is not None:
+            app.clipboard().setText(text)
+            app.processEvents()
+            return True, ''
+        return False, 'No QApplication instance found'
+    except Exception as e:
+        return False, str(e)
+
+
 class AsyncHTTPServer:
     def __init__(self, host="127.0.0.1", port=3000, static_dir=None):
         self.host = host
@@ -1440,36 +1476,16 @@ class AsyncHTTPServer:
                 self.send_response(writer, 500, json.dumps({"ok": False, "error": str(e)}).encode('utf-8'), "application/json")
 
         elif path == '/api/clipboard/read' and method == 'GET':
-            text = ''
-            try:
-                import sys as _sys, subprocess as _sub, os as _os
-                env = _os.environ.copy()
-                result = _sub.run(
-                    [_sys.executable, '-c',
-                     'import sys; from PyQt6.QtWidgets import QApplication;'
-                     ' app=QApplication([]); print(app.clipboard().text(), end="")'],
-                    capture_output=True, text=True, timeout=3, env=env,
-                )
-                text = result.stdout
-            except Exception:
-                pass
+            text = _read_clipboard()
             self.send_response(writer, 200, json.dumps({'text': text}).encode('utf-8'), "application/json")
 
         elif path == '/api/clipboard/write' and method == 'POST':
-            try:
-                import sys as _sys, subprocess as _sub, os as _os
-                text_to_write = data.get('text', '') if isinstance(data, dict) else ''
-                escaped = text_to_write.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
-                env = _os.environ.copy()
-                _sub.run(
-                    [_sys.executable, '-c',
-                     f'import sys; from PyQt6.QtWidgets import QApplication;'
-                     f' app=QApplication([]); app.clipboard().setText("{escaped}"); app.processEvents()'],
-                    capture_output=True, text=True, timeout=3, env=env,
-                )
+            text_to_write = data.get('text', '') if isinstance(data, dict) else ''
+            ok, err = _write_clipboard(text_to_write)
+            if ok:
                 self.send_response(writer, 200, b'{"ok":true}', "application/json")
-            except Exception as e:
-                self.send_response(writer, 500, json.dumps({'ok': False, 'error': str(e)}).encode(), "application/json")
+            else:
+                self.send_response(writer, 500, json.dumps({'ok': False, 'error': err}).encode(), "application/json")
 
         else:
             self.send_response(writer, 404, b'{"error":"Not Found"}', "application/json")
