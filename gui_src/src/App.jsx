@@ -128,6 +128,7 @@ export default function App() {
   const [inlinePrompt, setInlinePrompt] = useState(null);
   // Stores the Monaco range that should be replaced after an inline agent reply
   const pendingInlineRangeRef = useRef(null);
+  const pendingWritePathRef = useRef(null);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const terminalRef = useRef(null);
@@ -336,7 +337,11 @@ export default function App() {
     if (!activeProject) return;
     try {
       const res = await fetch(`/api/git/status?projectPath=${encodeURIComponent(activeProject.project_path)}`);
-      if (res.ok) { const data = await res.json(); setGitChanges(data.files || []); }
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`[DEBUG fetchGitStatus] projectPath="${activeProject.project_path}" files=`, data.files);
+        setGitChanges(data.files || []);
+      }
     } catch (err) { console.error('Failed to fetch git status', err); }
   };
 
@@ -350,13 +355,16 @@ export default function App() {
     if (!activeProject || !commitMessage.trim() || isCommitting) return;
     setIsCommitting(true);
     addLog('info', t('app.commitCreating', { message: commitMessage }));
+    console.log(`[DEBUG handleGitCommit] Committing to projectPath="${activeProject.project_path}" message="${commitMessage}"`);
     try {
       const res = await fetch('/api/git/commit', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectPath: activeProject.project_path, message: commitMessage }),
       });
+      const data = await res.json();
+      console.log(`[DEBUG handleGitCommit] Response status=${res.status}`, data);
       if (res.ok) { addLog('info', t('app.commitSuccess')); setCommitMessage(''); fetchGitStatus(); }
-      else { const data = await res.json(); addLog('error', t('app.commitFailed', { error: data.error || t('app.unknownError') })); }
+      else { addLog('error', t('app.commitFailed', { error: data.error || t('app.unknownError') })); }
     } catch (err) { addLog('error', t('app.commitError', { error: err.message })); }
     finally { setIsCommitting(false); }
   };
@@ -434,10 +442,15 @@ export default function App() {
     if (selectedFile) setFileContents(prev => ({ ...prev, [selectedFile]: fileContent }));
     setOpenFiles(prev => prev.includes(filePath) ? prev : [...prev, filePath]);
     setSelectedFile(filePath);
-    if (fileContents[filePath] !== undefined) { setFileContent(fileContents[filePath]); return; }
+    if (fileContents[filePath] !== undefined) {
+      console.log(`[DEBUG handleFileSelect] CACHE HIT for "${filePath}" — serving cached content (${fileContents[filePath].length} chars). Disk NOT read.`);
+      setFileContent(fileContents[filePath]);
+      return;
+    }
+    console.log(`[DEBUG handleFileSelect] CACHE MISS for "${filePath}" — fetching from disk.`);
     try {
       const res = await fetch(`/api/file/read?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(filePath)}`);
-      if (res.ok) { const data = await res.json(); setFileContent(data.content); setFileContents(prev => ({ ...prev, [filePath]: data.content })); }
+      if (res.ok) { const data = await res.json(); console.log(`[DEBUG handleFileSelect] Loaded from disk: ${data.content.length} chars`); setFileContent(data.content); setFileContents(prev => ({ ...prev, [filePath]: data.content })); }
       else addLog('error', `Erro ao ler arquivo: ${filePath}`);
     } catch (err) { addLog('error', `Erro de leitura: ${err.message}`); }
   };
@@ -819,8 +832,55 @@ export default function App() {
         });
         break;
       case 'cancelled': addLog('warning', data.message || 'Execução cancelada.'); setChatMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Interrompido: ${data.message || 'A execução do agente foi parada.'}` }]); break;
-      case 'tool_call': addLog('tool_call', `Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`); break;
-      case 'tool_result': addLog('tool_result', `Sucesso: ${data.tool}`); break;
+      case 'tool_call':
+        addLog('tool_call', `Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`);
+        if (['write_file', 'write_content_pos', 'edit_file'].includes(data.tool)) {
+          const writePath = data.arguments?.path;
+          console.log(`[DEBUG tool_call] ${data.tool} path="${writePath}" — currentEditorCached=${fileContents[writePath] !== undefined}`);
+          if (writePath) pendingWritePathRef.current = writePath;
+        }
+        break;
+      case 'tool_result':
+        addLog('tool_result', `Sucesso: ${data.tool}`);
+        if (['write_file', 'write_content_pos', 'edit_file'].includes(data.tool)) {
+          console.log(`[DEBUG tool_result] ${data.tool} result="${data.result}"`);
+          const writtenPath = pendingWritePathRef.current;
+          pendingWritePathRef.current = null;
+          if (writtenPath) {
+            // Invalidate cached content so the editor reloads from disk on next open.
+            // Use the relative path as stored in fileContents (basename only, no leading slash).
+            const relPath = writtenPath.replace(/^.*[/\\]/, '') === writtenPath
+              ? writtenPath
+              : writtenPath.split(/[/\\]/).pop();
+            setFileContents(prev => {
+              // Remove any key that ends with this relative path segment.
+              const updated = { ...prev };
+              for (const key of Object.keys(updated)) {
+                if (key === writtenPath || key.endsWith('/' + relPath) || key === relPath) {
+                  console.log(`[DEBUG tool_result] Invalidating editor cache for "${key}"`);
+                  delete updated[key];
+                }
+              }
+              return updated;
+            });
+            // If this file is currently open in the editor, reload it from disk now.
+            if (selectedFile && (selectedFile === writtenPath || selectedFile.endsWith('/' + relPath) || selectedFile === relPath)) {
+              if (activeProject) {
+                fetch(`/api/file/read?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(selectedFile)}`)
+                  .then(r => r.ok ? r.json() : null)
+                  .then(d => {
+                    if (d) {
+                      console.log(`[DEBUG tool_result] Reloaded open file "${selectedFile}" from disk.`);
+                      setFileContent(d.content);
+                      setFileContents(prev => ({ ...prev, [selectedFile]: d.content }));
+                    }
+                  })
+                  .catch(() => {});
+              }
+            }
+          }
+        }
+        break;
       case 'agent_response':
         addLog('info', 'Resposta recebida.');
         setChatMessages(prev => {
@@ -963,6 +1023,7 @@ export default function App() {
   const handleEditorDidMount = (editor, monaco) => {
     editorRef.current = editor;
     if (monaco) monacoRef.current = monaco;
+
     editor.onKeyDown((e) => {
       const ev = e.browserEvent;
       const isCtrl = ev.ctrlKey || ev.metaKey;

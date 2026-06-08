@@ -77,6 +77,26 @@ export default function EditorPanel({
       }
     );
 
+    // ── Paste via backend (navigator.clipboard.readText fails while context
+    //    menu is open because hasTextFocus() is false; run() receives the
+    //    editor directly so it works regardless of focus state).
+    editor.addAction({
+      id: 'opalacoder.paste',
+      label: 'Paste',
+      contextMenuGroupId: '9_cutcopypaste',
+      contextMenuOrder: 3,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV],
+      run: async (ed) => {
+        let text = '';
+        try {
+          const res = await fetch('/api/clipboard/read');
+          const data = await res.json();
+          text = data.text ?? '';
+        } catch (_) {}
+        if (text) ed.trigger('keyboard', 'paste', { text });
+      },
+    });
+
     // ── Monaco context menu — Refine Selection ───────────────────────────────
     editor.addAction({
       id: 'opalacoder.refineSelection',

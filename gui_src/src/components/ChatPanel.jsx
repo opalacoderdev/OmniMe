@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatMessageContent } from '../utils/formatMessage';
+import { readClipboard } from '../utils/clipboard.js';
 import { useTextContextMenu } from '../hooks/useTextContextMenu.js';
 import TextContextMenu from './TextContextMenu.jsx';
 
@@ -24,7 +25,29 @@ export default function ChatPanel({
 }) {
   const { t } = useTranslation();
   const historyRef = useRef(null);
-  const { menu, onContextMenu, handleCopy, handlePaste, handleSelectAll } = useTextContextMenu();
+  const inputRef = useRef(null);
+  const { menu, onContextMenu, handleCopy, handleSelectAll, close: closeMenu } = useTextContextMenu();
+
+  const handlePaste = useCallback(() => {
+    readClipboard().then((text) => {
+      if (!text) return;
+      const el = inputRef.current;
+      if (el) {
+        const start = el.selectionStart ?? chatInput.length;
+        const end = el.selectionEnd ?? chatInput.length;
+        const next = chatInput.slice(0, start) + text + chatInput.slice(end);
+        setChatInput(next);
+        requestAnimationFrame(() => {
+          el.focus();
+          const pos = start + text.length;
+          el.setSelectionRange(pos, pos);
+        });
+      } else {
+        setChatInput((prev) => prev + text);
+      }
+    });
+    closeMenu();
+  }, [chatInput, setChatInput, closeMenu]);
 
   // Chat input history state
   const [inputHistory, setInputHistory] = useState(() => {
@@ -474,6 +497,7 @@ export default function ChatPanel({
       <form onSubmit={handleFormSubmit} className="vscode-chat-form">
         <div className="vscode-chat-input-row">
           <input
+            ref={inputRef}
             type="text"
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}

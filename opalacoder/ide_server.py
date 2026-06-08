@@ -1439,6 +1439,38 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"ok": False, "error": str(e)}).encode('utf-8'), "application/json")
 
+        elif path == '/api/clipboard/read' and method == 'GET':
+            text = ''
+            try:
+                import sys as _sys, subprocess as _sub, os as _os
+                env = _os.environ.copy()
+                result = _sub.run(
+                    [_sys.executable, '-c',
+                     'import sys; from PyQt6.QtWidgets import QApplication;'
+                     ' app=QApplication([]); print(app.clipboard().text(), end="")'],
+                    capture_output=True, text=True, timeout=3, env=env,
+                )
+                text = result.stdout
+            except Exception:
+                pass
+            self.send_response(writer, 200, json.dumps({'text': text}).encode('utf-8'), "application/json")
+
+        elif path == '/api/clipboard/write' and method == 'POST':
+            try:
+                import sys as _sys, subprocess as _sub, os as _os
+                text_to_write = data.get('text', '') if isinstance(data, dict) else ''
+                escaped = text_to_write.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+                env = _os.environ.copy()
+                _sub.run(
+                    [_sys.executable, '-c',
+                     f'import sys; from PyQt6.QtWidgets import QApplication;'
+                     f' app=QApplication([]); app.clipboard().setText("{escaped}"); app.processEvents()'],
+                    capture_output=True, text=True, timeout=3, env=env,
+                )
+                self.send_response(writer, 200, b'{"ok":true}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({'ok': False, 'error': str(e)}).encode(), "application/json")
+
         else:
             self.send_response(writer, 404, b'{"error":"Not Found"}', "application/json")
 
@@ -1528,8 +1560,32 @@ def start_gui_server(host="127.0.0.1", port=3000):
             if "setFeaturePermission(url, feature, 2)" in _src:
                 if hasattr(_wv_qt, "BrowserView") and hasattr(_wv_qt.BrowserView, "WebPage"):
                     _wv_qt.BrowserView.WebPage.onFeaturePermissionRequested = _onFeaturePermissionRequested
+
         except Exception:
             pass
+
+        # Suppress Qt's native context menu by patching BrowserView.__init__
+        # to add a second loadFinished connection that sets NoContextMenu policy.
+        try:
+            from webview.platforms import qt as _wv_qt2
+            from qtpy.QtCore import Qt as _Qt
+
+            if hasattr(_wv_qt2, "BrowserView"):
+                _orig_init = _wv_qt2.BrowserView.__init__
+
+                def _patched_init(self, window):
+                    print('[patch] BrowserView.__init__ called')
+                    _orig_init(self, window)
+                    def _disable_context_menu(_ok=None):
+                        print('[patch] loadFinished fired, applying NoContextMenu')
+                        self.webview.setContextMenuPolicy(_Qt.ContextMenuPolicy.NoContextMenu)
+                    self.webview.page().loadFinished.connect(_disable_context_menu)
+                    print('[patch] loadFinished connected')
+
+                _wv_qt2.BrowserView.__init__ = _patched_init
+                print('[patch] BrowserView.__init__ patched successfully')
+        except Exception as e:
+            print('[patch init] FAILED:', e)
 
         # Ensure WebKit2GTK GObject introspection is available on Linux
         try:

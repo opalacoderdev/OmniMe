@@ -232,7 +232,24 @@ class ProjectStore:
             with open(env_path, "w", encoding="utf-8") as f:
                 f.writelines(env_lines)
 
-            # 4. Initialize VCS shadow git
+            # 4. Add .opalacoder/ to the project's own .gitignore so OpalaCoder
+            #    internal files don't appear in the user's git status.
+            proj_gitignore = os.path.join(abs_proj_path, ".gitignore")
+            opalacoder_entry = ".opalacoder/"
+            try:
+                existing = ""
+                if os.path.isfile(proj_gitignore):
+                    with open(proj_gitignore, "r", encoding="utf-8") as f:
+                        existing = f.read()
+                if opalacoder_entry not in existing:
+                    with open(proj_gitignore, "a", encoding="utf-8") as f:
+                        if existing and not existing.endswith("\n"):
+                            f.write("\n")
+                        f.write(f"{opalacoder_entry}\n")
+            except Exception:
+                pass
+
+            # 5. Initialize VCS shadow git
             from .vcs import get_vcs_strategy
             from .config import get_git_strategy
             vcs = get_vcs_strategy(get_git_strategy(), abs_proj_path)

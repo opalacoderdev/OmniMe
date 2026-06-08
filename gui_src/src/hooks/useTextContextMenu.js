@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { readClipboard } from '../utils/clipboard.js';
 
 export function useTextContextMenu() {
   const [menu, setMenu] = useState(null);
@@ -40,9 +41,9 @@ export function useTextContextMenu() {
   }, [close]);
 
 const handlePaste = useCallback(() => {
-    navigator.clipboard.readText().then((text) => {
-      document.execCommand('insertText', false, text);
-    }).catch(() => {});
+    readClipboard().then((text) => {
+      if (text) document.execCommand('insertText', false, text);
+    });
     close();
   }, [close]);
 

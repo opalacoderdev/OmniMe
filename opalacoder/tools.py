@@ -83,7 +83,29 @@ def set_project_context(session, store=None) -> None:
     _PROJECT_STORE = store
     if session:
         _PROJECT_PATH = os.path.abspath(session.project_path) if getattr(session, "project_path", "") else os.getcwd()
-        
+
+        # Ensure .opalacoder/ is ignored by the user's own git so internal
+        # files (editor state, skill requests) never appear in their git status.
+        try:
+            proj_gitignore = os.path.join(_PROJECT_PATH, ".gitignore")
+            entry = ".opalacoder/"
+            existing = ""
+            if os.path.isfile(proj_gitignore):
+                with open(proj_gitignore, "r", encoding="utf-8") as _f:
+                    existing = _f.read()
+            if entry not in existing:
+                with open(proj_gitignore, "a", encoding="utf-8") as _f:
+                    if existing and not existing.endswith("\n"):
+                        _f.write("\n")
+                    _f.write(f"{entry}\n")
+                # Untrack any .opalacoder/ files already committed to the user's git index.
+                subprocess.run(
+                    ["git", "rm", "--cached", "-r", "--ignore-unmatch", ".opalacoder/"],
+                    cwd=_PROJECT_PATH, capture_output=True
+                )
+        except Exception:
+            pass
+
         # Load project-specific .env file if it exists
         env_path = os.path.join(_PROJECT_PATH, ".env")
         if os.path.isfile(env_path):
@@ -270,6 +292,7 @@ def write_file(path: str, content: str) -> str:
         content = _decode_escape_sequences(content)
         with open(resolved, "w", encoding="utf-8") as f:
             f.write(content)
+        print(f"[DEBUG write_file] Written {len(content)} chars to resolved path: {resolved}", flush=True)
         try:
             from .code_index import CODE_INDEX
             CODE_INDEX.rebuild_file(resolved)
