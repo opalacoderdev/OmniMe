@@ -126,15 +126,58 @@ def sanitize_model_params(params: dict) -> dict:
         
     return sanitized
 
-def _read_clipboard() -> str:
-    """Read system clipboard using the QApplication already running in this process.
+def _qt_invoke(fn):
+    """Run fn() on the Qt main thread and return its result.
 
-    pywebview on Linux uses the Qt backend, so a QApplication instance exists in
-    the main thread by the time any HTTP request arrives.  Reading from that
-    instance works on both X11 and Wayland without any extra packages or
-    subprocesses — a new QApplication in a subprocess has no compositor connection
-    and always returns an empty string on Wayland.
+    QClipboard must be accessed from the main thread only.  The HTTP server
+    runs on a background asyncio thread, so we marshal the call via a
+    QMetaObject.invokeMethod + threading.Event round-trip.
     """
+    import threading
+    try:
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import QObject, pyqtSlot, Qt
+
+        app = QApplication.instance()
+        if app is None:
+            return None
+
+        result_box = [None]
+        done = threading.Event()
+
+        class _Caller(QObject):
+            @pyqtSlot()
+            def call(self):
+                try:
+                    result_box[0] = fn()
+                except Exception:
+                    pass
+                finally:
+                    done.set()
+
+        caller = _Caller()
+        # Move to main thread so invokeMethod queues on the Qt event loop
+        caller.moveToThread(app.thread())
+        from PyQt6.QtCore import QMetaObject
+        QMetaObject.invokeMethod(caller, 'call', Qt.ConnectionType.QueuedConnection)
+        done.wait(timeout=3)
+        return result_box[0]
+    except Exception:
+        return None
+
+
+def _read_clipboard() -> str:
+    """Read system clipboard via Qt main thread (thread-safe).
+
+    pywebview on Linux uses the Qt backend (gi is not in the venv), so
+    QApplication.instance() always exists.  Accessing QClipboard from the
+    asyncio background thread requires marshalling to the main thread.
+    """
+    result = _qt_invoke(lambda: QApplication.instance().clipboard().text())  # noqa: F821 — resolved inside _qt_invoke
+    if result is not None:
+        return result
+
+    # Direct fallback: if already on main thread or _qt_invoke failed
     try:
         from PyQt6.QtWidgets import QApplication
         app = QApplication.instance()
@@ -146,18 +189,30 @@ def _read_clipboard() -> str:
 
 
 def _write_clipboard(text: str):
-    """Write text to system clipboard. Returns (ok: bool, error: str).
+    """Write text to system clipboard via Qt main thread (thread-safe).
 
-    Uses the QApplication already running in this process (see _read_clipboard).
+    Returns (ok: bool, error: str).
     """
+    def _do_write():
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is not None:
+            app.clipboard().setText(text)
+            return True
+        return False
+
+    result = _qt_invoke(_do_write)
+    if result:
+        return True, ''
+
+    # Direct fallback
     try:
         from PyQt6.QtWidgets import QApplication
         app = QApplication.instance()
         if app is not None:
             app.clipboard().setText(text)
-            app.processEvents()
             return True, ''
-        return False, 'No QApplication instance found'
+        return False, 'No QApplication instance'
     except Exception as e:
         return False, str(e)
 
