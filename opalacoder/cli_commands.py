@@ -528,6 +528,50 @@ async def cmd_removechk(state: REPLState, args: list[str]) -> str | None:
     return "continue"
 
 
+@_registry.register("/history", usage="[n]", description="Show conversation history (last n messages, default all)")
+async def cmd_history(state: REPLState, args: list[str]) -> str | None:
+    limit: int | None = None
+    if args:
+        try:
+            limit = int(args[0])
+            if limit <= 0:
+                T.error("Usage: /history [n]  — n must be a positive integer")
+                return "continue"
+        except ValueError:
+            T.error("Usage: /history [n]  — n must be a positive integer")
+            return "continue"
+
+    history = state.project.history
+    if not history:
+        T.info("No conversation history for this project.")
+        return "continue"
+
+    messages = history[-limit:] if limit else history
+    total = len(history)
+    showing = len(messages)
+
+    T.console.print(
+        f"\n[dim]Conversation history for '{_escape(state.display_name)}' "
+        f"— showing {showing} of {total} message(s):[/dim]\n"
+    )
+
+    role_styles = {"user": "bold cyan", "assistant": "bold green"}
+    role_labels = {"user": "You", "assistant": "OpalaCoder"}
+
+    for i, msg in enumerate(messages, start=total - showing + 1):
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "")
+        style = role_styles.get(role, "bold yellow")
+        label = role_labels.get(role, role.capitalize())
+
+        # Truncate very long messages for readability
+        display = content if len(content) <= 500 else content[:497] + "..."
+        T.console.print(f"[{style}][{i}] {label}:[/{style}] {_escape(display)}\n")
+
+    T.console.print(f"[dim]{'─' * 40}[/dim]\n")
+    return "continue"
+
+
 @_registry.register("/exit", "/quit", description=_("exit_desc"))
 async def cmd_exit(_state: REPLState, _args: list[str]) -> str:
     T.info(_("exiting"))
