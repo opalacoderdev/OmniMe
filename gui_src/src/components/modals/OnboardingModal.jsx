@@ -82,7 +82,14 @@ export default function OnboardingModal({ onClose, onComplete }) {
 
   const vram = hardware ? parseFloat(hardware.vram_gb) || 0 : 0;
   const isHighEnd = vram >= 8;
-  const ollamaModel = "ollama/gemma4:12b";
+  let ollamaModel = "ollama/gemma4:e2b-it-qat";
+  if (vram > 32) {
+    ollamaModel = "ollama/gemma4:32b";
+  } else if (vram > 16) {
+    ollamaModel = "ollama/gemma4:26b";
+  } else if (vram >= 8) {
+    ollamaModel = "ollama/gemma4:12b";
+  }
 
   return (
     <div className="vscode-modal-overlay" style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.85)' }}>

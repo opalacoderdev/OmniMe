@@ -498,6 +498,7 @@ async def handle_run(data: dict):
         
         # Default think to False if not explicitly passed as True
         model_kwargs["think"] = bool(model_params.get("think", False))
+        model_kwargs["stream"] = bool(model_params.get("stream", False))
 
         agent_kwargs = {}
         if model_params.get("max_iterations") is not None:
@@ -505,10 +506,14 @@ async def handle_run(data: dict):
         if model_params.get("max_tool_calls") is not None:
             agent_kwargs["max_tool_calls"] = int(model_params["max_tool_calls"])
 
+        _model = model or DEFAULT_MODEL
+        from opalacoder.config import resolve_model_for_thinking
+        _model = resolve_model_for_thinking(_model, model_kwargs)
+
         agent = LLMAgentBlock(
             name=agent_type or "custom_agent",
             system_prompt=system_prompt,
-            model=model or DEFAULT_MODEL,
+            model=_model,
             tools=tools_list,
             model_kwargs=model_kwargs,
             **agent_kwargs

@@ -75,19 +75,23 @@ export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, f
       }).catch(err => console.error('Failed to send terminal input', err));
     });
 
-    // Resize observer keeps the terminal sized correctly.
+    let resizeTimeout;
     const resizeObserver = new ResizeObserver(() => {
-      if (fitAddon && !isCollapsedRef.current) {
-        try {
-          fitAddon.fit();
-          const { cols, rows } = term;
-          fetch('/api/terminal/input', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'resize', cols, rows, projectPath: activeProject.project_path }),
-          }).catch(err => console.error('Failed to send terminal resize', err));
-        } catch (e) { /* ignore */ }
-      }
+      if (resizeTimeout) return;
+      resizeTimeout = setTimeout(() => {
+        resizeTimeout = null;
+        if (fitAddon && !isCollapsedRef.current) {
+          try {
+            fitAddon.fit();
+            const { cols, rows } = term;
+            fetch('/api/terminal/input', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'resize', cols, rows, projectPath: activeProject.project_path }),
+            }).catch(err => console.error('Failed to send terminal resize', err));
+          } catch (e) { /* ignore */ }
+        }
+      }, 100); // 100ms debounce
     });
     resizeObserver.observe(terminalRef.current);
 

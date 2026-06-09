@@ -305,7 +305,10 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setProjects(data.projects || []);
-        if (data.projects?.length > 0 && !activeProject) handleSelectProject(data.projects[0]);
+        if (data.projects?.length > 0 && !activeProject) {
+          const firstValid = data.projects.find(p => p.exists);
+          if (firstValid) handleSelectProject(firstValid);
+        }
       }
     } catch (err) { addLog('error', t('app.failedToLoadProjects', { error: err.message })); }
   };
@@ -346,6 +349,10 @@ export default function App() {
   };
 
   const handleSelectProject = (proj) => {
+    if (proj.exists === false) {
+      alert(`A pasta do projeto não existe no disco:\n${proj.project_path}`);
+      return;
+    }
     setActiveProject(proj);
     addLog('info', t('app.projectSelected', { name: proj.project_name || proj.name }));
   };
@@ -532,24 +539,31 @@ export default function App() {
   const handleDeleteNode = async (node) => {
     if (!activeProject || !node) return;
     const msg = `Tem certeza que deseja deletar o ${node.isDirectory ? 'diretório' : 'arquivo'} "${node.path}"?${node.isDirectory ? ' Todos os arquivos internos serão removidos!' : ''}`;
-    if (!window.confirm(msg)) return;
-    try {
-      const res = await fetch('/api/file/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectPath: activeProject.project_path, filePath: node.path }) });
-      if (res.ok) {
-        addLog('info', `${node.isDirectory ? 'Diretório' : 'Arquivo'} excluído: ${node.path}`);
-        if (!node.isDirectory) {
-          setOpenFiles(prev => prev.filter(f => f !== node.path));
-          setFileContents(prev => { const n = { ...prev }; delete n[node.path]; return n; });
-          if (selectedFile === node.path) { const rem = openFiles.filter(f => f !== node.path); if (rem.length) { setSelectedFile(rem[rem.length - 1]); setFileContent(fileContents[rem[rem.length - 1]] || ''); } else { setSelectedFile(null); setFileContent(''); } }
-        } else {
-          const prefix = `${node.path}/`;
-          setOpenFiles(prev => prev.filter(f => !f.startsWith(prefix)));
-          setFileContents(prev => { const n = {}; for (const [k, v] of Object.entries(prev)) if (!k.startsWith(prefix)) n[k] = v; return n; });
-          if (selectedFile?.startsWith(prefix)) { const rem = openFiles.filter(f => !f.startsWith(prefix)); if (rem.length) { setSelectedFile(rem[rem.length - 1]); setFileContent(fileContents[rem[rem.length - 1]] || ''); } else { setSelectedFile(null); setFileContent(''); } }
-        }
-        await fetchFiles();
-      } else { const e = await res.json(); addLog('error', `Falha ao deletar: ${e.error}`); alert(`Erro ao deletar: ${e.error}`); }
-    } catch (err) { addLog('error', `Erro ao deletar: ${err.message}`); }
+    setConfirmRequest({
+      prompt: msg,
+      options: ['yes', 'no'],
+      default: 'no',
+      callback: async (value) => {
+        if (value !== 'yes') return;
+        try {
+          const res = await fetch('/api/file/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectPath: activeProject.project_path, filePath: node.path }) });
+          if (res.ok) {
+            addLog('info', `${node.isDirectory ? 'Diretório' : 'Arquivo'} excluído: ${node.path}`);
+            if (!node.isDirectory) {
+              setOpenFiles(prev => prev.filter(f => f !== node.path));
+              setFileContents(prev => { const n = { ...prev }; delete n[node.path]; return n; });
+              if (selectedFile === node.path) { const rem = openFiles.filter(f => f !== node.path); if (rem.length) { setSelectedFile(rem[rem.length - 1]); setFileContent(fileContents[rem[rem.length - 1]] || ''); } else { setSelectedFile(null); setFileContent(''); } }
+            } else {
+              const prefix = `${node.path}/`;
+              setOpenFiles(prev => prev.filter(f => !f.startsWith(prefix)));
+              setFileContents(prev => { const n = {}; for (const [k, v] of Object.entries(prev)) if (!k.startsWith(prefix)) n[k] = v; return n; });
+              if (selectedFile?.startsWith(prefix)) { const rem = openFiles.filter(f => !f.startsWith(prefix)); if (rem.length) { setSelectedFile(rem[rem.length - 1]); setFileContent(fileContents[rem[rem.length - 1]] || ''); } else { setSelectedFile(null); setFileContent(''); } }
+            }
+            await fetchFiles();
+          } else { const e = await res.json(); addLog('error', `Falha ao deletar: ${e.error}`); alert(`Erro ao deletar: ${e.error}`); }
+        } catch (err) { addLog('error', `Erro ao deletar: ${err.message}`); }
+      }
+    });
   };
 
   const handleMoveNode = async (oldPath, targetDirPath, isDirectory) => {

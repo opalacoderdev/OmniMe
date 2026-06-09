@@ -54,6 +54,7 @@ _MODEL_PARAMS_SCHEMA = {
     "repetition_penalty": {"type": float, "min": 0.0},
     "think": {"type": bool},
     "stream": {"type": bool},
+    "reasoning_effort": {"type": str, "choices": ["none", "low", "medium", "high", "xhigh"]},
     
     "max_heartbeats": {"type": int, "min": 1},
     "max_context_tokens": {"type": int, "min": 1},
@@ -794,12 +795,17 @@ class AsyncHTTPServer:
                 
             self.send_response(writer, 200, json.dumps({"found": False}).encode('utf-8'), "application/json")
 
-        # 4. List Projects
         elif path == '/api/opalacoder/list-projects':
             from opalacoder.config import DEFAULT_DB_PATH
             from opalacoder.project import ProjectStore
             store = ProjectStore(db_path=DEFAULT_DB_PATH)
             projects = store.list_projects()
+            for p in projects:
+                raw_path = p.get('project_path', '')
+                if raw_path:
+                    p['exists'] = os.path.exists(os.path.abspath(os.path.expanduser(raw_path)))
+                else:
+                    p['exists'] = False
             self.send_response(writer, 200, json.dumps({"projects": projects}).encode('utf-8'), "application/json")
 
         # 5. Create Project
@@ -844,8 +850,11 @@ class AsyncHTTPServer:
             model_params = sanitize_model_params(model_params_raw) if isinstance(model_params_raw, dict) else None
 
             db_key = project_name.replace(" ", "_").lower()
-            if store.exists(db_key):
-                db_key = db_key + "_1"
+            original_db_key = db_key
+            counter = 1
+            while store.exists(db_key):
+                db_key = f"{original_db_key}_{counter}"
+                counter += 1
 
             try:
                 project = store.create(
@@ -860,51 +869,54 @@ class AsyncHTTPServer:
                     api_base=api_base,
                     model_params=model_params,
                 )
-                
-                if model and model.startswith("ollama/"):
-                    m_name = model.split("ollama/", 1)[1]
-                    import threading
-                    import subprocess
-                    def pull_model():
-                        try:
-                            subprocess.run(["ollama", "pull", m_name], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        except Exception:
-                            pass
-                    threading.Thread(target=pull_model, daemon=True).start()
-                
-                if "piloto" in project_name.lower() or "pilot" in project_name.lower():
-                    from opalacoder.onboarding import PILOT_SKILL_CONTENT_PT, PILOT_SKILL_CONTENT_EN
-                    from opalacoder.ui_settings import load_ui_settings
-                    from opalacoder.skills import write_skills_yaml
-                    
-                    cfg = load_ui_settings()
-                    lang = cfg.get("lang", "pt")
-                    skill_content = PILOT_SKILL_CONTENT_EN if lang.startswith("en") else PILOT_SKILL_CONTENT_PT
-                    
-                    skill_dir = os.path.join(abs_path, ".opalacoder", "skills", "tutorial_opalacoder")
-                    os.makedirs(skill_dir, exist_ok=True)
-                    with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
-                        f.write(skill_content.strip() + "\n")
-                    
-                    # Activate the skill without overwriting command-line
-                    from opalacoder.skills import read_skills_yaml
-                    existing_skills = read_skills_yaml(abs_path)
-                    if "tutorial_opalacoder" not in existing_skills:
-                        existing_skills.append("tutorial_opalacoder")
-                    write_skills_yaml(abs_path, existing_skills)
-                    
-                    if "tutorial_opalacoder" not in project.skills:
-                        project.skills.append("tutorial_opalacoder")
-                        store.save(project)
-
-                res_data = {
-                    "project_name": project.project_name,
-                    "project_path": project.project_path,
-                    "skills": project.skills
-                }
-                self.send_response(writer, 200, json.dumps(res_data).encode('utf-8'), "application/json")
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+                return
+                
+            if model and model.startswith("ollama/"):
+                m_name = model.split("ollama/", 1)[1]
+                import threading
+                import subprocess
+                def pull_model():
+                    try:
+                        subprocess.run(["ollama", "pull", m_name], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    except Exception:
+                        pass
+                threading.Thread(target=pull_model, daemon=True).start()
+            
+            if "piloto" in project_name.lower() or "pilot" in project_name.lower():
+                from opalacoder.onboarding import PILOT_SKILL_CONTENT_PT, PILOT_SKILL_CONTENT_EN
+                from opalacoder.ui_settings import load_ui_settings
+                from opalacoder.skills import write_skills_yaml
+                
+                cfg = load_ui_settings()
+                lang = cfg.get("lang", "pt")
+                skill_content = PILOT_SKILL_CONTENT_EN if lang.startswith("en") else PILOT_SKILL_CONTENT_PT
+                
+                skill_dir = os.path.join(abs_path, ".opalacoder", "skills", "tutorial_opalacoder")
+                os.makedirs(skill_dir, exist_ok=True)
+                with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
+                    f.write(skill_content.strip() + "\n")
+                
+                # Activate the skill without overwriting command-line
+                from opalacoder.skills import read_skills_yaml
+                existing_skills = read_skills_yaml(abs_path)
+                if "tutorial_opalacoder" not in existing_skills:
+                    existing_skills.append("tutorial_opalacoder")
+                write_skills_yaml(abs_path, existing_skills)
+                
+                if "tutorial_opalacoder" not in project.skills:
+                    project.skills.append("tutorial_opalacoder")
+                    store.save(project)
+
+            res_data = {
+                "project_name": project.project_name,
+                "project_path": project.project_path,
+                "skills": project.skills
+            }
+            self.send_response(writer, 200, json.dumps(res_data).encode('utf-8'), "application/json")
 
         # 6. Delete Project
         elif path == '/api/opalacoder/delete' and method == 'POST':
@@ -1151,6 +1163,10 @@ class AsyncHTTPServer:
                         self.active_terminal.close()
                     except:
                         pass
+                if not os.path.exists(project_path):
+                    self.send_response(writer, 400, b'{"error":"Project path does not exist"}', "application/json")
+                    return
+
                 from opalacoder.terminal_manager import TerminalSession
                 try:
                     self.active_terminal = TerminalSession(project_path)
@@ -1271,7 +1287,8 @@ class AsyncHTTPServer:
                 if res.returncode == 0:
                     self.send_response(writer, 200, b'{"success":true}', "application/json")
                 elif "nothing to commit" in res.stdout or "nothing added to commit" in res.stdout:
-                    self.send_response(writer, 400, b'{"error":"Nada para commitar (Nenhuma mudan\u00e7a encontrada)."}', "application/json")
+                    from opalacoder.i18n import _
+                    self.send_response(writer, 400, json.dumps({"error": _("commit_nothing")}).encode('utf-8'), "application/json")
                 else:
                     raise Exception(res.stderr or res.stdout or "Git commit failed")
             except Exception as e:

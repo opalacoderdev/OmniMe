@@ -165,7 +165,7 @@ class ProjectStore:
                 res.append(d)
             return res
 
-    def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "", api_key: str = None, api_base: str = None, model_params: dict = None) -> ProjectData:
+    def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "", api_key: str = None, api_base: str = None, model_params: dict = None, apply_modelconfig: bool = True) -> ProjectData:
         now = datetime.now(timezone.utc).isoformat()
         _skills = skills if skills is not None else ["opalacoder"]
         if "opalacoder" not in _skills:
@@ -268,71 +268,72 @@ class ProjectStore:
                 pass
 
             # 6. Apply modelconfig for the selected model
-            try:
-                from .assetstore import _model_to_path
-                import yaml
-                import re
-
-                def normalize_for_match(n: str) -> str:
-                    return re.sub(r'[-:_\s]+', '_', n).lower()
-
-                provider_dir, filename = _model_to_path(model)
-                provider_dir_path = os.path.join(abs_proj_path, '.opalacoder', 'modelsconfig', provider_dir)
-                config_path = os.path.join(provider_dir_path, filename)
-                
-                if not os.path.isfile(config_path):
-                    target_norm = normalize_for_match(filename[:-5])
-                    best_match = None
-                    best_len = 0
-                    if os.path.isdir(provider_dir_path):
-                        for f in os.listdir(provider_dir_path):
-                            if not f.endswith('.yaml'): continue
-                            cand_norm = normalize_for_match(f[:-5])
-                            if target_norm.startswith(cand_norm):
-                                if len(cand_norm) > best_len:
-                                    best_len = len(cand_norm)
-                                    best_match = f
-                    if best_match:
-                        config_path = os.path.join(provider_dir_path, best_match)
-
-                if os.path.isfile(config_path):
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        config = yaml.safe_load(f) or {}
+            if apply_modelconfig:
+                try:
+                    from .assetstore import _model_to_path
+                    import yaml
+                    import re
+    
+                    def normalize_for_match(n: str) -> str:
+                        return re.sub(r'[-:_\s]+', '_', n).lower()
+    
+                    provider_dir, filename = _model_to_path(model)
+                    provider_dir_path = os.path.join(abs_proj_path, '.opalacoder', 'modelsconfig', provider_dir)
+                    config_path = os.path.join(provider_dir_path, filename)
                     
-                    if 'provider' in config:
-                        new_provider = config.pop('provider')
-                        if '/' in model:
-                            _, m_name = model.split('/', 1)
-                        else:
-                            m_name = model
-                        model = f"{new_provider}/{m_name}"
-                    
-                    if 'api_base' in config:
-                        config_api_base = config.pop('api_base')
-                        if not api_base: 
-                            api_base = config_api_base
-                            upsert_env("OPENAI_API_BASE", api_base)
-                            
-                    if 'api_key' in config:
-                        config_api_key = config.pop('api_key')
-                        if not api_key: 
-                            api_key = config_api_key
-                            upsert_env("OPENAI_API_KEY", api_key)
-                            
-                    if 'alternative_model' in config:
-                        alt_model = config.pop('alternative_model')
-                        if not alternative_model:
-                            alternative_model = alt_model
-                            
-                    for k, v in config.items():
-                        if v is not None:
-                            # Only set if it's missing or if the current value is empty/None
-                            if k not in _model_params or _model_params[k] in (None, ""):
-                                _model_params[k] = v
+                    if not os.path.isfile(config_path):
+                        target_norm = normalize_for_match(filename[:-5])
+                        best_match = None
+                        best_len = 0
+                        if os.path.isdir(provider_dir_path):
+                            for f in os.listdir(provider_dir_path):
+                                if not f.endswith('.yaml'): continue
+                                cand_norm = normalize_for_match(f[:-5])
+                                if target_norm.startswith(cand_norm):
+                                    if len(cand_norm) > best_len:
+                                        best_len = len(cand_norm)
+                                        best_match = f
+                        if best_match:
+                            config_path = os.path.join(provider_dir_path, best_match)
+    
+                    if os.path.isfile(config_path):
+                        with open(config_path, 'r', encoding='utf-8') as f:
+                            config = yaml.safe_load(f) or {}
+                        
+                        if 'provider' in config:
+                            new_provider = config.pop('provider')
+                            if '/' in model:
+                                _, m_name = model.split('/', 1)
+                            else:
+                                m_name = model
+                            model = f"{new_provider}/{m_name}"
+                        
+                        if 'api_base' in config:
+                            config_api_base = config.pop('api_base')
+                            if not api_base: 
+                                api_base = config_api_base
+                                upsert_env("OPENAI_API_BASE", api_base)
                                 
-            except Exception:
-                pass
-                
+                        if 'api_key' in config:
+                            config_api_key = config.pop('api_key')
+                            if not api_key: 
+                                api_key = config_api_key
+                                upsert_env("OPENAI_API_KEY", api_key)
+                                
+                        if 'alternative_model' in config:
+                            alt_model = config.pop('alternative_model')
+                            if not alternative_model:
+                                alternative_model = alt_model
+                                
+                        for k, v in config.items():
+                            if v is not None:
+                                # Only set if it's missing or if the current value is empty/None
+                                if k not in _model_params or _model_params[k] in (None, ""):
+                                    _model_params[k] = v
+                                
+                except Exception:
+                    pass
+                    
             try:
                 with open(env_path, "w", encoding="utf-8") as f:
 
@@ -352,7 +353,7 @@ class ProjectStore:
 
     def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "", api_key: str = None, api_base: str = None, model_params: dict = None) -> ProjectData:
         self.delete(name)
-        return self.create(name, mode, model, project_name, project_path, skills, description, alternative_model, api_key=api_key, api_base=api_base, model_params=model_params)
+        return self.create(name, mode, model, project_name, project_path, skills, description, alternative_model, api_key=api_key, api_base=api_base, model_params=model_params, apply_modelconfig=False)
 
     def delete(self, name: str) -> None:
         with _conn(self.db_path) as conn:

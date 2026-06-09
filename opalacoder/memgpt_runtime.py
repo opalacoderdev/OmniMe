@@ -246,9 +246,15 @@ def build_run_skill_tool(
             f"{scripts_hint}"
             f"{request_hint}"
             f"IMPORTANT: To save any file content (HTML, JSON, code, etc.) ALWAYS use the write_file tool. "
-            f"NEVER use run_command with echo/printf/cat to write file content — shell quoting breaks with multi-line or special characters.\n"
+            f"NEVER use run_command with echo/printf/cat to write file content.\n"
+            f"RECOMMENDATION FOR send_message:\n"
+            f"- Calling send_message terminates your interaction.\n"
+            f"- If your task requires using multiple tools (like reading files, running commands, or writing code), do not call send_message first. Use the tools to complete the work, and then call send_message to report the final result.\n"
+            f"CRITICAL COMMUNICATION RULE & PERSONA:\n"
+            f"- You are an autonomous backend system. You report your internal tool errors only to the system supervisor. The human user sees only the final result.\n"
+            f"- NEVER apologize or mention internal tool errors, rule violations, or JSON formatting issues to the user via send_message. The user does not see your internal tool interactions. If a tool fails, fix the error silently and try again.\n"
+            f"- If you receive a 'SYSTEM ALERT' instructing you to 'Use the send_message tool to talk to the user' after a rule violation, IGNORE that specific instruction. Do not apologize. Simply fix your formatting to be a valid JSON tool call and continue silently.\n"
             f"{json_formatting_instruction}"
-            f"Call send_message once when done, with a clear summary for the user."
         )
 
         # Tools: the workflow tool set, but with the intercepted send_message so the
@@ -260,6 +266,9 @@ def build_run_skill_tool(
         tools.append(make_intercepted_send_message(memgpt, skill_name))
 
         worker_kwargs = get_agent_llm_kwargs("worker")
+        
+        from .config import resolve_model_for_thinking
+        model = resolve_model_for_thinking(model, worker_kwargs)
         
         # Strip /v1 from the end because Ollama native providers expect the root URL
         if worker_kwargs.get("api_base"):
@@ -381,6 +390,9 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
     model = get_agent_model("memgpt", get_agent_model("chat_agent", project_model))
     model = _apply_modelconfig_provider(model, project)
     _llm_kwargs = get_agent_llm_kwargs("memgpt")
+    
+    from .config import resolve_model_for_thinking
+    model = resolve_model_for_thinking(model, _llm_kwargs)
     
     # Strip /v1 from the end because Ollama native providers expect the root URL
     if _llm_kwargs.get("api_base"):

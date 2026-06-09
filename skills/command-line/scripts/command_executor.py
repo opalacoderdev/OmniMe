@@ -53,6 +53,16 @@ def main():
     # remove-dir
     subparsers.add_parser("remove-dir").add_argument("path", help="Relative directory path")
 
+    # rename
+    p_rename = subparsers.add_parser("rename")
+    p_rename.add_argument("origin", help="Relative origin path")
+    p_rename.add_argument("dest", help="Relative destination path")
+
+    # cp
+    p_cp = subparsers.add_parser("cp")
+    p_cp.add_argument("origin", help="Relative origin path")
+    p_cp.add_argument("dest", help="Relative destination path")
+
     args = parser.parse_args()
 
     if args.command == "create-file":
@@ -113,6 +123,29 @@ def main():
         else:
             print(f"Error: Directory '{args.path}' does not exist.", file=sys.stderr)
             sys.exit(1)
+
+    elif args.command == "rename":
+        origin = validate_path(args.origin, args.project_path)
+        dest = validate_path(args.dest, args.project_path)
+        if not os.path.exists(origin):
+            print(f"Error: Origin '{args.origin}' does not exist.", file=sys.stderr)
+            sys.exit(1)
+        os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+        os.rename(origin, dest)
+        print(f"Renamed successfully from {args.origin} to {args.dest}")
+
+    elif args.command == "cp":
+        origin = validate_path(args.origin, args.project_path)
+        dest = validate_path(args.dest, args.project_path)
+        if not os.path.exists(origin):
+            print(f"Error: Origin '{args.origin}' does not exist.", file=sys.stderr)
+            sys.exit(1)
+        os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+        if os.path.isdir(origin):
+            shutil.copytree(origin, dest, dirs_exist_ok=True)
+        else:
+            shutil.copy2(origin, dest)
+        print(f"Copied successfully from {args.origin} to {args.dest}")
 
 
 if __name__ == "__main__":

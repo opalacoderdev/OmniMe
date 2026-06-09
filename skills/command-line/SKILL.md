@@ -51,3 +51,13 @@ python3 <command_executor.py_path> --project-path <project_path> create-dir <rel
 ```
 python3 <command_executor.py_path> --project-path <project_path> remove-dir <relative_directory_path>
 ```
+
+### 5. Rename / Move File or Directory
+```
+python3 <command_executor.py_path> --project-path <project_path> rename <relative_origin_path> <relative_dest_path>
+```
+
+### 6. Copy File or Directory
+```
+python3 <command_executor.py_path> --project-path <project_path> cp <relative_origin_path> <relative_dest_path>
+```

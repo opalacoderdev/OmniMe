@@ -1,6 +1,8 @@
 # General Rules
 
-1. Don't make baseless assumptions; before drawing any conclusions, conduct tests and analysis to gather as much information as possible.
+1. Don't make baseless assumptions; before drawing any conclusions, conduct tests and analysis to gather as much information as possible. 
+
+1.1. Don't make Jerry-rig or Kludge without user authorization. Hightlight this limitation for user.
 
 2. Dever apply direct patch ou modifications in external lib without user authorization.
 
