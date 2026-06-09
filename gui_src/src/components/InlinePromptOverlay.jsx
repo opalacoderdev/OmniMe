@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, X, Wand2, Wrench, MessageSquarePlus } from 'lucide-react';
+import { Send, X, Wand2, MessageSquarePlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 /**

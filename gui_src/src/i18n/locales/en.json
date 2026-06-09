@@ -188,6 +188,8 @@
     "editorFontSize": "Editor Font Size",
     "tabSize": "Tab Size (Spaces)",
     "wordWrap": "Word Wrap",
+    "panelMaxLines": "Panel Max Lines (Output / Problems / Thinking)",
+    "panelMaxLinesHint": "Maximum number of lines kept in Output, Problems and Thinking panels (100–10000). Older lines are discarded when the limit is reached.",
     "ephemeralAgentTitle": "Ephemeral Agent (Inline/Editor)",
     "ephemeralMaxTokens": "Max Tokens",
     "ephemeralContextWindow": "Context Window (num_ctx)",

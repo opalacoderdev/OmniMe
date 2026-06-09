@@ -38,20 +38,6 @@ def register_orchestrator(name: str):
     return decorator
 
 
-def get_orchestrator(strategy: str, model: str) -> "BaseOrchestratorStrategy":
-    """Instantiate the orchestrator registered under *strategy*.
-
-    Raises ValueError for unknown names so a misconfigured agents.yaml fails loudly.
-    """
-    cls = _REGISTRY.get(strategy)
-    if cls is None:
-        available = ", ".join(sorted(_REGISTRY)) or "(none)"
-        raise ValueError(
-            f"Unknown orchestrator strategy '{strategy}'. Available: {available}"
-        )
-    return cls(model=model)
-
-
 # ─── Abstract base ────────────────────────────────────────────────────────────
 
 class BaseOrchestratorStrategy(abc.ABC):

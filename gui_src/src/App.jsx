@@ -60,6 +60,11 @@ export default function App() {
   const [thinkingLogs, setThinkingLogs] = useState([]);
   const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false);
   const [activeBottomTab, setActiveBottomTab] = useState('output');
+  const [panelMaxLines, setPanelMaxLines] = useState(() => {
+    const stored = safeGetLocalStorage('panelMaxLines');
+    const parsed = stored !== null ? Number(stored) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1000;
+  });
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [isChatVisible, setIsChatVisible] = useState(true);
@@ -284,18 +289,19 @@ export default function App() {
   }, [openFiles, isEditorMaximized]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
+  const trimToLimit = (arr, limit) => arr.length > limit ? arr.slice(arr.length - limit) : arr;
+
   const addLog = (type, message) =>
     setTerminalLogs(prev => {
+      let next;
       if (prev.length > 0) {
         const last = prev[prev.length - 1];
         if (last.type === type && (type === 'thought' || type === 'stdout' || type === 'stderr')) {
-          return [
-            ...prev.slice(0, -1),
-            { ...last, message: last.message + message }
-          ];
+          next = [...prev.slice(0, -1), { ...last, message: last.message + message }];
         }
       }
-      return [...prev, { type, message, timestamp: new Date().toLocaleTimeString() }];
+      if (!next) next = [...prev, { type, message, timestamp: new Date().toLocaleTimeString() }];
+      return trimToLimit(next, panelMaxLines);
     });
 
   // ── API calls ─────────────────────────────────────────────────────────────
@@ -824,37 +830,40 @@ export default function App() {
       case 'thought':
         addLog('thought', data.content);
         setThinkingLogs(prev => {
-          if (prev.length > 0) {
+          let next;
+          if (prev.length > 0 && prev[prev.length - 1].type === 'THINKING') {
             const last = prev[prev.length - 1];
-            if (last.type === 'THINKING') {
-              return [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
-            }
+            next = [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
+          } else {
+            next = [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'THINKING', content: data.content }];
           }
-          return [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'THINKING', content: data.content }];
+          return trimToLimit(next, panelMaxLines);
         });
         break;
       case 'reflection':
         addLog('thought', data.content);
         setThinkingLogs(prev => {
-          if (prev.length > 0) {
+          let next;
+          if (prev.length > 0 && prev[prev.length - 1].type === 'REFLECTION') {
             const last = prev[prev.length - 1];
-            if (last.type === 'REFLECTION') {
-              return [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
-            }
+            next = [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
+          } else {
+            next = [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'REFLECTION', content: data.content }];
           }
-          return [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'REFLECTION', content: data.content }];
+          return trimToLimit(next, panelMaxLines);
         });
         break;
       case 'stream_chunk':
         addLog('thought', data.content);
         setThinkingLogs(prev => {
-          if (prev.length > 0) {
+          let next;
+          if (prev.length > 0 && prev[prev.length - 1].type === 'STREAM') {
             const last = prev[prev.length - 1];
-            if (last.type === 'STREAM') {
-              return [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
-            }
+            next = [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
+          } else {
+            next = [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'STREAM', content: data.content }];
           }
-          return [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'STREAM', content: data.content }];
+          return trimToLimit(next, panelMaxLines);
         });
         break;
       case 'cancelled': addLog('warning', data.message || 'Execução cancelada.'); setChatMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Interrompido: ${data.message || 'A execução do agente foi parada.'}` }]); break;
@@ -949,7 +958,7 @@ export default function App() {
       case 'error': addLog('error', data.message); setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Erro do Agente: ${data.message}` }]); break;
       case 'problem':
         addLog('error', `[Problema em ${data.tool}]: ${data.message}`);
-        setProblems(prev => [...prev, { id: Math.random().toString(), tool: data.tool, message: data.message, severity: data.severity || 'error', timestamp: new Date().toLocaleTimeString() }]);
+        setProblems(prev => trimToLimit([...prev, { id: Math.random().toString(), tool: data.tool, message: data.message, severity: data.severity || 'error', timestamp: new Date().toLocaleTimeString() }], panelMaxLines));
         break;
       default: addLog('info', `Evento: ${event}`);
     }
@@ -1152,11 +1161,14 @@ export default function App() {
               addLog('thought', textContent);
               setThinkingLogs(prev => {
                 const type = data.event === 'stream_chunk' ? 'STREAM' : data.event.toUpperCase();
+                let next;
                 if (prev.length > 0 && prev[prev.length - 1].type === type) {
                   const last = prev[prev.length - 1];
-                  return [...prev.slice(0, -1), { ...last, content: last.content + textContent }];
+                  next = [...prev.slice(0, -1), { ...last, content: last.content + textContent }];
+                } else {
+                  next = [...prev, { timestamp: new Date().toLocaleTimeString(), type, content: textContent }];
                 }
-                return [...prev, { timestamp: new Date().toLocaleTimeString(), type, content: textContent }];
+                return trimToLimit(next, panelMaxLines);
               });
             } else if (data.event === 'tool_call') {
               addLog('tool_call', `[Inline] Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`);
@@ -1539,6 +1551,8 @@ export default function App() {
           onInstallDeps={handleInstallOptionalDeps}
           ephemeralParams={ephemeralParams}
           setEphemeralParams={setEphemeralParams}
+          panelMaxLines={panelMaxLines}
+          setPanelMaxLines={(val) => { setPanelMaxLines(val); safeSetLocalStorage('panelMaxLines', val); }}
           onLanguageChange={(lang) => {
             fetch('/api/settings/language', {
               method: 'POST',

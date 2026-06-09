@@ -1,6 +1,5 @@
 """OpalaCoder entry point — run with: python main.py [--mode auto|plan|edit] [--model ...]"""
 import sys
-import io
 
 # Force UTF-8 on Windows to prevent 'charmap' codec crashes when printing emojis or unicode
 if sys.stdout and getattr(sys.stdout, "encoding", "").lower() != "utf-8":

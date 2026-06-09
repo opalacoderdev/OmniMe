@@ -1621,6 +1621,13 @@ def start_gui_server(host="127.0.0.1", port=3000):
     url = f"http://{host}:{port}"
 
     try:
+        import os as _os
+        # Force Qt backend on Linux: PyGObject/GTK may be installed but the system
+        # WebKit2GTK WebKitNetworkProcess can crash when snap's libpthread pollutes
+        # LD_LIBRARY_PATH. Qt WebEngine ships its own bundled libs and is unaffected.
+        if _os.name != 'nt' and 'PYWEBVIEW_GUI' not in _os.environ:
+            _os.environ['PYWEBVIEW_GUI'] = 'qt'
+
         import webview  # pywebview
 
         # Monkey-patch pywebview's Qt backend to use proper Qt enum values

@@ -151,10 +151,6 @@ def get_git_strategy() -> str:
     """Return the git strategy from config.yaml (falls back to agents.yaml for back-compat)."""
     return _APP_CONFIG.get("git_strategy", _get_agents_config().get("git_strategy", "hybrid"))
 
-def get_agent_strategy(agent_name: str) -> str:
-    """Return the orchestrator strategy name for *agent_name* from agents.yaml."""
-    return _get_agent_overrides().get(agent_name, {}).get("strategy", "autonomous")
-
 
 def get_vector_config() -> dict:
     """Return vector index configuration from config.yaml with defaults."""
@@ -413,8 +409,4 @@ def setup_debug_logging():
     print(f"[debug] Full run log → {log_file}")
     return log_file
 
-
-# Keep backward-compat alias used in older --debug path
-def setup_litellm_debug():
-    setup_debug_logging()
 

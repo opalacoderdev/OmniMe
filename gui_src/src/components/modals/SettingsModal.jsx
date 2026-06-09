@@ -25,6 +25,8 @@ export default function SettingsModal({
   onLanguageChange,
   ephemeralParams,
   setEphemeralParams,
+  panelMaxLines,
+  setPanelMaxLines,
 }) {
   const { t } = useTranslation();
   const [selectedLang, setSelectedLang] = React.useState('');
@@ -138,6 +140,22 @@ export default function SettingsModal({
                   <option value="on">{t('settingsModal.wordWrapOn')}</option>
                   <option value="off">{t('settingsModal.wordWrapOff')}</option>
                 </select>
+              </div>
+
+              {/* Panel max lines */}
+              <div className="flex flex-col" style={{ gap: '6px' }}>
+                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.panelMaxLines')}</label>
+                <input
+                  type="number" min="100" max="10000" step="100"
+                  value={panelMaxLines}
+                  onChange={(e) => {
+                    const val = Math.max(100, Math.min(10000, Number(e.target.value) || 1000));
+                    setPanelMaxLines(val);
+                  }}
+                  className="vscode-settings-input"
+                  style={{ width: '100%' }}
+                />
+                <span style={{ fontSize: '11px', color: '#888888' }}>{t('settingsModal.panelMaxLinesHint')}</span>
               </div>
 
               {/* Ephemeral Agent Settings */}
