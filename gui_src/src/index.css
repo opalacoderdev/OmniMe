@@ -683,7 +683,17 @@ input:focus, select:focus, textarea:focus {
 .vscode-chat-input-row {
   display: flex;
   gap: 6px;
-  align-items: center;
+  align-items: flex-end;
+}
+
+.vscode-chat-textarea {
+  flex: 1;
+  resize: none;
+  overflow-y: auto;
+  max-height: 200px;
+  min-height: 32px;
+  line-height: 1.5;
+  border-radius: 2px;
 }
 
 /* Status Bar */

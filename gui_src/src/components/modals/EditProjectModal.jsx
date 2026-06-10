@@ -69,7 +69,8 @@ export default function EditProjectModal({
           max_heartbeats: { min: 1 },
           max_context_tokens: { min: 1 },
           max_iterations: { min: 1 },
-          max_tool_calls: { min: 1 }
+          max_tool_calls: { min: 1 },
+
         };
         if (limits[key] && typeof clampedValue === 'number') {
           const { min, max } = limits[key];
@@ -345,7 +346,6 @@ export default function EditProjectModal({
                     <ParamNumber label="Max Tool Calls (Worker)" min="1" placeholder="padrão: 40"
                       value={editingProject.model_params?.max_tool_calls}
                       onChange={e => setParam('max_tool_calls', parseNum(e.target.value))} />
-
                     <div className="flex flex-col" style={{ gap: '4px' }}>
                       <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Response Mode (MemGPT)</label>
                       <select

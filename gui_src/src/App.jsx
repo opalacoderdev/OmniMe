@@ -243,12 +243,21 @@ export default function App() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
   useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [terminalLogs]);
 
-  // Global keyboard shortcuts (Ctrl+S, Ctrl+/- zoom)
+  // Global keyboard shortcuts (Ctrl+S, Ctrl+J, Ctrl+/- zoom)
   useEffect(() => {
     const handleKeyDown = (e) => {
       const isCtrl = e.ctrlKey || e.metaKey;
       if (isCtrl && e.key === 's') { e.preventDefault(); saveFile(); }
-      else if (isCtrl && (e.key === '+' || e.key === '=' || e.code === 'Equal' || e.code === 'NumpadAdd')) {
+      else if (isCtrl && e.key === 'j') {
+        e.preventDefault();
+        if (isBottomMaximized) {
+          setIsBottomMaximized(false);
+        } else if (isTerminalCollapsed) {
+          setIsTerminalCollapsed(false);
+        } else {
+          setIsTerminalCollapsed(true);
+        }
+      } else if (isCtrl && (e.key === '+' || e.key === '=' || e.code === 'Equal' || e.code === 'NumpadAdd')) {
         e.preventDefault();
         setEditorFontSize(prev => { const v = Math.min(30, prev + 1); safeSetLocalStorage('editorFontSize', v); return v; });
       } else if (isCtrl && (e.key === '-' || e.code === 'Minus' || e.code === 'NumpadSubtract')) {
@@ -258,7 +267,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedFile, fileContent, activeProject]);
+  }, [selectedFile, fileContent, activeProject, isBottomMaximized, isTerminalCollapsed]);
 
   useEffect(() => {
     safeSetLocalStorage('theme', theme);
@@ -336,7 +345,7 @@ export default function App() {
         const data = await res.json();
         setProblems(prev => {
           const nonLinter = prev.filter(p => p.tool !== 'python-linter');
-          return [...nonLinter, ...(data.problems || [])];
+          return trimToLimit([...nonLinter, ...(data.problems || [])], panelMaxLines);
         });
       }
     } catch (err) { console.error('Failed to fetch problems', err); }

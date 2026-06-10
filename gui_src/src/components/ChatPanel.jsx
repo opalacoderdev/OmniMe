@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useLayoutEffect } from 'react';
 import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatMessageContent } from '../utils/formatMessage';
@@ -27,6 +27,13 @@ export default function ChatPanel({
   const historyRef = useRef(null);
   const inputRef = useRef(null);
   const { menu, onContextMenu, handleCopy, handleSelectAll, close: closeMenu } = useTextContextMenu();
+
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }, [chatInput]);
 
   const handlePaste = useCallback(() => {
     readClipboard().then((text) => {
@@ -153,8 +160,13 @@ export default function ChatPanel({
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'ArrowUp') {
-      if (inputHistory.length === 0) return;
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleFormSubmit(null);
+    } else if (e.key === 'ArrowUp') {
+      const el = e.currentTarget;
+      const onFirstLine = el.selectionStart === 0 || !el.value.slice(0, el.selectionStart).includes('\n');
+      if (!onFirstLine || inputHistory.length === 0) return;
       e.preventDefault();
       let newIndex;
       if (historyIndex === -1) {
@@ -166,7 +178,9 @@ export default function ChatPanel({
       setHistoryIndex(newIndex);
       setChatInput(inputHistory[newIndex]);
     } else if (e.key === 'ArrowDown') {
-      if (historyIndex === -1) return;
+      const el = e.currentTarget;
+      const onLastLine = el.selectionEnd === el.value.length || !el.value.slice(el.selectionEnd).includes('\n');
+      if (!onLastLine || historyIndex === -1) return;
       e.preventDefault();
       if (historyIndex === inputHistory.length - 1) {
         setHistoryIndex(-1);
@@ -496,9 +510,9 @@ export default function ChatPanel({
       {/* Input form */}
       <form onSubmit={handleFormSubmit} className="vscode-chat-form">
         <div className="vscode-chat-input-row">
-          <input
+          <textarea
             ref={inputRef}
-            type="text"
+            rows={1}
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -508,7 +522,7 @@ export default function ChatPanel({
               isAgentRunning ? t('chatPanel.thinking') :
               t('chatPanel.askOpalaCoder')
             }
-            style={{ flex: 1 }}
+            className="vscode-chat-textarea"
           />
           {isAgentRunning ? (
             <button

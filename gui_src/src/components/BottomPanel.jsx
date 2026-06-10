@@ -116,21 +116,24 @@ export default function BottomPanel({
             )}
             <button
               onClick={() => {
-                if (isBottomMaximized) onToggleMaximizeBottom();
-                setIsTerminalCollapsed(!isTerminalCollapsed);
+                if (isBottomMaximized) {
+                  onToggleMaximizeBottom();
+                } else {
+                  setIsTerminalCollapsed(!isTerminalCollapsed);
+                }
               }}
               style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
-              title={isTerminalCollapsed ? t('bottomPanel.expandPanel') : t('bottomPanel.collapsePanel')}
+              title={isTerminalCollapsed ? t('bottomPanel.expandPanel') : isBottomMaximized ? t('bottomPanel.restorePanel') : t('bottomPanel.collapsePanel')}
             >
-              {isTerminalCollapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {isTerminalCollapsed ? <ChevronUp size={14} /> : isBottomMaximized ? <Minimize2 size={12} /> : <ChevronDown size={14} />}
             </button>
-            {!isTerminalCollapsed && (
+            {!isTerminalCollapsed && !isBottomMaximized && (
               <button
                 onClick={onToggleMaximizeBottom}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
-                title={isBottomMaximized ? t('bottomPanel.restorePanel') : t('bottomPanel.maximizePanel')}
+                title={t('bottomPanel.maximizePanel')}
               >
-                {isBottomMaximized ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                <Maximize2 size={12} />
               </button>
             )}
           </div>
