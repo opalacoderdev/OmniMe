@@ -30,11 +30,26 @@ Prefer a single `index.html`; for medium complexity, separate into `index.html` 
 
 ## Contract Detection (script)
 
-Before proposing any fix in HTML/CSS/JS, run the contract bug detector with `run_command`, using the ABSOLUTE path of the script (indicated in your prompt in the "Scripts available in this skill" section):
+Before proposing any fix in HTML/CSS/JS, you may run the contract bug detector with `run_python_script`, using the ABSOLUTE path of the script (indicated in your prompt in the "Scripts available in this skill" section):
 
 ```
-python <ABSOLUTE-PATH>/check_contracts.py --project-path <PROJECT-DIRECTORY>
+run_python_script("<ABSOLUTE-PATH>/check_contracts.py", "--project-path <PROJECT-DIRECTORY>")
 ```
+
+**Argument Explanation:**
+- `<ABSOLUTE-PATH>/check_contracts.py`: The absolute path to the `check_contracts.py` script for this skill. This path is provided dynamically in your prompt.
+- `<PROJECT-DIRECTORY>`: The absolute path to the web project directory containing your HTML, CSS, and JS files.
+
+**Concrete Examples:**
+
+1. Checking contracts in the current directory:
+`run_python_script("/home/user/project/skills/html-css-js/scripts/check_contracts.py", "--project-path .")`
+
+2. Checking a specific web subfolder:
+`run_python_script("/home/user/project/skills/html-css-js/scripts/check_contracts.py", "--project-path /home/user/project/frontend_app")`
+
+3. Checking a project located elsewhere:
+`run_python_script("/opt/opalacoder/skills/html-css-js/scripts/check_contracts.py", "--project-path /var/www/html/my-site")`
 
 It reports `[CONTRACT ERROR]` / `[SYNTAX ERROR]` / `[WARNING]` / `[INFO]` lines.
 A `[CONTRACT ERROR]` indicating an incompatibility between the HTML and the JS must be fixed **in the pointed file** (usually the HTML, at the indicated line) — do not invent fixes outside what the detector points out.

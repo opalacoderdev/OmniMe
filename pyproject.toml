@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opalacoder"
-version = "0.2.4.13"
+version = "0.2.4.14"
 description = "Autonomous coding agent with interactive planning and modular execution"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
-    { name = "Gil Zamir", email = "gilzamir@example.com" }
+    { name = "Gilzamir Gomes", email = "dev@opalacoder.com" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -25,8 +25,6 @@ dependencies = [
     "numpy>=1.21.0",
     "instructor>=1.15.1",
     "litellm>=1.40.0",
-    "tree-sitter>=0.25.0",
-    "tree-sitter-language-pack>=1.8.0",
     "chromadb>=0.4.0",
     "pywebview>=4.0",
     "pywinpty>=2.0.0; sys_platform == 'win32'",
@@ -40,8 +38,8 @@ dependencies = [
 embeddings = ["sentence-transformers>=3.0.0"]
 
 [project.urls]
-"Homepage" = "https://github.com/gilzamir/OpalaCoder"
-"Bug Tracker" = "https://github.com/gilzamir/OpalaCoder/issues"
+"Homepage" = "https://github.com/opalacoderdev/OpalaCoder"
+"Bug Tracker" = "https://github.com/opalacoderdev/OpalaCoder/issues"
 
 [project.scripts]
 opalacoder = "opalacoder.cli:main"

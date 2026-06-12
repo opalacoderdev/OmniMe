@@ -22,10 +22,18 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-monaco': ['@monaco-editor/react', '@monaco-editor/loader'],
-          'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom')) {
+              return 'vendor-react';
+            }
+            if (id.includes('@monaco-editor')) {
+              return 'vendor-monaco';
+            }
+            if (id.includes('@xterm')) {
+              return 'vendor-xterm';
+            }
+          }
         }
       }
     }

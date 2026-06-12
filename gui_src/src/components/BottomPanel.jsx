@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { AlertCircle, Trash, Maximize2, Minimize2, ChevronUp, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useTextContextMenu } from '../hooks/useTextContextMenu.js';
@@ -14,8 +14,6 @@ export default function BottomPanel({
   setTerminalLogs,
   problems,
   setProblems,
-  thinkingLogs,
-  setThinkingLogs,
   bottomPanelHeight,
   activeProject,
   terminalRef,
@@ -27,7 +25,22 @@ export default function BottomPanel({
 }) {
   const { t } = useTranslation();
   const contentRef = useRef(null);
+  const logsContainerRef = useRef(null);
   const { menu, onContextMenu, handleCopy, handlePaste, handleSelectAll } = useTextContextMenu();
+  const [autoScroll, setAutoScroll] = useState(true);
+
+  const handleScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    // Consider "at bottom" if within 30px of the bottom
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 30;
+    setAutoScroll(isAtBottom);
+  };
+
+  useEffect(() => {
+    if (autoScroll && logEndRef && logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'auto' });
+    }
+  }, [terminalLogs, autoScroll, logEndRef]);
 
   const selectTab = (tab) => {
     setActiveBottomTab(tab);
@@ -36,9 +49,7 @@ export default function BottomPanel({
 
   const clearTitle = activeBottomTab === 'output'
     ? t('bottomPanel.clearOutput')
-    : activeBottomTab === 'problems'
-      ? t('bottomPanel.clearProblems')
-      : t('bottomPanel.clearThinking');
+    : t('bottomPanel.clearProblems');
 
   return (
     <>
@@ -74,7 +85,7 @@ export default function BottomPanel({
         {/* Tab header */}
         <div className="vscode-bottom-tabs">
           <div className="vscode-bottom-tab-list">
-            {['output', 'problems', 'thinking', 'terminal'].map((tab) => (
+            {['output', 'problems', 'terminal'].map((tab) => (
               <span
                 key={tab}
                 className={`vscode-bottom-tab ${activeBottomTab === tab ? 'active' : ''}`}
@@ -91,21 +102,18 @@ export default function BottomPanel({
                     )}
                   </>
                 )}
-                {tab === 'thinking' && t('bottomPanel.thinkingTab')}
                 {tab === 'terminal' && t('bottomPanel.terminalTab')}
               </span>
             ))}
           </div>
 
           <div className="flex items-center" style={{ gap: '8px' }}>
-            {(activeBottomTab === 'output' || activeBottomTab === 'problems' || activeBottomTab === 'thinking') && (
+            {(activeBottomTab === 'output' || activeBottomTab === 'problems') && (
               <button
                 onClick={
                   activeBottomTab === 'output'
                     ? () => setTerminalLogs([])
-                    : activeBottomTab === 'problems'
-                      ? () => setProblems([])
-                      : () => setThinkingLogs([])
+                    : () => setProblems([])
                 }
                 className="vscode-bottom-panel-clear-btn"
                 title={clearTitle}
@@ -148,7 +156,12 @@ export default function BottomPanel({
 
             {/* Output tab */}
             {activeBottomTab === 'output' && (
-              <div className="vscode-logs" style={{ height: '100%' }}>
+              <div 
+                className="vscode-logs" 
+                style={{ height: '100%', overflowY: 'auto' }}
+                ref={logsContainerRef}
+                onScroll={handleScroll}
+              >
                 {terminalLogs.length === 0 ? (
                   <div style={{ color: '#808080', fontStyle: 'italic' }}>
                     {t('bottomPanel.noLogs')}
@@ -160,7 +173,9 @@ export default function BottomPanel({
 
                     if (log.type === 'error') { color = 'text-[#f48771] font-semibold'; label = 'ERROR'; }
                     else if (log.type === 'info') { color = 'text-[#75beff]'; label = 'INFO'; }
-                    else if (log.type === 'thought') { color = 'text-[#da70d6] italic'; label = 'THOUGHT'; }
+                    else if (log.type === 'thought') { color = 'text-[#da70d6] italic'; label = 'THINKING'; }
+                    else if (log.type === 'reflection') { color = 'text-[#4ec9b0] italic'; label = 'REFLECTION'; }
+                    else if (log.type === 'stream_chunk') { color = 'text-[#da70d6] italic'; label = 'STREAM'; }
                     else if (log.type === 'tool_call') { color = 'text-[#d7ba7d]'; label = 'TOOL'; }
                     else if (log.type === 'tool_result') { color = 'text-[#89d4a5]'; label = 'RESULT'; }
 
@@ -200,31 +215,6 @@ export default function BottomPanel({
               </div>
             )}
 
-            {/* Thinking tab */}
-            {activeBottomTab === 'thinking' && (
-              <div className="vscode-logs" style={{ height: '100%' }}>
-                {thinkingLogs.length === 0 ? (
-                  <div style={{ color: '#808080', fontStyle: 'italic' }}>
-                    {t('bottomPanel.noThinking')}
-                  </div>
-                ) : (
-                  thinkingLogs.map((log, i) => {
-                    const isReflection = log.type === 'REFLECTION';
-                    return (
-                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '4px' }}>
-                        <span style={{ color: '#5a5a5a', flexShrink: 0 }}>[{log.timestamp}]</span>
-                        <span style={{ fontWeight: 'bold', flexShrink: 0, color: isReflection ? '#4ec9b0' : '#da70d6' }}>
-                          [{log.type || 'THINKING'}]
-                        </span>
-                        <span style={{ whiteSpace: 'pre-wrap', flex: 1, fontFamily: 'Consolas, monospace', color: isReflection ? '#4ec9b0' : '#da70d6' }}>
-                          {log.content}
-                        </span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
 
             {/* Terminal tab */}
             <div style={{ display: activeBottomTab === 'terminal' ? 'block' : 'none', height: '100%', background: '#1e1e1e', overflow: 'hidden' }}>

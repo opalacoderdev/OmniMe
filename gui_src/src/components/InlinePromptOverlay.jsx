@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
  *   onClose()                     — called when user dismisses
  *   isRunning                     — true if the backend task is currently processing
  */
-export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, onCancel, isRunning, thinkingLogs }) {
+export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, onCancel, isRunning }) {
   const { t } = useTranslation();
   const inputRef = useRef(null);
   const [value, setValue] = useState('');
@@ -81,8 +81,7 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
   const safeX = Math.round((window.innerWidth - overlayWidth) / 2);
   const safeY = Math.round(window.innerHeight * 0.35);
 
-  const latestThought = thinkingLogs?.length > 0 ? thinkingLogs[thinkingLogs.length - 1] : null;
-  const isThinking = isRunning && latestThought && (latestThought.type === 'THINKING' || latestThought.type === 'REFLECTION');
+
 
   return (
     <>
@@ -287,28 +286,7 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
           }
         </span>
 
-        {/* Thinking snippet */}
-        {isThinking && (
-          <div
-            className="opc-thinking-block"
-            style={{
-              fontSize: '10px',
-              color: '#888',
-              background: 'rgba(0,0,0,0.2)',
-              borderRadius: '4px',
-              padding: '6px',
-              maxHeight: '80px',
-              overflowY: 'auto',
-              whiteSpace: 'pre-wrap',
-              fontFamily: 'monospace',
-              borderLeft: '2px solid #007acc',
-              marginTop: '4px',
-            }}
-          >
-            <strong style={{ color: '#007acc', display: 'block', marginBottom: '2px' }}>Thinking{animatedDots}</strong>
-            {latestThought.content}
-          </div>
-        )}
+
       </div>
     </>
   );

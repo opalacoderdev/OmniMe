@@ -1,15 +1,10 @@
 """Tools for the OpalaCoder Autonomous Agent (MemGPT pattern + HITL)."""
-
-import ast
-import json
 import os
-import re
 import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from agenticblocks.core.function_block import as_tool
 
@@ -176,8 +171,6 @@ def set_project_context(session, store=None) -> None:
             if not env_file_has_base:
                 os.environ.pop("OPENAI_API_BASE", None)
 
-
-
         # Dynamically inject/register the configured context window (num_ctx) in LiteLLM's model mapping
         # so it doesn't fail with a BadRequestError (request exceeds available context window).
         try:
@@ -220,6 +213,28 @@ def _preview(value: object, max_len: int = 60) -> str:
     s = str(value).replace("\n", " ")
     return s[:max_len] + "…" if len(s) > max_len else s
 
+def _decode_escape_sequences(s: str) -> str:
+    """Fix content where the model emitted literal \\n \\t \\r instead of real control chars.
+
+    When a model double-escapes inside a JSON tool argument (\\\\n instead of \\n),
+    json.loads produces the two-character sequence backslash-n. We detect this heuristic:
+    the string has no real newlines but does contain literal backslash-n sequences,
+    indicating the entire content is single-line with escaped line breaks.
+
+    We do a simple targeted replacement of the common escape sequences to avoid
+    corrupting multi-byte UTF-8 characters (accents, etc.) that unicode_escape would mangle.
+    """
+    if "\n" in s:
+        return s
+    if r"\n" not in s and r"\t" not in s and r"\r" not in s:
+        return s
+    return (
+        s
+        .replace(r"\n", "\n")
+        .replace(r"\t", "\t")
+        .replace(r"\r", "\r")
+        .replace(r"\\", "\\")
+    )
 
 # ─── Tools ───────────────────────────────────────────────────────────────────
 
@@ -246,31 +261,6 @@ def read_file(path: str) -> str:
             return f.read()
     except Exception as e:
         raise ValueError(f"Error reading {_preview(resolved)}: {e}")
-
-
-def _decode_escape_sequences(s: str) -> str:
-    """Fix content where the model emitted literal \\n \\t \\r instead of real control chars.
-
-    When a model double-escapes inside a JSON tool argument (\\\\n instead of \\n),
-    json.loads produces the two-character sequence backslash-n. We detect this heuristic:
-    the string has no real newlines but does contain literal backslash-n sequences,
-    indicating the entire content is single-line with escaped line breaks.
-
-    We do a simple targeted replacement of the common escape sequences to avoid
-    corrupting multi-byte UTF-8 characters (accents, etc.) that unicode_escape would mangle.
-    """
-    if "\n" in s:
-        return s
-    if r"\n" not in s and r"\t" not in s and r"\r" not in s:
-        return s
-    return (
-        s
-        .replace(r"\n", "\n")
-        .replace(r"\t", "\t")
-        .replace(r"\r", "\r")
-        .replace(r"\\", "\\")
-    )
-
 
 @as_tool(name="write_file", description="Write or overwrite a file inside the project directory. Relative paths are resolved from the project directory. Creates parent directories if needed. ALWAYS use this tool to save file content — never use run_command with echo/printf/cat to write files, as shell quoting will break with multi-line or HTML/JSON content.")
 def write_file(path: str, content: str) -> str:
@@ -338,6 +328,46 @@ def run_command(command: str) -> str:
         raise ValueError(f"Error running command: {e}")
 
 
+@as_tool(name="run_python_script", description="Execute a Python script securely. It automatically uses the correct Python interpreter for the environment. Provide the script path and any optional arguments.")
+def run_python_script(script_path: str, args: str = "") -> str:
+    try:
+        resolved = _resolve_path(script_path)
+    except Exception as e:
+        raise ValueError(f"Error resolving path: {e}")
+
+    cmd = f'"{sys.executable}" "{resolved}" {args}'.strip()
+    AGENT_PROGRESS.update("run_python_script", f"$ {_preview(cmd)}")
+    cwd = get_project_path()
+    try:
+        res = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=120,
+            cwd=cwd,
+        )
+        out = res.stdout.strip()
+        err = res.stderr.strip()
+        # Truncate large outputs
+        if len(out) > 2000:
+            out = out[:1000] + "\n... [TRUNCATED] ...\n" + out[-500:]
+        if len(err) > 2000:
+            err = err[:1000] + "\n... [TRUNCATED] ...\n" + err[-500:]
+        output = ""
+        if out:
+            output += f"STDOUT:\n{out}\n"
+        if err:
+            output += f"STDERR:\n{err}\n"
+        if res.returncode != 0:
+            raise ValueError(f"ERROR: Command failed (exit code {res.returncode}).\n{output}Do NOT report success. Fix the error or use a different tool.")
+        return output if output else "Command executed successfully (no output)."
+    except subprocess.TimeoutExpired:
+        raise ValueError("Error: Command timed out after 120 seconds.")
+    except Exception as e:
+        raise ValueError(f"Error running script: {e}")
+
 @as_tool(name="run_interactive_command", description="Run a command that requires user interaction (e.g. npm create, interactive scripts, prompts). The terminal control will be temporarily handed over to the user. Use this ONLY when a command needs human choices.")
 def run_interactive_command(command: str) -> str:
     import sys
@@ -363,7 +393,6 @@ def run_interactive_command(command: str) -> str:
         if getattr(AGENT_PROGRESS, "live_context", None):
             AGENT_PROGRESS.live_context.start()
 
-
 @as_tool(name="search_code", description="Search for a specific string across all files using grep. Searches inside the project directory by default.")
 def search_code(query: str, path: str = ".") -> str:
     try:
@@ -384,7 +413,6 @@ def search_code(query: str, path: str = ".") -> str:
         return res.stdout if res.stdout else "No matches."
     except Exception as e:
         raise ValueError(f"Error searching code in {_preview(resolved)}: {e}")
-
 
 @as_tool(
     name="ask_human",
@@ -413,24 +441,29 @@ def ask_human(question: str) -> str:
 @as_tool(
     name="get_project_overview",
     description=(
-        "Return a compact overview of the current project: directory tree (max depth 3), "
+        "Return a compact overview of the current project: directory tree (max depth defined by parameter max_depth), "
         "file count by type, and a summary of key files (README, package.json, requirements.txt, etc.). "
         "Call this at the start of any task to understand the project before acting."
     ),
 )
-def get_project_overview() -> str:
+def get_project_overview(max_depth:int = -1) -> str:
+    from .config import get_project_overview_max_depth
     AGENT_PROGRESS.update("get_project_overview")
     root = Path(get_project_path())
+    if max_depth < 0:
+        max_depth_cfg = get_project_overview_max_depth()
+    else:
+        max_depth_cfg = max_depth
 
     if not root.exists():
         return f"Project directory does not exist yet: {root}"
 
-    # ── Directory tree (depth ≤ 3, skip hidden & node_modules/__pycache__) ──
+    # ── Directory tree (skip hidden & node_modules/__pycache__) ──
     SKIP = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", "dist", "build"}
 
-    def _tree(path: Path, prefix: str = "", depth: int = 0) -> list[str]:
-        if depth > 3:
-            return ["    " * depth + "…"]
+    def _tree(path: Path, depth: int = 0) -> list[str]:
+        if depth >= max_depth_cfg:
+            return ["  " * depth + "..."]
         lines = []
         try:
             entries = sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name))
@@ -439,11 +472,10 @@ def get_project_overview() -> str:
         for entry in entries:
             if entry.name.startswith(".") or entry.name in SKIP:
                 continue
-            connector = "├── " if entry != entries[-1] else "└── "
-            lines.append(prefix + connector + entry.name + ("/" if entry.is_dir() else ""))
+            indent = "  " * depth
+            lines.append(indent + entry.name + ("/" if entry.is_dir() else ""))
             if entry.is_dir():
-                extension = "│   " if entry != entries[-1] else "    "
-                lines.extend(_tree(entry, prefix + extension, depth + 1))
+                lines.extend(_tree(entry, depth + 1))
         return lines
 
     tree_lines = _tree(root)
@@ -486,77 +518,6 @@ def get_project_overview() -> str:
         parts += ["", "## Key files"] + snippets
 
     return "\n".join(parts)
-
-
-@as_tool(
-    name="get_file_overview",
-    description=(
-        "Return an overview of a file's structure. For Python files, it lists classes, functions, "
-        "and methods with their start and end line numbers. For other files, it returns the first 100 lines."
-    )
-)
-def get_file_overview(path: str) -> str:
-    try:
-        resolved = _resolve_path(path)
-    except Exception as e:
-        raise ValueError(f"Error resolving path: {e}")
-
-    AGENT_PROGRESS.update("get_file_overview", f"path={_preview(resolved)}")
-    
-    try:
-        if os.path.isdir(resolved):
-            raise ValueError(f"Error: '{_preview(resolved)}' is a directory, not a file.")
-        if not os.path.exists(resolved):
-            raise ValueError(f"Error: file not found: {_preview(resolved)}.")
-    except OSError as e:
-        raise ValueError(f"Error: invalid path argument ({e.strerror}).")
-
-    try:
-        # Try index-backed overview first (works for any language)
-        try:
-            from .code_index import CODE_INDEX
-            project_root = get_project_path()
-            rel = os.path.relpath(resolved, project_root)
-            syms = CODE_INDEX.symbols_in_file(rel)
-            if syms:
-                overview = [f"File: {_preview(path)}"]
-                for sym in syms:
-                    prefix = "  " if sym.kind == "method" else ""
-                    overview.append(f"{prefix}{sym.kind} '{sym.name}' (line {sym.line})")
-                return "\n".join(overview)
-        except Exception:
-            pass
-
-        with open(resolved, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        if not path.endswith(".py"):
-            lines = content.splitlines()
-            preview = "\n".join(lines[:100])
-            return f"Overview for {_preview(path)} (non-Python):\n{preview}" + ("\n... [TRUNCATED]" if len(lines) > 100 else "")
-
-        tree = ast.parse(content)
-        overview = [f"File: {_preview(path)}"]
-
-        for node in ast.iter_child_nodes(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                start = node.lineno
-                end = node.end_lineno
-                overview.append(f"{node.__class__.__name__} '{node.name}' (lines {start}-{end})")
-
-                if isinstance(node, ast.ClassDef):
-                    for subnode in node.body:
-                        if isinstance(subnode, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                            sub_start = subnode.lineno
-                            sub_end = subnode.end_lineno
-                            overview.append(f"  Method '{subnode.name}' (lines {sub_start}-{sub_end})")
-
-        if len(overview) == 1:
-            overview.append("No classes or functions found.")
-
-        return "\n".join(overview)
-    except Exception as e:
-        raise ValueError(f"Error generating overview for {_preview(resolved)}: {e}")
 
 @as_tool(
     name="write_content_pos",
@@ -637,364 +598,24 @@ def read_content_pos(path: str, start_pos: int, end_pos: int) -> str:
     except Exception as e:
         raise ValueError(f"Error reading {_preview(resolved)}: {e}")
 
-# ─── Bug Detection ────────────────────────────────────────────────────────────
-
-@dataclass
-class BugReport:
-    file: str
-    line: Optional[int]
-    column: Optional[int]
-    severity: str        # "error" | "warning" | "info"
-    message: str
-    rule: str            # e.g. "pyflakes:F811", "ast:bare-except", "type:mypy"
-    source: str          # "linter" | "ast" | "llm"
-
-    def to_dict(self) -> dict:
-        return {
-            "file": self.file,
-            "line": self.line,
-            "column": self.column,
-            "severity": self.severity,
-            "message": self.message,
-            "rule": self.rule,
-            "source": self.source,
-        }
-
-
-def _collect_python_files(root: str, target: str) -> list[str]:
-    resolved = _resolve_path(target)
-    if os.path.isfile(resolved):
-        return [resolved] if resolved.endswith(".py") else []
-    py_files = []
-    skip = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", "dist", "build", ".env", "tests", "opalacoder", "skills", "debug"}
-    for dirpath, dirnames, filenames in os.walk(resolved):
-        dirnames[:] = [d for d in dirnames if d not in skip and not d.startswith(".")]
-        for fname in filenames:
-            if fname.endswith(".py"):
-                py_files.append(os.path.join(dirpath, fname))
-    return py_files
-
-
 def _rel(path: str, root: str) -> str:
     try:
         return os.path.relpath(path, root)
     except ValueError:
         return path
 
-
-def _layer_linters(py_files: list[str], root: str) -> list[BugReport]:
-    """Layer 1: run pyflakes (and mypy/pylint if available) on each file."""
-    bugs: list[BugReport] = []
-    python_exe = sys.executable
-
-    # ── pyflakes ──
-    try:
-        res = subprocess.run(
-            [python_exe, "-m", "pyflakes"] + py_files,
-            capture_output=True, text=True, timeout=60,
-        )
-        output = res.stdout + res.stderr
-        # pyflakes format: path:line: message
-        pattern = re.compile(r"^(.+?):(\d+):\d*:?\s*(.+)$", re.MULTILINE)
-        for m in pattern.finditer(output):
-            fpath, lineno, msg = m.group(1), int(m.group(2)), m.group(3).strip()
-            severity = "error" if any(w in msg.lower() for w in ("undefined", "import *", "redefinition")) else "warning"
-            bugs.append(BugReport(
-                file=_rel(fpath, root), line=lineno, column=None,
-                severity=severity, message=msg, rule="pyflakes", source="linter",
-            ))
-    except Exception:
-        pass
-
-    # ── mypy (optional) ──
-    try:
-        res = subprocess.run(
-            [python_exe, "-m", "mypy", "--no-error-summary", "--show-column-numbers",
-             "--ignore-missing-imports"] + py_files,
-            capture_output=True, text=True, timeout=90,
-        )
-        pattern = re.compile(r"^(.+?):(\d+):(\d+): (\w+): (.+)$", re.MULTILINE)
-        for m in pattern.finditer(res.stdout + res.stderr):
-            fpath, lineno, col, sev, msg = m.group(1), int(m.group(2)), int(m.group(3)), m.group(4), m.group(5)
-            if sev in ("error", "warning"):
-                bugs.append(BugReport(
-                    file=_rel(fpath, root), line=lineno, column=col,
-                    severity=sev, message=msg, rule="mypy", source="linter",
-                ))
-    except Exception:
-        pass
-
-    # ── pylint (optional) ──
-    try:
-        res = subprocess.run(
-            [python_exe, "-m", "pylint", "--output-format=json",
-             "--disable=C,R", "--score=no"] + py_files,
-            capture_output=True, text=True, timeout=90,
-        )
-        for item in json.loads(res.stdout or "[]"):
-            sev_map = {"error": "error", "warning": "warning", "fatal": "error"}
-            sev = sev_map.get(item.get("type", ""), "info")
-            bugs.append(BugReport(
-                file=_rel(item.get("path", ""), root),
-                line=item.get("line"), column=item.get("column"),
-                severity=sev, message=item.get("message", ""),
-                rule=f"pylint:{item.get('message-id', '')}",
-                source="linter",
-            ))
-    except Exception:
-        pass
-
-    return bugs
-
-
-# AST patterns: (rule_id, severity, detector_fn) → detector returns message | None
-_AST_CHECKS: list[tuple[str, str, object]] = []
-
-
-def _ast_check(rule: str, severity: str):
-    def decorator(fn):
-        _AST_CHECKS.append((rule, severity, fn))
-        return fn
-    return decorator
-
-
-@_ast_check("ast:bare-except", "warning")
-def _check_bare_except(node: ast.AST) -> Optional[str]:
-    if isinstance(node, ast.ExceptHandler) and node.type is None:
-        return "Bare 'except:' silences all exceptions including KeyboardInterrupt/SystemExit."
-    return None
-
-
-@_ast_check("ast:mutable-default-arg", "error")
-def _check_mutable_default(node: ast.AST) -> Optional[str]:
-    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        return None
-    for default in node.args.defaults + node.args.kw_defaults:
-        if default is None:
-            continue
-        if isinstance(default, (ast.List, ast.Dict, ast.Set)):
-            return f"Mutable default argument in '{node.name}' — use None and assign inside the function."
-    return None
-
-
-@_ast_check("ast:assert-in-prod", "warning")
-def _check_assert(node: ast.AST) -> Optional[str]:
-    if isinstance(node, ast.Assert):
-        return "Assert statement is removed when Python runs with -O; use explicit checks for runtime validation."
-    return None
-
-
-@_ast_check("ast:except-pass", "warning")
-def _check_except_pass(node: ast.AST) -> Optional[str]:
-    if isinstance(node, ast.ExceptHandler):
-        if len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
-            etype = ast.unparse(node.type) if node.type else "*"
-            return f"'except {etype}: pass' silently swallows exceptions."
-    return None
-
-
-@_ast_check("ast:shadowed-builtin", "warning")
-def _check_shadow_builtin(node: ast.AST) -> Optional[str]:
-    _BUILTINS = frozenset({
-        "list", "dict", "set", "tuple", "type", "input", "id", "hash",
-        "min", "max", "sum", "len", "open", "print", "range", "zip", "map",
-        "filter", "object", "str", "int", "float", "bool", "bytes",
-    })
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-        if node.name in _BUILTINS:
-            return f"'{node.name}' shadows the built-in with the same name."
-    elif isinstance(node, ast.Assign):
-        for target in node.targets:
-            if isinstance(target, ast.Name) and target.id in _BUILTINS:
-                return f"Variable '{target.id}' shadows the built-in with the same name."
-    return None
-
-
-@_ast_check("ast:return-in-finally", "error")
-def _check_return_in_finally(node: ast.AST) -> Optional[str]:
-    if isinstance(node, ast.Try):
-        for stmt in (node.finalbody if hasattr(node, "finalbody") else []):
-            if isinstance(stmt, ast.Return):
-                return "Return inside 'finally' block suppresses exceptions from try/except."
-    return None
-
-
-@_ast_check("ast:comparison-with-none", "warning")
-def _check_none_equality(node: ast.AST) -> Optional[str]:
-    if isinstance(node, ast.Compare):
-        for op in node.ops:
-            if isinstance(op, (ast.Eq, ast.NotEq)):
-                for comparator in node.comparators:
-                    if isinstance(comparator, ast.Constant) and comparator.value is None:
-                        op_str = "==" if isinstance(op, ast.Eq) else "!="
-                        return f"Use 'is None' / 'is not None' instead of '{op_str} None'."
-    return None
-
-
-def _layer_ast(py_files: list[str], root: str) -> list[BugReport]:
-    """Layer 2: walk each file's AST and run custom checks."""
-    bugs: list[BugReport] = []
-    for fpath in py_files:
-        try:
-            source = Path(fpath).read_text(encoding="utf-8", errors="replace")
-            tree = ast.parse(source, filename=fpath)
-        except SyntaxError as e:
-            bugs.append(BugReport(
-                file=_rel(fpath, root), line=e.lineno, column=e.offset,
-                severity="error", message=f"SyntaxError: {e.msg}",
-                rule="ast:syntax-error", source="ast",
-            ))
-            continue
-        except Exception:
-            continue
-
-        for node in ast.walk(tree):
-            lineno = getattr(node, "lineno", None)
-            for rule, severity, checker in _AST_CHECKS:
-                msg = checker(node)
-                if msg:
-                    bugs.append(BugReport(
-                        file=_rel(fpath, root), line=lineno, column=None,
-                        severity=severity, message=msg, rule=rule, source="ast",
-                    ))
-
-    return bugs
-
-
-async def _layer_llm(py_files: list[str], root: str, max_files: int = 3) -> list[BugReport]:
-    """Layer 3: LLM spot-check on the most recently modified Python files."""
-    bugs: list[BugReport] = []
-    try:
-        from .config import get_agent_config
-        from agenticblocks.blocks.llm.agent import LLMAgentBlock, AgentInput
-        cfg = get_agent_config("orchestrator")
-        model = cfg.get("model", "")
-        if not model:
-            return bugs
-    except Exception:
-        return bugs
-
-    _SYSTEM = (
-        "You are a static analysis tool. Analyze the following Python code and return "
-        "a JSON array of bugs. Each bug must be an object with keys: "
-        "\"line\" (int or null), \"severity\" (\"error\"|\"warning\"), \"message\" (string), "
-        "\"rule\" (string starting with 'llm:'). "
-        "Focus on: logic errors, incorrect control flow, resource leaks, off-by-one errors, "
-        "wrong variable usage, and type mismatches. "
-        "Ignore style issues. If no bugs found, return []. "
-        "Return ONLY the JSON array, no other text."
-    )
-    agent = LLMAgentBlock(
-        name="llm_bug_scanner",
-        system_prompt=_SYSTEM,
-        model=model,
-        max_iterations=1,
-        model_kwargs={"max_tokens": 1024, "temperature": 0},
-    )
-
-    candidates = sorted(py_files, key=lambda p: os.path.getmtime(p), reverse=True)[:max_files]
-
-    for fpath in candidates:
-        try:
-            source = Path(fpath).read_text(encoding="utf-8", errors="replace")
-            if len(source) > 6000:
-                source = source[:6000] + "\n# ... [TRUNCATED]"
-
-            result = await agent.run(AgentInput(prompt=f"```python\n{source}\n```"))
-            raw = result.response or "[]"
-            m = re.search(r"\[.*\]", raw, re.DOTALL)
-            if not m:
-                continue
-            items = json.loads(m.group(0))
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                bugs.append(BugReport(
-                    file=_rel(fpath, root),
-                    line=item.get("line"),
-                    column=None,
-                    severity=item.get("severity", "warning"),
-                    message=item.get("message", ""),
-                    rule=item.get("rule", "llm:unknown"),
-                    source="llm",
-                ))
-        except Exception:
-            continue
-
-    return bugs
-
-
-@as_tool(
-    name="search_bugs",
-    description=(
-        "Detect bugs in the project (or a specific file/directory) using three layers: "
-        "(1) linters: pyflakes, mypy, pylint — when available; "
-        "(2) AST analysis: custom checks for bare-except, mutable defaults, except-pass, "
-        "shadowed builtins, return-in-finally, None comparisons; "
-        "(3) LLM spot-check: the active orchestrator model reviews the most recently "
-        "modified files for logic errors and type mismatches. "
-        "Returns a structured list of bugs sorted by severity. "
-        "Optionally restrict to a specific path (file or directory relative to project root). "
-        "Set llm_check=False to skip the LLM layer (faster)."
-    ),
-)
-async def search_bugs(path: str = ".", llm_check: bool = True) -> str:
-    AGENT_PROGRESS.update("search_bugs", f"path={_preview(path)}")
-    root = get_project_path()
-    py_files = _collect_python_files(root, path)
-
-    if not py_files:
-        return f"No Python files found in '{path}'."
-
-    all_bugs: list[BugReport] = []
-    all_bugs.extend(_layer_linters(py_files, root))
-    all_bugs.extend(_layer_ast(py_files, root))
-    if llm_check:
-        all_bugs.extend(await _layer_llm(py_files, root))
-
-    if not all_bugs:
-        return f"No bugs detected in {len(py_files)} Python file(s)."
-
-    # Deduplicate by (file, line, rule, message)
-    seen: set[tuple] = set()
-    unique: list[BugReport] = []
-    for b in all_bugs:
-        key = (b.file, b.line, b.rule, b.message[:80])
-        if key not in seen:
-            seen.add(key)
-            unique.append(b)
-
-    # Sort: errors first, then by file and line
-    sev_order = {"error": 0, "warning": 1, "info": 2}
-    unique.sort(key=lambda b: (sev_order.get(b.severity, 9), b.file, b.line or 0))
-
-    lines = [f"Found {len(unique)} bug(s) in {len(py_files)} file(s):\n"]
-    for b in unique:
-        loc = f"{b.file}:{b.line}" if b.line else b.file
-        lines.append(f"[{b.severity.upper()}] {loc}  ({b.rule})  [{b.source}]")
-        lines.append(f"  {b.message}")
-    return "\n".join(lines)
-
-
 def get_available_tools():
     return [
         get_project_overview,
-        get_file_overview,
         read_file,
         read_content_pos,
         write_file,
         write_content_pos,
         run_command,
-        run_interactive_command,
-        search_code,
-        ask_human,
-        read_core_memory,
-        append_core_memory,
         search_conversation_history,
     ]
 
 # ─── Long-Term Memory (MemGPT-style) ──────────────────────────────────────────
-
 @as_tool(name="read_core_memory", description="Read the global 'Core Memory' of the project. Contains rules, persistent context, and architectural decisions you should follow.")
 def read_core_memory() -> str:
     AGENT_PROGRESS.update("read_core_memory")

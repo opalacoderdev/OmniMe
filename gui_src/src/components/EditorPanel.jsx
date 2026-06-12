@@ -30,7 +30,6 @@ export default function EditorPanel({
   isInlineRunning,
   onInlineCancel,
   onToggleTerminal,
-  thinkingLogs,
 }) {
   const { t } = useTranslation();
   // Ref so the Monaco command closure always calls the latest callback,
@@ -249,7 +248,6 @@ export default function EditorPanel({
           onClose={() => setInlinePrompt(null)}
           onCancel={onInlineCancel}
           isRunning={isInlineRunning}
-          thinkingLogs={thinkingLogs}
         />
       )}
     </div>

@@ -13,8 +13,6 @@ from agenticblocks.blocks.llm.agent import AgentInput
 from .i18n import _, set_lang
 from rich.markup import escape as _escape
 from .cli_commands import REPLState, _registry
-from .orchestrator import CHECKPOINT_SUBPATH
-
 
 def _inject_project(project: ProjectData, prompt: str) -> str:
     """Prepend project context to every prompt sent to agents."""

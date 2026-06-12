@@ -163,6 +163,11 @@ def get_vector_config() -> dict:
         "top_k": int(cfg.get("top_k", 10)),
     }
 
+def get_project_overview_max_depth() -> int:
+    """Return max depth for project overview directory tree from config.yaml with default 3."""
+    cfg = _APP_CONFIG.get("project_overview", {})
+    return int(cfg.get("max_depth", 3))
+
 def get_agent_max_heartbeats(agent_name: str, default: int) -> Union[int, str]:
     """Return max_heartbeats configured for *agent_name* in agents.yaml (can be 'auto'), or *default*."""
     val = _get_agent_overrides().get(agent_name, {}).get("max_heartbeats", default)

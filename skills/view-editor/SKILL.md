@@ -1,6 +1,6 @@
 ---
 name: view-editor
-description: Allows inspecting the current file opened in the editor, as well as the active text selection or full content.
+description: Allows inspecting the current file OPENED IN THE EDITOR, as well as the active text selection or full content.
 ---
 
 # View Editor Skill
@@ -9,9 +9,23 @@ This skill allows you to inspect what file is currently open in the IDE editor, 
 
 ## Usage
 
-You must execute the script `scripts/run_view_editor.py` inside the `view-editor` skill directory.
+You may inspect the editor state by running the `run_view_editor.py` script.
 
-Run the following command using the `run_command` tool:
-`python3 <run_view_editor.py_path> --project-path <project_path>`
+Consider using the `run_python_script` tool:
+`run_python_script("skills/view-editor/scripts/run_view_editor.py", "--project-path <project_path>")`
 
-It will automatically locate the staged editor state inside the project folder at `.opalacoder/_editor_state.json` and output the path, current selection, and full content in markdown.
+**Argument Explanation:**
+- `<project_path>`: The absolute or relative path to the root directory of the current project you are working on. Usually, this is just `.` (the current directory) if you are already inside the project.
+
+**Concrete Examples:**
+
+1. If you are already at the root of the project:
+`run_python_script("skills/view-editor/scripts/run_view_editor.py", "--project-path .")`
+
+2. If your project is located at `/var/www/my-app`:
+`run_python_script("skills/view-editor/scripts/run_view_editor.py", "--project-path /var/www/my-app")`
+
+3. If you want to inspect a project located in a relative subfolder named `frontend`:
+`run_python_script("skills/view-editor/scripts/run_view_editor.py", "--project-path ./frontend")`
+
+This script locates the staged editor state inside the project folder at `.opalacoder/_editor_state.json` and outputs the path, current selection, and full content in markdown.

@@ -18,17 +18,18 @@ uses to delegate work to skills:
 The module is additive: the legacy intent-routing path in cli.py is untouched
 until the REPL is switched over (Phase 4).
 """
-
 from __future__ import annotations
-
+from opalacoder.tools import run_command
 import os
 from typing import Any
 
 from agenticblocks.blocks.llm.agent import AgentInput, LLMAgentBlock
 from agenticblocks.blocks.llm.memgpt_agent import MemGPTAgentBlock
+# pyrefly: ignore [missing-import]
 from agenticblocks.core.function_block import as_tool
 
 from . import terminal as T
+
 from .tools import (
     ask_human,
     read_core_memory,
@@ -138,14 +139,10 @@ def make_intercepted_send_message(memgpt: MemGPTAgentBlock, skill_name: str):
     def send_message(message: str) -> str:
         # 1. Show to the user (the sub-agent speaks directly).
         T.console.print(f"\n[bold green]OpalaCoder ({skill_name}):[/bold green] {message}\n")
-        # 2. Mirror into the MemGPT conversation so memory stays coherent.
-        try:
-            memgpt.internal_history.append({
-                "role": "assistant",
-                "content": f"[skill:{skill_name}] {message}",
-            })
-        except Exception:
-            pass
+        # 2. Record the message to be returned as the tool result, instead of 
+        # injecting a rogue 'assistant' message mid-turn.
+        if hasattr(memgpt, "_current_worker_messages"):
+            memgpt._current_worker_messages.append(message)
         return "[DONE] message delivered to user"
 
     return send_message
@@ -178,8 +175,9 @@ def build_run_skill_tool(
         name="run_skill",
         description=(
             "Delegate the current task to a skill. Pass the skill name (one of the "
-            "available skills shown to you) and a context string with the user's request "
-            "plus any relevant facts. The skill runs and reports the result back to the user."
+            "available skills shown to you) and a context string with any relevant facts "
+            "or instructions you want to give the worker. The worker will automatically "
+            "receive the recent chat history as well. The tool returns a summary of what the worker did."
         ),
     )
     async def run_skill(skill_name: str, context: str, intent: str = "newfeat") -> str:
@@ -239,6 +237,18 @@ def build_run_skill_tool(
         )
 
         system = (
+            "#ROLE: "
+            "You are a problem-solving agent. You must use your available tools and skills "
+            "to fulfill the user's request provided in your context. "
+            "Your specific tools are:\n"
+            "  - get_project_overview: Returns the project's folder and file structure. Use it to explore the workspace and locate files.\n"
+            "  - read_file: Reads the complete contents of a file. Use it to inspect code or text files entirely.\n"
+            "  - read_content_pos: Reads a specific snippet of a file by providing start and end line numbers. Use it for targeted reading of large files.\n"
+            "  - write_file: Writes or completely overwrites a file. Use it to create new files or replace existing ones entirely. NEVER use run_command with echo/cat to write files.\n"
+            "  - write_content_pos: Modifies a specific block of lines in an existing file. Use it to surgically edit code without replacing the whole file.\n"
+            "  - run_command: Executes terminal commands (e.g., running tests, build scripts, or exploring the OS). Use it to interact with the environment and validate code.\n"
+            "  - search_conversation_history: Searches past interactions. Use it to recall previous decisions, context, or code snippets from the chat history.\n"
+            "# Metadata: "
             f"{meta['body']}\n\n"
             f"You are executing the '{skill_name}' skill. "
             f"Work inside the project directory: {project_path}\n"
@@ -263,6 +273,7 @@ def build_run_skill_tool(
             t for t in get_available_tools()
             if t.name not in ["send_message"]
         ]
+        memgpt._current_worker_messages = []
         tools.append(make_intercepted_send_message(memgpt, skill_name))
 
         worker_kwargs = get_agent_llm_kwargs("worker")
@@ -277,6 +288,10 @@ def build_run_skill_tool(
                     worker_kwargs["api_base"] = worker_kwargs["api_base"][:-3]
                 elif worker_kwargs["api_base"].endswith("/v1/"):
                     worker_kwargs["api_base"] = worker_kwargs["api_base"][:-4]
+        
+        #print("BEGIN SYSTEM_PROMPT::::: LLMAgentBlock ")
+        #print(">>> ", system)
+        #print("END SYSTEM_PROMPT::::::: LLMAgentBlock ")
         sub_agent = LLMAgentBlock(
             name=f"skill_{skill_name}",
             system_prompt=system,
@@ -297,26 +312,24 @@ def build_run_skill_tool(
         )
         # The intent (newfeat/bugfix) the MemGPT classified is surfaced to the
         # sub-agent so script-driven skills can pass it through (e.g. --intent).
-        prompt = f"INTENT: {intent}\n\n{context}"
+        # Automatically inject recent chat history so MemGPT doesn't have to waste tokens copying it
+        recent_history = "\n".join([f"{m.get('role', 'unknown').upper()}: {m.get('content', '')}" for m in memgpt.internal_history[-10:] if m.get("role") in ("user", "assistant")])
+        prompt = f"INTENT: {intent}\n\nRECENT CHAT HISTORY:\n{recent_history}\n\nMEMGPT CONTEXT/INSTRUCTIONS:\n{context}"
         out = await sub_agent.run(AgentInput(prompt=prompt))
 
-        # Check for interactive input marker in the sub-agent's output.
-        if "<<NEED_INPUT>>" in out:
-            # Extract the prompt after the marker, e.g., "<<NEED_INPUT>> Please enter value"
-            parts = out.split("<<NEED_INPUT>>", 1)
+        out_text = out.response if hasattr(out, "response") else str(out)
+        if "<<NEED_INPUT>>" in out_text:
+            parts = out_text.split("<<NEED_INPUT>>", 1)
             user_prompt = parts[1].strip() if len(parts) > 1 else "Please provide required input:"
-            # Use the existing ask_human tool to request input via the chat UI.
             user_response = ask_human(user_prompt)
-            # Append the user response to the original output for context.
-            out = out.replace("<<NEED_INPUT>>", f"[User provided: {user_response}]")
-            # Continue processing with the enriched output.
+            out_text = out_text.replace("<<NEED_INPUT>>", f"[User provided: {user_response}]")
 
-        # The sub-agent's full message was already mirrored into the MemGPT memory
-        # by the interceptor (make_intercepted_send_message). Returning the full text
-        # again here would double-record it into internal_history as the tool result,
-        # bloating context and pushing small models into text-emitted tool calls on
-        # later turns. Return only a short, de-duplicated acknowledgment.
-        return f"[skill '{skill_name}' finished] result delivered to the user."
+        # Return the summary of what the worker did to MemGPT
+        worker_summary = "\n".join(getattr(memgpt, "_current_worker_messages", []))
+        if not worker_summary.strip():
+            worker_summary = out_text
+
+        return f"[skill '{skill_name}' finished] Worker's summary/report:\n{worker_summary}"
 
     return run_skill
 
@@ -418,6 +431,11 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         use_shared_router=_agent_params.get("use_shared_router", True),
         response_mode=_agent_params.get("response_mode", get_agent_response_mode("memgpt")),
     )
+
+    #print("BEGIN MEMGPT SYSTEM PROMPT >>>>>>>>>>>>>>")
+    #print(system_prompt)
+    #print("END MEMGPT SYSTEM PROMPT <<<<<<<<<<<< ")
+    
 
     # Seed the working context from persisted history so the conversation restores
     # across restarts (the old chat_agent did this; the MemGPT starts empty).

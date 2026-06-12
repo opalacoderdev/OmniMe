@@ -96,15 +96,8 @@ def print_event(event: str, data: dict):
             import sys
             sys.stderr.write(f"[DEBUG] Error invoking event hook: {ex}\n")
 
-# Import project components safely
-try:
-    import opalacoder.orchestrator  # resolve circular import order
-except ImportError:
-    pass
-
 from opalacoder.config import DEFAULT_MODEL, DEFAULT_DB_PATH
 from opalacoder.project import ProjectStore, ProjectData
-from opalacoder.agents import make_landscape_planner, make_refinement_agent
 from opalacoder.memgpt_runtime import build_chat_orchestrator
 from agenticblocks.blocks.llm.agent import AgentInput, LLMAgentBlock
 
@@ -113,14 +106,13 @@ from opalacoder.tools import (
     read_file as raw_read_file_base,
     write_file,
     run_command,
+    run_python_script,
     run_interactive_command,
     search_code,
     ask_human,
     get_project_overview,
-    get_file_overview,
     write_content_pos,
     read_content_pos,
-    search_bugs,
     set_project_context,
     web_search,
 )
@@ -130,14 +122,13 @@ ALL_TOOLS_MAP = {
     "read_file": raw_read_file_base,
     "write_file": write_file,
     "run_command": run_command,
+    "run_python_script": run_python_script,
     "run_interactive_command": run_interactive_command,
     "search_code": search_code,
     "ask_human": ask_human,
     "get_project_overview": get_project_overview,
-    "get_file_overview": get_file_overview,
     "write_content_pos": write_content_pos,
     "read_content_pos": read_content_pos,
-    "search_bugs": search_bugs,
     "web_search": web_search,
 }
 
@@ -452,15 +443,7 @@ async def handle_run(data: dict):
 
     # Build agent
     agent = None
-    if agent_type == "landscape_planner":
-        agent = make_landscape_planner(model=model)
-        if system_prompt:
-            agent.system_prompt = system_prompt
-    elif agent_type == "refinement_agent":
-        agent = make_refinement_agent(model=model)
-        if system_prompt:
-            agent.system_prompt = system_prompt
-    elif agent_type == "chat_orchestrator":
+    if agent_type == "chat_orchestrator":
         if not current_memgpt:
             # Autoload default project
             await handle_load_project(data)
@@ -518,6 +501,7 @@ async def handle_run(data: dict):
             model_kwargs=model_kwargs,
             **agent_kwargs
         )
+        print("WORKER SPROMPT ", system_prompt)
     
     # Setup message history if provided (for custom/standard LLMAgentBlock)
     if messages_history and hasattr(agent, "internal_history"):
@@ -561,8 +545,12 @@ async def handle_run(data: dict):
         try:
             with apply_meta_params(agent, _meta_overrides):
                 resp_obj = await agent.run(AgentInput(prompt=prompt))
+            print("PROMPT ", prompt)
             response = resp_obj.response.strip() if resp_obj.response else ""
-
+            print("RESPONSE ", ">>>"*50)
+            print(response)
+            print("END_RESPONSE ", "<<<"*50)
+            
             # Save to store if using chat_orchestrator
             if agent_type == "chat_orchestrator" and current_store and current_project:
                 current_store.append_message(current_project, "user", prompt)
@@ -573,6 +561,7 @@ async def handle_run(data: dict):
             print_event("agent_response", {"response": response})
         except Exception as e:
             import traceback
+            print("ERROR ", ">>>"*50)
             err_msg = traceback.format_exc()
             user_msg = _friendly_llm_error(e, current_project)
             print_event("error", {"message": user_msg, "trace": err_msg})

@@ -57,7 +57,6 @@ export default function App() {
   // ── Bottom panel ──────────────────────────────────────────────────────────
   const [terminalLogs, setTerminalLogs] = useState([]);
   const [problems, setProblems] = useState([]);
-  const [thinkingLogs, setThinkingLogs] = useState([]);
   const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false);
   const [activeBottomTab, setActiveBottomTab] = useState('output');
   const [panelMaxLines, setPanelMaxLines] = useState(() => {
@@ -241,7 +240,6 @@ export default function App() {
   }, []);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
-  useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [terminalLogs]);
 
   // Global keyboard shortcuts (Ctrl+S, Ctrl+J, Ctrl+/- zoom)
   useEffect(() => {
@@ -305,7 +303,7 @@ export default function App() {
       let next;
       if (prev.length > 0) {
         const last = prev[prev.length - 1];
-        if (last.type === type && (type === 'thought' || type === 'stdout' || type === 'stderr')) {
+        if (last.type === type && (type === 'thought' || type === 'reflection' || type === 'stream_chunk' || type === 'stdout' || type === 'stderr')) {
           next = [...prev.slice(0, -1), { ...last, message: last.message + message }];
         }
       }
@@ -838,42 +836,12 @@ export default function App() {
       case 'agent_started': addLog('info', `Agente ${data.agent} iniciado.`); break;
       case 'thought':
         addLog('thought', data.content);
-        setThinkingLogs(prev => {
-          let next;
-          if (prev.length > 0 && prev[prev.length - 1].type === 'THINKING') {
-            const last = prev[prev.length - 1];
-            next = [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
-          } else {
-            next = [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'THINKING', content: data.content }];
-          }
-          return trimToLimit(next, panelMaxLines);
-        });
         break;
       case 'reflection':
-        addLog('thought', data.content);
-        setThinkingLogs(prev => {
-          let next;
-          if (prev.length > 0 && prev[prev.length - 1].type === 'REFLECTION') {
-            const last = prev[prev.length - 1];
-            next = [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
-          } else {
-            next = [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'REFLECTION', content: data.content }];
-          }
-          return trimToLimit(next, panelMaxLines);
-        });
+        addLog('reflection', data.content);
         break;
       case 'stream_chunk':
-        addLog('thought', data.content);
-        setThinkingLogs(prev => {
-          let next;
-          if (prev.length > 0 && prev[prev.length - 1].type === 'STREAM') {
-            const last = prev[prev.length - 1];
-            next = [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
-          } else {
-            next = [...prev, { timestamp: new Date().toLocaleTimeString(), type: 'STREAM', content: data.content }];
-          }
-          return trimToLimit(next, panelMaxLines);
-        });
+        addLog('stream_chunk', data.content);
         break;
       case 'cancelled': addLog('warning', data.message || 'Execução cancelada.'); setChatMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Interrompido: ${data.message || 'A execução do agente foi parada.'}` }]); break;
       case 'tool_call':
@@ -1110,7 +1078,7 @@ export default function App() {
 
     setChatInput('');
     setIsInlineRunning(true);
-    setThinkingLogs([]);
+    setIsInlineRunning(true);
     addLog('info', `Iniciando edição inline: "${instruction}"`);
 
     const systemPrompt = "You are an expert developer performing an inline code edit. " +
@@ -1167,18 +1135,8 @@ export default function App() {
               if (textContent === '{}' || !textContent.trim()) continue;
               if (textContent.startsWith('{"result":') || textContent.startsWith('{"error":') || textContent.startsWith('{"name":')) continue;
 
-              addLog('thought', textContent);
-              setThinkingLogs(prev => {
-                const type = data.event === 'stream_chunk' ? 'STREAM' : data.event.toUpperCase();
-                let next;
-                if (prev.length > 0 && prev[prev.length - 1].type === type) {
-                  const last = prev[prev.length - 1];
-                  next = [...prev.slice(0, -1), { ...last, content: last.content + textContent }];
-                } else {
-                  next = [...prev, { timestamp: new Date().toLocaleTimeString(), type, content: textContent }];
-                }
-                return trimToLimit(next, panelMaxLines);
-              });
+              let typeName = data.event;
+              addLog(typeName, textContent);
             } else if (data.event === 'tool_call') {
               addLog('tool_call', `[Inline] Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`);
             } else if (data.event === 'tool_result') {
@@ -1419,7 +1377,7 @@ export default function App() {
                   setActiveBottomTab('terminal');
                 }
               }}
-              thinkingLogs={thinkingLogs}
+              activeProject={activeProject}
             />
           )}
 
@@ -1433,8 +1391,6 @@ export default function App() {
               setTerminalLogs={setTerminalLogs}
               problems={problems}
               setProblems={setProblems}
-              thinkingLogs={thinkingLogs}
-              setThinkingLogs={setThinkingLogs}
               bottomPanelHeight={bottomPanelHeight}
               activeProject={activeProject}
               terminalRef={terminalRef}
