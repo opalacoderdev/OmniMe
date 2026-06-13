@@ -21,7 +21,7 @@ export default function ContextMenu({
   const parentPath = rightClickedNode
     ? (rightClickedNode.isDirectory
         ? rightClickedNode.path
-        : rightClickedNode.path.split('/').slice(0, -1).join('/'))
+        : rightClickedNode.path.replace(/\\/g, '/').split('/').slice(0, -1).join('/'))
     : '';
 
   return (

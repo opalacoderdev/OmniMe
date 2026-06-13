@@ -11,6 +11,7 @@ export default function EditorPanel({
   openFiles,
   fileContent,
   fileContents,
+  originalFileContents,
   isSaving,
   theme,
   editorFontSize,
@@ -177,6 +178,9 @@ export default function EditorPanel({
         <div className="flex h-full overflow-x-auto" style={{ gap: '2px' }}>
           {openFiles.map(filePath => {
             const isActive = filePath === selectedFile;
+            const currentContent = isActive ? fileContent : fileContents[filePath];
+            const isDirty = originalFileContents && currentContent !== originalFileContents[filePath] && originalFileContents[filePath] !== undefined;
+
             return (
               <div
                 key={filePath}
@@ -185,7 +189,7 @@ export default function EditorPanel({
                 style={{ cursor: 'pointer', userSelect: 'none' }}
               >
                 <span style={{ color: isActive ? '#ffffff' : '#a0a0a0' }}>
-                  {filePath.split('/').pop()}
+                  {filePath.replace(/\\/g, '/').split('/').pop()}{isDirty ? ' *' : ''}
                 </span>
                 <button
                   onClick={(e) => handleCloseTab(filePath, e)}

@@ -6,6 +6,8 @@ export default function FileNode({
   node,
   selectedFile,
   selectedNodes,
+  fileContents,
+  originalFileContents,
   handleNodeSelect,
   handleFileSelect,
   handleNodeContextMenu,
@@ -59,6 +61,8 @@ export default function FileNode({
   // Check if node is part of the multi-selection
   const isMultiSelected = selectedNodes && selectedNodes.has(node.path);
 
+  const isDirty = !isDir && originalFileContents && fileContents?.[node.path] !== originalFileContents[node.path] && originalFileContents[node.path] !== undefined;
+
   if (isDir) {
     return (
       <div
@@ -94,6 +98,8 @@ export default function FileNode({
                 node={child}
                 selectedFile={selectedFile}
                 selectedNodes={selectedNodes}
+                fileContents={fileContents}
+                originalFileContents={originalFileContents}
                 handleNodeSelect={handleNodeSelect}
                 handleFileSelect={handleFileSelect}
                 handleNodeContextMenu={handleNodeContextMenu}
@@ -121,8 +127,8 @@ export default function FileNode({
       onDragStart={handleDragStart}
       onContextMenu={(e) => handleNodeContextMenu(e, node)}
     >
-      <File size={13} style={{ color: '#a0a0a0' }} />
-      <span className="truncate">{node.name}</span>
+      <File size={14} className="text-white" style={{ color: '#808080' }} />
+      <span className="truncate">{node.name}{isDirty ? ' *' : ''}</span>
     </div>
   );
 }

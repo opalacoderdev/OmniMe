@@ -46,6 +46,7 @@ export default function App() {
   const [fileContent, setFileContent] = useState('');
   const [openFiles, setOpenFiles] = useState([]);
   const [fileContents, setFileContents] = useState({});
+  const [originalFileContents, setOriginalFileContents] = useState({});
   const [rightClickedNode, setRightClickedNode] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -217,6 +218,11 @@ export default function App() {
           { role: 'assistant', content: t('app.greeting', { projectName: activeProject.project_name || activeProject.name }) }
         ]);
         prevProjectNameRef.current = activeProject.name;
+        setOpenFiles([]);
+        setSelectedFile(null);
+        setFileContent('');
+        setFileContents({});
+        setOriginalFileContents({});
       }
     } else {
       setFiles([]);
@@ -224,6 +230,7 @@ export default function App() {
       setFileContent('');
       setOpenFiles([]);
       setFileContents({});
+      setOriginalFileContents({});
       setProblems([]);
       prevProjectNameRef.current = null;
     }
@@ -367,6 +374,38 @@ export default function App() {
       alert(`A pasta do projeto não existe no disco:\n${proj.project_path}`);
       return;
     }
+    
+    let currentContents = { ...fileContents };
+    if (selectedFile) {
+      currentContents[selectedFile] = fileContent;
+    }
+
+    const dirtyFiles = openFiles.filter(f => currentContents[f] !== originalFileContents[f] && originalFileContents[f] !== undefined);
+    
+    if (dirtyFiles.length > 0) {
+      setConfirmRequest({
+        prompt: `Você tem ${dirtyFiles.length} arquivo(s) não salvo(s) no projeto atual. Deseja salvá-los antes de trocar de projeto? (Escolha "Cancelar" para não trocar)`,
+        options: ['yes', 'no', 'cancel'],
+        callback: async (val) => {
+          if (val === 'cancel') return;
+          if (val === 'yes') {
+             for (const filePath of dirtyFiles) {
+                try {
+                   await fetch('/api/file/write', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ projectPath: activeProject.project_path, filePath, content: currentContents[filePath] })
+                   });
+                } catch(e) {}
+             }
+          }
+          setActiveProject(proj);
+          addLog('info', t('app.projectSelected', { name: proj.project_name || proj.name }));
+        }
+      });
+      return;
+    }
+
     setActiveProject(proj);
     addLog('info', t('app.projectSelected', { name: proj.project_name || proj.name }));
   };
@@ -489,7 +528,13 @@ export default function App() {
     console.log(`[DEBUG handleFileSelect] CACHE MISS for "${filePath}" — fetching from disk.`);
     try {
       const res = await fetch(`/api/file/read?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(filePath)}`);
-      if (res.ok) { const data = await res.json(); console.log(`[DEBUG handleFileSelect] Loaded from disk: ${data.content.length} chars`); setFileContent(data.content); setFileContents(prev => ({ ...prev, [filePath]: data.content })); }
+      if (res.ok) { 
+        const data = await res.json(); 
+        console.log(`[DEBUG handleFileSelect] Loaded from disk: ${data.content.length} chars`); 
+        setFileContent(data.content); 
+        setFileContents(prev => ({ ...prev, [filePath]: data.content })); 
+        setOriginalFileContents(prev => ({ ...prev, [filePath]: data.content }));
+      }
       else addLog('error', `Erro ao ler arquivo: ${filePath}`);
     } catch (err) { addLog('error', `Erro de leitura: ${err.message}`); }
   };
@@ -502,7 +547,13 @@ export default function App() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectPath: activeProject.project_path, filePath: selectedFile, content: fileContent }),
       });
-      if (res.ok) { addLog('info', `Arquivo salvo: ${selectedFile}`); setFileContents(prev => ({ ...prev, [selectedFile]: fileContent })); fetchGitStatus(); fetchProblems(); }
+      if (res.ok) { 
+        addLog('info', `Arquivo salvo: ${selectedFile}`); 
+        setFileContents(prev => ({ ...prev, [selectedFile]: fileContent })); 
+        setOriginalFileContents(prev => ({ ...prev, [selectedFile]: fileContent }));
+        fetchGitStatus(); 
+        fetchProblems(); 
+      }
       else addLog('error', `Erro ao salvar arquivo: ${selectedFile}`);
     } catch (err) { addLog('error', `Erro de escrita: ${err.message}`); }
     finally { setIsSaving(false); }
@@ -615,7 +666,7 @@ export default function App() {
 
   const handleMoveNode = async (oldPath, targetDirPath, isDirectory) => {
     if (!activeProject) return;
-    const nodeName = oldPath.split('/').pop();
+    const nodeName = oldPath.replace(/\\/g, '/').split('/').pop();
     const newPath = targetDirPath ? `${targetDirPath}/${nodeName}` : nodeName;
     if (oldPath === newPath) return;
     if (isDirectory && (newPath === oldPath || newPath.startsWith(`${oldPath}/`))) { addLog('error', 'Não é possível mover um diretório para dentro dele mesmo.'); return; }
@@ -1337,6 +1388,8 @@ export default function App() {
                 files={files}
                 selectedFile={selectedFile}
                 selectedNodes={selectedNodes}
+                fileContents={fileContents}
+                originalFileContents={originalFileContents}
                 handleNodeSelect={handleNodeSelect}
                 handleFileSelect={handleFileSelect}
                 handleNodeContextMenu={handleNodeContextMenu}
@@ -1380,6 +1433,7 @@ export default function App() {
               openFiles={openFiles}
               fileContent={fileContent}
               fileContents={fileContents}
+              originalFileContents={originalFileContents}
               isSaving={isSaving}
               theme={theme}
               editorFontSize={editorFontSize}
