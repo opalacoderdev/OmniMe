@@ -853,7 +853,11 @@ export default function App() {
         }
         break;
       case 'tool_result':
-        addLog('tool_result', `Sucesso: ${data.tool}`);
+        if (data.is_error) {
+          addLog('error', `Falha na ferramenta: ${data.tool}`);
+        } else {
+          addLog('tool_result', `Sucesso: ${data.tool}`);
+        }
         if (['write_file', 'write_content_pos', 'edit_file'].includes(data.tool)) {
           console.log(`[DEBUG tool_result] ${data.tool} result="${data.result}"`);
           const writtenPath = pendingWritePathRef.current;

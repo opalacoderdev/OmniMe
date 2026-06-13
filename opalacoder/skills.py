@@ -11,7 +11,7 @@ import os
 # ===========================================================================
 
 # The chat-orchestrator skill is always loaded regardless of skills.yaml.
-MANDATORY_SKILLS = ("chat-orchestrator", "view-editor")
+MANDATORY_SKILLS = ("chat-orchestrator", "view-editor", "command-line")
 
 # Directory name of the skill manifest file inside each skill directory.
 SKILL_MANIFEST = "SKILL.md"

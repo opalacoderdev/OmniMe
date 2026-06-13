@@ -80,15 +80,18 @@ def print_event(event: str, data: dict):
             # Emit auxiliary thoughts to keep the Thinking tab active and alive
             thought_content = None
             if event == "agent_started":
-                thought_content = f"Iniciando a execução do agente '{data.get('agent', '')}' usando o modelo '{data.get('model', '')}'..."
+                thought_content = f"Starting execution of agent '{data.get('agent', '')}' using model '{data.get('model', '')}'..."
             elif event == "tool_call":
-                thought_content = f"Decidi executar a ferramenta '{data.get('tool', '')}' com os parâmetros: {json.dumps(data.get('arguments', {}))}"
+                thought_content = f"Decided to execute tool '{data.get('tool', '')}' with parameters: {json.dumps(data.get('arguments', {}))}"
             elif event == "tool_result":
-                thought_content = f"Recebi o retorno da ferramenta '{data.get('tool', '')}' com sucesso. Analisando o resultado obtido..."
+                if data.get("is_error"):
+                    thought_content = f"Tool '{data.get('tool', '')}' returned an error. Analyzing the failure..."
+                else:
+                    thought_content = f"Received successful return from tool '{data.get('tool', '')}'. Analyzing the obtained result..."
             elif event == "agent_response":
-                thought_content = "Resposta gerada com sucesso pelo modelo. Finalizando turno do agente."
+                thought_content = "Response generated successfully by the model. Finishing agent turn."
             elif event == "error":
-                thought_content = f"Alerta: Ocorreu um erro durante a execução: {data.get('message', '')}"
+                thought_content = f"Alert: An error occurred during execution: {data.get('message', '')}"
                 
             if thought_content:
                 hook({"event": "thought", "content": thought_content})
@@ -142,6 +145,9 @@ def wrap_tool(original_tool):
     from pydantic import BaseModel
     from agenticblocks.core.function_block import FunctionBlock
     
+    if getattr(original_tool, "_is_wrapped", False):
+        return original_tool
+
     if not hasattr(original_tool, "run"):
         name = getattr(original_tool, "name", None) or getattr(original_tool, "__name__", None)
         desc = getattr(original_tool, "description", None) or getattr(original_tool, "__doc__", None)
@@ -162,21 +168,44 @@ def wrap_tool(original_tool):
             
         dump_kwargs = input_data.model_dump()
         print_event("tool_call", {"tool": name, "arguments": dump_kwargs})
+        
+        global _recent_tool_calls
+        if '_recent_tool_calls' not in globals():
+            globals()['_recent_tool_calls'] = []
+            
+        call_signature = f"{name}:{json.dumps(dump_kwargs, sort_keys=True)}"
+        _recent_tool_calls.append(call_signature)
+        if len(_recent_tool_calls) > 10:
+            _recent_tool_calls.pop(0)
+            
+        count = 0
+        for sig in reversed(_recent_tool_calls):
+            if sig == call_signature:
+                count += 1
+            else:
+                break
+                
+        is_error = False
         try:
+            if count >= 3:
+                raise ValueError(f"Loop detected: You called '{name}' with these exact arguments {count} times in a row without success. Stop repeating this tool call! If this is an interactive CLI command (like npm create), use 'run_interactive_command' instead. Otherwise, try a different approach.")
+
             result = await original_run(input_data)
             if hasattr(result, "result"):
                 res_val = result.result
             else:
                 res_val = result.model_dump()
         except Exception as e:
+            is_error = True
             res_val = f"Error: {e}"
             print_event("problem", {"tool": name, "message": str(e), "severity": "error"})
             raise
         finally:
-            print_event("tool_result", {"tool": name, "result": str(res_val)})
+            print_event("tool_result", {"tool": name, "result": str(res_val), "is_error": is_error})
         return result
         
     object.__setattr__(original_tool, "run", wrapped_run)
+    object.__setattr__(original_tool, "_is_wrapped", True)
     return original_tool
 
 
@@ -545,11 +574,11 @@ async def handle_run(data: dict):
         try:
             with apply_meta_params(agent, _meta_overrides):
                 resp_obj = await agent.run(AgentInput(prompt=prompt))
-            print("PROMPT ", prompt)
+            #print("PROMPT ", prompt)
             response = resp_obj.response.strip() if resp_obj.response else ""
-            print("RESPONSE ", ">>>"*50)
-            print(response)
-            print("END_RESPONSE ", "<<<"*50)
+            #print("RESPONSE ", ">>>"*50)
+            #print(response)
+            #print("END_RESPONSE ", "<<<"*50)
             
             # Save to store if using chat_orchestrator
             if agent_type == "chat_orchestrator" and current_store and current_project:
@@ -561,7 +590,6 @@ async def handle_run(data: dict):
             print_event("agent_response", {"response": response})
         except Exception as e:
             import traceback
-            print("ERROR ", ">>>"*50)
             err_msg = traceback.format_exc()
             user_msg = _friendly_llm_error(e, current_project)
             print_event("error", {"message": user_msg, "trace": err_msg})

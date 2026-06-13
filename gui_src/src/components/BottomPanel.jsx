@@ -168,19 +168,19 @@ export default function BottomPanel({
                   </div>
                 ) : (
                   terminalLogs.map((log, i) => {
-                    let color = 'text-[#cccccc]';
+                    let colorStyle = { color: '#cccccc' };
                     let label = 'SYSTEM';
 
-                    if (log.type === 'error') { color = 'text-[#f48771] font-semibold'; label = 'ERROR'; }
-                    else if (log.type === 'info') { color = 'text-[#75beff]'; label = 'INFO'; }
-                    else if (log.type === 'thought') { color = 'text-[#da70d6] italic'; label = 'THINKING'; }
-                    else if (log.type === 'reflection') { color = 'text-[#4ec9b0] italic'; label = 'REFLECTION'; }
-                    else if (log.type === 'stream_chunk') { color = 'text-[#da70d6] italic'; label = 'STREAM'; }
-                    else if (log.type === 'tool_call') { color = 'text-[#d7ba7d]'; label = 'TOOL'; }
-                    else if (log.type === 'tool_result') { color = 'text-[#89d4a5]'; label = 'RESULT'; }
+                    if (log.type === 'error') { colorStyle = { color: '#f48771', fontWeight: 'bold' }; label = 'ERROR'; }
+                    else if (log.type === 'info') { colorStyle = { color: '#75beff' }; label = 'INFO'; }
+                    else if (log.type === 'thought') { colorStyle = { color: '#da70d6', fontStyle: 'italic' }; label = 'THINKING'; }
+                    else if (log.type === 'reflection') { colorStyle = { color: '#4ec9b0', fontStyle: 'italic' }; label = 'REFLECTION'; }
+                    else if (log.type === 'stream_chunk') { colorStyle = { color: '#da70d6', fontStyle: 'italic' }; label = 'STREAM'; }
+                    else if (log.type === 'tool_call') { colorStyle = { color: '#d7ba7d' }; label = 'TOOL'; }
+                    else if (log.type === 'tool_result') { colorStyle = { color: '#89d4a5' }; label = 'RESULT'; }
 
                     return (
-                      <div key={i} className={color} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '3px' }}>
+                      <div key={i} style={{ ...colorStyle, display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '3px' }}>
                         <span style={{ color: '#5a5a5a' }}>[{log.timestamp}]</span>
                         <span style={{ fontWeight: 'bold' }}>[{label}]</span>
                         <span style={{ whiteSpace: 'pre-wrap', flex: 1 }}>{log.message}</span>

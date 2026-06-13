@@ -7,23 +7,91 @@ description: Executes command-line operations to read, create, insert text, remo
 
 This skill provides the sub-agent with tools to manipulate files and directories securely, restricted to the project directory.
 
-## IMPORTANT: Creating or writing files
+## AVAILABLE TOOLS
 
-**Use `write_file` directly to create or overwrite any file.** Do NOT use `command_executor.py` for writing file content — shell quoting breaks with multi-line, HTML, CSS, or JavaScript content.
+        get_project_overview,
+        read_file,
+        read_content_pos,
+        write_content_pos,
+        run_command,
+        search_conversation_history,
+        exec
+
+
+1. write_file: **Use `write_file` directly to create or overwrite any file.** Do NOT use `command_executor.py` for writing file content — shell quoting breaks with multi-line, HTML, CSS, or JavaScript content.
 
 ```
 write_file("<relative_or_absolute_path>", "<full file content>")
 ```
-
 Examples:
 ```
 write_file("tictactoe.html", "<!DOCTYPE html>...")
 write_file("src/utils.js", "function foo() {...}")
 ```
 
+2. read_file: use read_file for directly access files without shell. For example:
+```
+read_file("<relative_or_absolute_path>")
+```
+Examples:
+```
+read_file("tictactoe.html")
+read_file("src/utils.js")
+```
+
+3. read_content_pos: use read_content_pos for directly access file content at a specific line range without shell. For example:
+```
+read_content_pos("<relative_or_absolute_path>", "<start_line>", "<end_line>")
+```
+Examples:
+```
+read_content_pos("tictactoe.html", "1", "10")
+read_content_pos("src/utils.js", "10", "20")
+```
+
+4. write_content_pos: write_content_pos for directly access file content at a specific line range without shell. For example:
+```
+write_content_pos("<relative_or_absolute_path>", "<start_line>", "<end_line>", "<content>")
+```
+Examples:
+```
+write_content_pos("tictactoe.html", "1", "10", "<content>")
+write_content_pos("src/utils.js", "10", "20", "<content>")
+```
+
+5. exec: use exec for directly access shell without shell. For example:
+```
+exec("<command>")
+```
+Examples:
+```
+exec("ls -l")
+exec("pwd")
+exec("node --version")
+exec("npm create vite@latest app -- --template react")
+exec("uv pip install django")
+exec("uv init -p python3.9")
+```
+
+6. get_project_overview: use get_project_overview for directly access project tree of files.
+Example:
+```
+get_project_overview()
+```
+
+7. search_conversation_history: use search_conversation_history for directly search conversation history without shell. For example:
+```
+search_conversation_history("<keyword>")
+```
+Examples:
+```
+search_conversation_history("tictactoe")
+search_conversation_history("src")
+```
+
 ## Available Commands via command_executor.py
 
-Consider using `run_python_script` to call `scripts/command_executor.py` **only for structural operations** (insert text at a line, remove files/dirs, create empty directories). The syntax uses subcommands:
+Consider using `run_python_script` to call `scripts/command_executor.py`  (insert text at a line, remove files/dirs, create empty directories). The syntax uses subcommands:
 
 ```
 run_python_script("<command_executor.py_path>", "--project-path <project_path> <subcommand> <args>")

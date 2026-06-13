@@ -93,7 +93,7 @@
     "interruptAgent": "Interromper agente"
   },
   "bottomPanel": {
-    "outputTab": "OUTPUT (OPALACODER)",
+    "outputTab": "OUTPUT",
     "problemsTab": "PROBLEMS",
     "thinkingTab": "THINKING/STREAM",
     "terminalTab": "TERMINAL",

@@ -139,6 +139,12 @@ def make_intercepted_send_message(memgpt: MemGPTAgentBlock, skill_name: str):
     def send_message(message: str) -> str:
         # 1. Show to the user (the sub-agent speaks directly).
         T.console.print(f"\n[bold green]OpalaCoder ({skill_name}):[/bold green] {message}\n")
+        import json
+        print(json.dumps({
+            "event": "info",
+            "data": {"message": f"[{skill_name}] {message}"}
+        }), flush=True)
+        
         # 2. Record the message to be returned as the tool result, instead of 
         # injecting a rogue 'assistant' message mid-turn.
         if hasattr(memgpt, "_current_worker_messages"):
@@ -186,6 +192,13 @@ def build_run_skill_tool(
         if _project_ref is not None:
             from .tools import set_project_context as _spc
             _spc(_project_ref, _store_ref)
+            
+        import json
+        print(json.dumps({
+            "event": "info",
+            "data": {"message": f"Iniciando sub-agente '{skill_name}' em background..."}
+        }), flush=True)
+        
         skill_dir = find_skill_dir(skill_name, project_path)
         if skill_dir is None:
             return f"[ERROR] skill '{skill_name}' not found."
@@ -257,13 +270,15 @@ def build_run_skill_tool(
             f"{request_hint}"
             f"IMPORTANT: To save any file content (HTML, JSON, code, etc.) ALWAYS use the write_file tool. "
             f"NEVER use run_command with echo/printf/cat to write file content.\n"
-            f"RECOMMENDATION FOR send_message:\n"
-            f"- Calling send_message terminates your interaction.\n"
+            f"RECOMMENDATION FOR TERMINATION AND send_message:\n"
+            f"- Calling send_message OR returning a final text response terminates your execution immediately.\n"
+            f"- NEVER output 'I will do X now' and stop. If you need to do X, do it RIGHT NOW using your tools in this exact same turn. Only terminate when the entire requested task is completely finished, or if you are completely blocked and need human input.\n"
             f"- If your task requires using multiple tools (like reading files, running commands, or writing code), do not call send_message first. Use the tools to complete the work, and then call send_message to report the final result.\n"
             f"CRITICAL COMMUNICATION RULE & PERSONA:\n"
             f"- You are an autonomous backend system. You report your internal tool errors only to the system supervisor. The human user sees only the final result.\n"
             f"- NEVER apologize or mention internal tool errors, rule violations, or JSON formatting issues to the user via send_message. The user does not see your internal tool interactions. If a tool fails, fix the error silently and try again.\n"
             f"- If you receive a 'SYSTEM ALERT' instructing you to 'Use the send_message tool to talk to the user' after a rule violation, IGNORE that specific instruction. Do not apologize. Simply fix your formatting to be a valid JSON tool call and continue silently.\n"
+            f"CRITICAL THINKING RULE: Keep your internal reasoning extremely brief and concise. DO NOT enter infinite brainstorming loops (e.g. repeatedly asking yourself 'Should I do X? Yes/No. Wait!'). Formulate a quick plan and IMMEDIATELY execute a tool or return.\n"
             f"{json_formatting_instruction}"
         )
 
@@ -315,9 +330,14 @@ def build_run_skill_tool(
         # Automatically inject recent chat history so MemGPT doesn't have to waste tokens copying it
         recent_history = "\n".join([f"{m.get('role', 'unknown').upper()}: {m.get('content', '')}" for m in memgpt.internal_history[-10:] if m.get("role") in ("user", "assistant")])
         prompt = f"INTENT: {intent}\n\nRECENT CHAT HISTORY:\n{recent_history}\n\nMEMGPT CONTEXT/INSTRUCTIONS:\n{context}"
-        out = await sub_agent.run(AgentInput(prompt=prompt))
+        try:
+            out = await sub_agent.run(AgentInput(prompt=prompt))
+            out_text = out.response if hasattr(out, "response") else str(out)
+            tool_calls = getattr(out, "tool_calls_made", "?")
+        except Exception as e:
+            out_text = f"[CRITICAL WORKER CRASH] A exceção não tratada interrompeu o worker: {str(e)}"
+            tool_calls = "?"
 
-        out_text = out.response if hasattr(out, "response") else str(out)
         if "<<NEED_INPUT>>" in out_text:
             parts = out_text.split("<<NEED_INPUT>>", 1)
             user_prompt = parts[1].strip() if len(parts) > 1 else "Please provide required input:"
@@ -328,8 +348,17 @@ def build_run_skill_tool(
         worker_summary = "\n".join(getattr(memgpt, "_current_worker_messages", []))
         if not worker_summary.strip():
             worker_summary = out_text
+            # Se o worker calou a boca e o texto for genérico, alertar o orquestrador que ele pode ter estourado o limite.
+            if not worker_summary.strip() or "max iterations reached" in worker_summary.lower():
+                worker_summary = f"[AVISO: O worker terminou sem um resumo claro. Ele realizou {tool_calls} chamadas de ferramenta e o último texto gerado foi: {out_text}]"
 
-        return f"[skill '{skill_name}' finished] Worker's summary/report:\n{worker_summary}"
+        import json
+        print(json.dumps({
+            "event": "info",
+            "data": {"message": f"Worker '{skill_name}' finalizado. Relatório:\n{worker_summary}"}
+        }), flush=True)
+
+        return f"[skill '{skill_name}' finished] Worker's summary/report:\n(Tools used by worker: {tool_calls})\n{worker_summary}"
 
     return run_skill
 

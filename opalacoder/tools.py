@@ -237,7 +237,6 @@ def _decode_escape_sequences(s: str) -> str:
     )
 
 # ─── Tools ───────────────────────────────────────────────────────────────────
-
 @as_tool(name="read_file", description="Read the contents of a file in the project workspace. Relative paths are resolved from the project directory.")
 def read_file(path: str) -> str:
     try:
@@ -293,7 +292,7 @@ def write_file(path: str, content: str) -> str:
         raise ValueError(f"Error writing {_preview(resolved)}: {e}")
 
 
-@as_tool(name="run_command", description="Execute a non-interactive shell command (e.g. ls, mkdir, grep, npm install). Runs inside the project directory. Returns stdout/stderr. NEVER run servers or infinite processes. NEVER use echo/printf/cat to write file content — use write_file instead, since shell quoting breaks with multi-line or HTML/JSON content.")
+@as_tool(name="run_command", description="Execute a non-interactive shell command (e.g. dir, mkdir, grep, npm install). Runs inside the project directory. Returns stdout/stderr. NEVER run servers or infinite processes. NEVER use echo/printf/cat to write file content — use write_file instead. NOTE: Host OS is Windows (cmd.exe), so use 'dir' instead of 'ls', etc.")
 def run_command(command: str) -> str:
     AGENT_PROGRESS.update("run_command", f"$ {_preview(command)}")
     cwd = get_project_path()
@@ -380,11 +379,13 @@ def run_interactive_command(command: str) -> str:
         
     try:
         T.warning(f"\n[Interactive Mode]: Giving terminal control to user for command: {command}")
-        subprocess.run(
+        res = subprocess.run(
             command,
             shell=True,
             cwd=cwd,
         )
+        if res.returncode != 0:
+            raise ValueError(f"Interactive command failed or was cancelled by the user (exit code {res.returncode}).")
         return "Interactive command completed. The user interacted with it successfully."
     except Exception as e:
         raise ValueError(f"Error running interactive command: {e}")
@@ -612,7 +613,9 @@ def get_available_tools():
         write_file,
         write_content_pos,
         run_command,
-        search_conversation_history,
+        run_interactive_command,
+        ask_human,
+        search_conversation_history
     ]
 
 # ─── Long-Term Memory (MemGPT-style) ──────────────────────────────────────────
