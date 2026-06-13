@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Settings, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, Settings, Trash2, RefreshCw, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import FileNode from './FileNode';
 
@@ -11,6 +11,8 @@ export default function ExplorerSidebar({
   onNewProject,
   files,
   selectedFile,
+  selectedNodes,
+  handleNodeSelect,
   handleFileSelect,
   handleNodeContextMenu,
   handleWorkspaceContextMenu,
@@ -59,6 +61,24 @@ export default function ExplorerSidebar({
                     {p.project_path}
                   </div>
                 </div>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      await fetch('/api/file/open-explorer', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ projectPath: p.project_path })
+                      });
+                    } catch (err) {
+                      console.error('Failed to open explorer:', err);
+                    }
+                  }}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0', padding: '2px 4px' }}
+                  title="Abrir pasta no Sistema Operacional"
+                >
+                  <ExternalLink size={12} />
+                </button>
                 <button
                   onClick={(e) => openEditModal(e, p)}
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0', padding: '2px 4px' }}
@@ -134,6 +154,8 @@ export default function ExplorerSidebar({
                 key={node.path}
                 node={node}
                 selectedFile={selectedFile}
+                selectedNodes={selectedNodes}
+                handleNodeSelect={handleNodeSelect}
                 handleFileSelect={handleFileSelect}
                 handleNodeContextMenu={handleNodeContextMenu}
                 draggedNode={draggedNode}

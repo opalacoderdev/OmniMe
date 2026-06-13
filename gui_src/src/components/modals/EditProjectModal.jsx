@@ -346,6 +346,19 @@ export default function EditProjectModal({
                     <ParamNumber label="Max Tool Calls (Worker)" min="1" placeholder="padrão: 40"
                       value={editingProject.model_params?.max_tool_calls}
                       onChange={e => setParam('max_tool_calls', parseNum(e.target.value))} />
+                    <ParamNumber label="Loop Detection Limit" min="1" placeholder="padrão: 3"
+                      value={editingProject.model_params?.loop_detection_limit}
+                      onChange={e => setParam('loop_detection_limit', parseNum(e.target.value))} />
+                    
+                    <div className="flex flex-col" style={{ gap: '4px', justifyContent: 'flex-end' }}>
+                      <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Loop Detection</label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                        <input type="checkbox"
+                          checked={editingProject.model_params?.loop_detection ?? true}
+                          onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, loop_detection: e.target.checked } }))} />
+                        <span style={{ fontSize: '12px', color: '#cccccc' }}>Habilitado</span>
+                      </label>
+                    </div>
                     <div className="flex flex-col" style={{ gap: '4px' }}>
                       <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Response Mode (MemGPT)</label>
                       <select

@@ -42,6 +42,7 @@ export default function App() {
   const [activeProject, setActiveProject] = useState(null);
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedNodes, setSelectedNodes] = useState(new Set());
   const [fileContent, setFileContent] = useState('');
   const [openFiles, setOpenFiles] = useState([]);
   const [fileContents, setFileContents] = useState({});
@@ -457,6 +458,24 @@ export default function App() {
   };
 
   // ── File operations ────────────────────────────────────────────────────────
+  const handleNodeSelect = (nodePath, isDirectory, e) => {
+    if (e.ctrlKey || e.metaKey) {
+      setSelectedNodes(prev => {
+        const next = new Set(prev);
+        if (next.has(nodePath)) next.delete(nodePath);
+        else next.add(nodePath);
+        return next;
+      });
+      return;
+    }
+    
+    // Normal click clears multi-selection
+    setSelectedNodes(new Set());
+    if (!isDirectory) {
+      handleFileSelect(nodePath);
+    }
+  };
+
   const handleFileSelect = async (filePath) => {
     if (!activeProject) return;
     if (selectedFile) setFileContents(prev => ({ ...prev, [selectedFile]: fileContent }));
@@ -551,7 +570,17 @@ export default function App() {
 
   const handleDeleteNode = async (node) => {
     if (!activeProject || !node) return;
-    const msg = `Tem certeza que deseja deletar o ${node.isDirectory ? 'diretório' : 'arquivo'} "${node.path}"?${node.isDirectory ? ' Todos os arquivos internos serão removidos!' : ''}`;
+    
+    // Se o nó clicado faz parte da seleção múltipla, apagamos todos da seleção
+    const nodesToDelete = (selectedNodes && selectedNodes.has(node.path)) 
+      ? Array.from(selectedNodes)
+      : [node.path];
+
+    const isMulti = nodesToDelete.length > 1;
+    const msg = isMulti 
+      ? `Tem certeza que deseja deletar ${nodesToDelete.length} itens selecionados? Todos os arquivos internos de diretórios também serão removidos!`
+      : `Tem certeza que deseja deletar o ${node.isDirectory ? 'diretório' : 'arquivo'} "${node.path}"?${node.isDirectory ? ' Todos os arquivos internos serão removidos!' : ''}`;
+
     setConfirmRequest({
       prompt: msg,
       options: ['yes', 'no'],
@@ -559,21 +588,26 @@ export default function App() {
       callback: async (value) => {
         if (value !== 'yes') return;
         try {
-          const res = await fetch('/api/file/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectPath: activeProject.project_path, filePath: node.path }) });
-          if (res.ok) {
-            addLog('info', `${node.isDirectory ? 'Diretório' : 'Arquivo'} excluído: ${node.path}`);
-            if (!node.isDirectory) {
-              setOpenFiles(prev => prev.filter(f => f !== node.path));
-              setFileContents(prev => { const n = { ...prev }; delete n[node.path]; return n; });
-              if (selectedFile === node.path) { const rem = openFiles.filter(f => f !== node.path); if (rem.length) { setSelectedFile(rem[rem.length - 1]); setFileContent(fileContents[rem[rem.length - 1]] || ''); } else { setSelectedFile(null); setFileContent(''); } }
-            } else {
-              const prefix = `${node.path}/`;
-              setOpenFiles(prev => prev.filter(f => !f.startsWith(prefix)));
-              setFileContents(prev => { const n = {}; for (const [k, v] of Object.entries(prev)) if (!k.startsWith(prefix)) n[k] = v; return n; });
-              if (selectedFile?.startsWith(prefix)) { const rem = openFiles.filter(f => !f.startsWith(prefix)); if (rem.length) { setSelectedFile(rem[rem.length - 1]); setFileContent(fileContents[rem[rem.length - 1]] || ''); } else { setSelectedFile(null); setFileContent(''); } }
+          let successCount = 0;
+          for (const pathToDelete of nodesToDelete) {
+            const res = await fetch('/api/file/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectPath: activeProject.project_path, filePath: pathToDelete }) });
+            if (res.ok) {
+              successCount++;
+              setOpenFiles(prev => prev.filter(f => f !== pathToDelete && !f.startsWith(`${pathToDelete}/`)));
+              setFileContents(prev => { const n = {}; for (const [k, v] of Object.entries(prev)) if (k !== pathToDelete && !k.startsWith(`${pathToDelete}/`)) n[k] = v; return n; });
+              if (selectedFile === pathToDelete || selectedFile?.startsWith(`${pathToDelete}/`)) {
+                // If it's the current file, we can't reliably pick the 'last' open file easily in a loop, so we just clear it.
+                setSelectedFile(null); setFileContent(''); 
+              }
+            } else { 
+              const e = await res.json(); addLog('error', `Falha ao deletar ${pathToDelete}: ${e.error}`); 
             }
+          }
+          if (successCount > 0) {
+            addLog('info', `${successCount} item(s) excluído(s) com sucesso.`);
+            setSelectedNodes(new Set()); // clear multi-selection
             await fetchFiles();
-          } else { const e = await res.json(); addLog('error', `Falha ao deletar: ${e.error}`); alert(`Erro ao deletar: ${e.error}`); }
+          }
         } catch (err) { addLog('error', `Erro ao deletar: ${err.message}`); }
       }
     });
@@ -1302,6 +1336,8 @@ export default function App() {
                 onNewProject={() => { setShowNewProjectModal(true); setModelConfigMsg(''); setNewProjModelParams({}); }}
                 files={files}
                 selectedFile={selectedFile}
+                selectedNodes={selectedNodes}
+                handleNodeSelect={handleNodeSelect}
                 handleFileSelect={handleFileSelect}
                 handleNodeContextMenu={handleNodeContextMenu}
                 handleWorkspaceContextMenu={handleWorkspaceContextMenu}

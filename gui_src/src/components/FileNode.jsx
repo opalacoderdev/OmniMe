@@ -5,6 +5,8 @@ import { Folder, File, ChevronRight, ChevronDown } from 'lucide-react';
 export default function FileNode({
   node,
   selectedFile,
+  selectedNodes,
+  handleNodeSelect,
   handleFileSelect,
   handleNodeContextMenu,
   draggedNode,
@@ -52,7 +54,10 @@ export default function FileNode({
   };
 
   const isDragOver = dragOverPath === node.path;
-  const style = isDragOver ? { backgroundColor: '#2d2d2d', border: '1px dashed #007acc' } : {};
+  let baseStyle = isDragOver ? { backgroundColor: '#2d2d2d', border: '1px dashed #007acc' } : {};
+
+  // Check if node is part of the multi-selection
+  const isMultiSelected = selectedNodes && selectedNodes.has(node.path);
 
   if (isDir) {
     return (
@@ -65,9 +70,16 @@ export default function FileNode({
         onDrop={handleDrop}
       >
         <div
-          onClick={() => setIsOpen(!isOpen)}
-          className="vscode-tree-node"
-          style={style}
+          onClick={(e) => {
+            if (e.ctrlKey || e.metaKey) {
+              handleNodeSelect(node.path, true, e);
+            } else {
+              setIsOpen(!isOpen);
+              handleNodeSelect(node.path, true, e);
+            }
+          }}
+          className={`vscode-tree-node ${isMultiSelected ? 'active' : ''}`}
+          style={baseStyle}
           onContextMenu={(e) => handleNodeContextMenu(e, node)}
         >
           {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -81,6 +93,8 @@ export default function FileNode({
                 key={child.path}
                 node={child}
                 selectedFile={selectedFile}
+                selectedNodes={selectedNodes}
+                handleNodeSelect={handleNodeSelect}
                 handleFileSelect={handleFileSelect}
                 handleNodeContextMenu={handleNodeContextMenu}
                 draggedNode={draggedNode}
@@ -96,11 +110,13 @@ export default function FileNode({
     );
   }
 
-  const isSelected = selectedFile === node.path;
+  // Also highlight if it's the opened file, unless we are multi-selecting and it's not in the set
+  const isSelected = isMultiSelected || (selectedFile === node.path && (!selectedNodes || selectedNodes.size === 0));
   return (
     <div
-      onClick={() => handleFileSelect(node.path)}
+      onClick={(e) => handleNodeSelect(node.path, false, e)}
       className={`vscode-tree-node ${isSelected ? 'active' : ''}`}
+      style={baseStyle}
       draggable="true"
       onDragStart={handleDragStart}
       onContextMenu={(e) => handleNodeContextMenu(e, node)}

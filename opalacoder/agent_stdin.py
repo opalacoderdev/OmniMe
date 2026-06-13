@@ -187,7 +187,15 @@ def wrap_tool(original_tool):
                 
         is_error = False
         try:
-            if count >= 3:
+            import opalacoder.agent_stdin
+            proj = getattr(opalacoder.agent_stdin, "current_project", None)
+            loop_enabled = True
+            loop_limit = 3
+            if proj and hasattr(proj, "model_params") and isinstance(proj.model_params, dict):
+                loop_enabled = proj.model_params.get("loop_detection", True)
+                loop_limit = proj.model_params.get("loop_detection_limit", 3)
+
+            if loop_enabled and count >= loop_limit:
                 raise ValueError(f"Loop detected: You called '{name}' with these exact arguments {count} times in a row without success. Stop repeating this tool call! If this is an interactive CLI command (like npm create), use 'run_interactive_command' instead. Otherwise, try a different approach.")
 
             result = await original_run(input_data)

@@ -511,6 +511,25 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
+        # 3.6.5. Open OS Explorer
+        elif path == '/api/file/open-explorer' and method == 'POST':
+            project_path = data.get('projectPath')
+            if not project_path or not os.path.isdir(project_path):
+                self.send_response(writer, 400, b'{"error":"Valid projectPath is required"}', "application/json")
+                return
+            try:
+                import subprocess, platform
+                system = platform.system()
+                if system == "Windows":
+                    os.startfile(project_path)
+                elif system == "Darwin":
+                    subprocess.Popen(["open", project_path])
+                else:
+                    subprocess.Popen(["xdg-open", project_path])
+                self.send_response(writer, 200, b'{"success":true}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
         # 3.7. List subdirectories of a filesystem path
         elif path == '/api/fs/dirs':
             req_path = data.get('path', os.path.expanduser('~'))
