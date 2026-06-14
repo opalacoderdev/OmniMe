@@ -105,6 +105,7 @@ export default function App() {
   const [newProjError, setNewProjError] = useState('');
 
   const [editingProject, setEditingProject] = useState(null);
+  const [editProjError, setEditProjError] = useState('');
   const [projectToDelete, setProjectToDelete] = useState(null);
   const [confirmRequest, setConfirmRequest] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -517,6 +518,7 @@ export default function App() {
 
   const handleFileSelect = async (filePath) => {
     if (!activeProject) return;
+    setIsBottomMaximized(false);
     if (selectedFile) setFileContents(prev => ({ ...prev, [selectedFile]: fileContent }));
     setOpenFiles(prev => prev.includes(filePath) ? prev : [...prev, filePath]);
     setSelectedFile(filePath);
@@ -724,6 +726,7 @@ export default function App() {
       }
     } catch (_) { }
     setModelConfigMsg('');
+    setEditProjError('');
     const newState = { name: fresh.name, project_name: fresh.project_name || fresh.name, project_path: fresh.project_path || '', model: fresh.model || '', alternative_model: fresh.alternative_model || '', mode: fresh.mode || 'auto', description: fresh.description || '', model_params: fresh.model_params || {}, api_key: fresh.api_key || '', api_base: fresh.api_base || '' };
     console.log("[DEBUG APP] Estado editingProject final que vai para a Modal:", newState);
     setEditingProject(newState);
@@ -732,6 +735,7 @@ export default function App() {
   const handleUpdateProject = async (e) => {
     e.preventDefault();
     if (!editingProject) return;
+    setEditProjError('');
 
     try {
       const res = await fetch('/api/opalacoder/update-project', {
@@ -744,8 +748,8 @@ export default function App() {
         setEditingProject(null);
         await fetchProjects();
         if (activeProject?.name === updated.name) setActiveProject(prev => ({ ...prev, ...updated }));
-      } else { const err = await res.json(); addLog('error', `Erro ao atualizar: ${err.error}`); }
-    } catch (err) { addLog('error', `Erro ao atualizar projeto: ${err.message}`); }
+      } else { const err = await res.json(); setEditProjError(err.error || 'Erro ao atualizar.'); addLog('error', `Erro ao atualizar: ${err.error}`); }
+    } catch (err) { setEditProjError(err.message || 'Erro ao atualizar projeto.'); addLog('error', `Erro ao atualizar projeto: ${err.message}`); }
   };
 
   // ── Model config ──────────────────────────────────────────────────────────
@@ -1575,6 +1579,7 @@ export default function App() {
           setEditingProject={setEditingProject}
           onClose={() => setEditingProject(null)}
           onSubmit={handleUpdateProject}
+          editProjError={editProjError}
           showAdvancedParams={showAdvancedParams}
           setShowAdvancedParams={setShowAdvancedParams}
           modelConfigMsg={modelConfigMsg}

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { Files, RefreshCw, Check, X, Maximize2, Minimize2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -38,9 +38,13 @@ export default function EditorPanel({
   const onToggleTerminalRef = useRef(onToggleTerminal);
   onToggleTerminalRef.current = onToggleTerminal;
 
+  const localEditorRef = useRef(null);
+
   // Wrap the external mount handler so we can also register the context-menu
   // actions and the Ctrl+L shortcut ourselves.
   const handleMount = (editor, monaco) => {
+    localEditorRef.current = editor;
+
     // ── Ctrl+J — toggle terminal ────────────────────────────────────────────
     editor.addCommand(
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ,
@@ -157,7 +161,16 @@ export default function EditorPanel({
 
     // Delegate to the parent-level mount handler (font-size, Ctrl+S, etc.)
     if (handleEditorDidMount) handleEditorDidMount(editor, monaco);
+    
+    // Focus the editor when it is first mounted
+    setTimeout(() => editor.focus(), 50);
   };
+
+  useEffect(() => {
+    if (localEditorRef.current && selectedFile) {
+      setTimeout(() => localEditorRef.current?.focus(), 50);
+    }
+  }, [selectedFile]);
 
   if (!selectedFile) {
     return (

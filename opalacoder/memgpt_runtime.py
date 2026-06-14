@@ -19,6 +19,8 @@ The module is additive: the legacy intent-routing path in cli.py is untouched
 until the REPL is switched over (Phase 4).
 """
 from __future__ import annotations
+from opalacoder.tools import read_file
+from opalacoder.tools import get_project_overview
 from opalacoder.tools import run_command
 import os
 from typing import Any
@@ -31,7 +33,7 @@ from agenticblocks.core.function_block import as_tool
 from . import terminal as T
 
 from .tools import (
-    ask_human,
+    #ask_human,
     read_core_memory,
     append_core_memory,
     search_conversation_history,
@@ -247,6 +249,13 @@ def build_run_skill_tool(
             "Ensure that all double quotes inside JSON string arguments are properly escaped as \\\". "
             "Do NOT write literal backslash-n ('\\n') strings in the code; write the code structure normally "
             "within the JSON string and ensure the JSON format is valid.\n"
+            "Example of calling send_message:\n"
+            "```json\n"
+            "{\n"
+            "  \"name\": \"send_message\",\n"
+            "  \"arguments\": {\"message\": \"I have finished the task. Here is the summary...\"}\n"
+            "}\n"
+            "```\n"
         )
 
         system = (
@@ -338,11 +347,11 @@ def build_run_skill_tool(
             out_text = f"[CRITICAL WORKER CRASH] A exceção não tratada interrompeu o worker: {str(e)}"
             tool_calls = "?"
 
-        if "<<NEED_INPUT>>" in out_text:
-            parts = out_text.split("<<NEED_INPUT>>", 1)
-            user_prompt = parts[1].strip() if len(parts) > 1 else "Please provide required input:"
-            user_response = ask_human(user_prompt)
-            out_text = out_text.replace("<<NEED_INPUT>>", f"[User provided: {user_response}]")
+        #if "<<NEED_INPUT>>" in out_text:
+        #    parts = out_text.split("<<NEED_INPUT>>", 1)
+        #    user_prompt = parts[1].strip() if len(parts) > 1 else "Please provide required input:"
+        #    user_response = ask_human(user_prompt)
+        #    out_text = out_text.replace("<<NEED_INPUT>>", f"[User provided: {user_response}]")
 
         # Return the summary of what the worker did to MemGPT
         worker_summary = "\n".join(getattr(memgpt, "_current_worker_messages", []))
@@ -450,7 +459,7 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         name="chat_orchestrator",
         system_prompt=system_prompt,
         model=model,
-        tools=[read_core_memory, append_core_memory, search_conversation_history, web_search],
+        tools=[read_core_memory, read_file, get_project_overview, append_core_memory, search_conversation_history, web_search],
         model_kwargs=_llm_kwargs,
         max_heartbeats=_agent_params.get("max_heartbeats", get_agent_max_heartbeats("memgpt", 20)),
         max_context_tokens=_agent_params.get("max_context_tokens", _llm_kwargs.get("num_ctx", 8192)),

@@ -7,6 +7,8 @@ description: Executes command-line operations to read, create, insert text, remo
 
 This skill provides the sub-agent with tools to manipulate files and directories securely, restricted to the project directory.
 
+**FINDING FILES (CRITICAL):** Do not try to guess where files are located in the project. Always use tools like `get_project_overview` to find the correct file paths. As a last resort, if you cannot find the file, stop your turn and use the `send_message` tool to ask the user for the file's location.
+
 ## AVAILABLE TOOLS
 
         get_project_overview,
@@ -73,10 +75,10 @@ exec("uv pip install django")
 exec("uv init -p python3.9")
 ```
 
-6. get_project_overview: use get_project_overview for directly access project tree of files.
+6. get_project_overview: use get_project_overview for directly access project tree of files. Try with a minimum depth of 5.
 Example:
 ```
-get_project_overview()
+get_project_overview(5)
 ```
 
 7. search_conversation_history: use search_conversation_history for directly search conversation history without shell. For example:

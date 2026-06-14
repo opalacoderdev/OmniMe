@@ -27,6 +27,7 @@ export default function EditProjectModal({
   setEditingProject,
   onClose,
   onSubmit,
+  editProjError,
   showAdvancedParams,
   setShowAdvancedParams,
   modelConfigMsg,
@@ -385,6 +386,12 @@ export default function EditProjectModal({
               </div>
             )}
           </div>
+
+          {editProjError && (
+            <div style={{ color: '#f48771', fontSize: '11px', marginTop: '4px', whiteSpace: 'pre-wrap' }}>
+              ⚠️ {editProjError}
+            </div>
+          )}
 
           {/* Actions */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '12px', borderTop: '1px solid #3c3c3c', marginTop: '4px' }}>
