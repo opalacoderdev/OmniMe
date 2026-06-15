@@ -383,40 +383,20 @@ def run_python_script(script_path: str, args: str = "") -> str:
         raise ValueError(f"Error running script: {e}")
 
 @as_tool(name="run_interactive_command", description="Run a command that requires user interaction (e.g. npm create, interactive scripts, prompts) directly in the GUI Terminal tab. Use this ONLY when a command needs human choices or requires a PTY.")
-def run_interactive_command(command: str) -> str:
-    import urllib.request
-    import json
-    AGENT_PROGRESS.update("interactive_cmd", f"$ {_preview(command)}")
+async def run_interactive_command(command: str) -> str:
+    import uuid
+    import opalacoder.terminal as T
     
-    project_path = get_project_path()
-    
-    # Send the command to the active terminal via IDE Server API
-    try:
-        req = urllib.request.Request(
-            "http://127.0.0.1:3000/api/terminal/input",
-            data=json.dumps({"action": "input", "text": command + "\n", "projectPath": project_path}).encode('utf-8'),
-            headers={'Content-Type': 'application/json'},
-            method='POST'
-        )
-        with urllib.request.urlopen(req, timeout=5) as response:
-            if response.status != 200:
-                T.warning("Failed to inject command into IDE Terminal (non-200 response).")
-    except Exception as e:
-        T.warning(f"Error communicating with IDE Terminal API: {e}")
-        # We don't abort completely because ask_human will still pop up and they could run it manually if needed.
+    AGENT_PROGRESS.update("interactive_cmd", _preview(command))
+    term_id = "temp_" + str(uuid.uuid4())[:8]
 
-    # Now pause the agent and ask the human to confirm when it's done.
-    # ask_human uses the generic UI prompt modal which halts execution here.
-    question = (
-        f"Enviei o seguinte comando para execução na aba TERMINAL da IDE:\n\n"
-        f"    {command}\n\n"
-        f"Por favor, abra a aba TERMINAL no painel inferior, acompanhe a execução e "
-        f"interaja com o prompt se necessário.\n"
-        f"Quando o comando terminar (ou se ocorrer algum erro), descreva o resultado abaixo "
-        f"ou apenas digite 'pronto' para eu continuar."
-    )
+    # Trigger the interactive terminal modal in the UI
+    res = await T.a_interactive_terminal(command, term_id)
     
-    return ask_human(question)
+    if res and res.lower() not in ("cancel", "no", "false"):
+        return f"SUCCESS: The interactive command '{command}' finished successfully according to the user."
+    else:
+        return f"FAILURE: The user indicated that the interactive command '{command}' failed or was cancelled. Please ask the user for details if needed."
 
 @as_tool(name="search_code", description="Search for a specific string across all files using grep. Searches inside the project directory by default.")
 def search_code(query: str, path: str = ".") -> str:
@@ -449,18 +429,15 @@ def search_code(query: str, path: str = ".") -> str:
         "or any standard development task. Just do those things directly."
     )
 )
-def ask_human(question: str) -> str:
+async def ask_human(question: str) -> str:
     AGENT_PROGRESS.update("ask_human", _preview(question))
     
-    if getattr(AGENT_PROGRESS, "live_context", None):
-        AGENT_PROGRESS.live_context.stop()
-        
-    try:
-        T.warning(f"\n[Agent requires input]: {question}")
-        return T.ask("Your response")
-    finally:
-        if getattr(AGENT_PROGRESS, "live_context", None):
-            AGENT_PROGRESS.live_context.start()
+    import opalacoder.terminal as T
+    ans = await T.aask(question)
+    
+    if not ans:
+        return "The user did not provide an answer or cancelled the prompt."
+    return f"The user responded: {ans}"
 
 
 @as_tool(

@@ -584,6 +584,71 @@ async def handle_run(data: dict):
     if agent_type == "chat_orchestrator":
         tools_mod.TURN_ACHIEVEMENTS = ""
 
+    import opalacoder.terminal as T
+    orig_async_confirm_hook = getattr(T, "_async_confirm_hook", None)
+    orig_async_ask_hook = getattr(T, "_async_ask_hook", None)
+    loop = asyncio.get_event_loop()
+    import uuid
+
+    async def _handle_run_confirm_hook(prompt_text: str, default: bool = True) -> bool:
+        req_id = str(uuid.uuid4())
+        fut = loop.create_future()
+        _gui_input_pending[req_id] = fut
+        print_event("input_request", {
+            "id": req_id,
+            "prompt": prompt_text,
+            "type": "confirm",
+            "options": ["yes", "no"],
+            "default": "yes" if default else "no"
+        })
+        try:
+            raw = await asyncio.wait_for(asyncio.shield(fut), timeout=86400.0) # 24h wait
+            return raw.strip().lower() in ("yes", "y", "s", "sim", "true", "1")
+        except asyncio.TimeoutError:
+            return default
+        finally:
+            _gui_input_pending.pop(req_id, None)
+
+    async def _handle_run_ask_hook(prompt_text: str) -> str:
+        req_id = str(uuid.uuid4())
+        fut = loop.create_future()
+        _gui_input_pending[req_id] = fut
+        print_event("input_request", {
+            "id": req_id,
+            "prompt": prompt_text,
+            "type": "ask"
+        })
+        try:
+            raw = await asyncio.wait_for(asyncio.shield(fut), timeout=86400.0) # 24h wait
+            return str(raw).strip()
+        except asyncio.TimeoutError:
+            return ""
+        finally:
+            _gui_input_pending.pop(req_id, None)
+
+    async def _handle_run_interactive_terminal_hook(command: str, term_id: str) -> str:
+        req_id = str(uuid.uuid4())
+        fut = loop.create_future()
+        _gui_input_pending[req_id] = fut
+        print_event("input_request", {
+            "id": req_id,
+            "type": "interactive_terminal",
+            "command": command,
+            "term_id": term_id,
+            "prompt": "Interactive terminal spawned"
+        })
+        try:
+            raw = await asyncio.wait_for(asyncio.shield(fut), timeout=86400.0) # 24h wait
+            return str(raw).strip()
+        except asyncio.TimeoutError:
+            return ""
+        finally:
+            _gui_input_pending.pop(req_id, None)
+
+    T._async_confirm_hook = _handle_run_confirm_hook
+    T._async_ask_hook = _handle_run_ask_hook
+    T._async_interactive_terminal_hook = _handle_run_interactive_terminal_hook
+
     try:
         try:
             with apply_meta_params(agent, _meta_overrides):
@@ -613,7 +678,8 @@ async def handle_run(data: dict):
             user_msg = _friendly_llm_error(e, current_project)
             print_event("error", {"message": user_msg, "trace": err_msg})
     finally:
-        pass
+        T._async_confirm_hook = orig_async_confirm_hook
+        T._async_ask_hook = orig_async_ask_hook
 
     print_event("agent_finished", {})
 

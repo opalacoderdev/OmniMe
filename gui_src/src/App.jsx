@@ -26,6 +26,8 @@ import NewProjectModal from './components/modals/NewProjectModal';
 import EditProjectModal from './components/modals/EditProjectModal';
 import SettingsModal from './components/modals/SettingsModal';
 import ConfirmModal from './components/modals/ConfirmModal';
+import InteractiveTerminalModal from './components/modals/InteractiveTerminalModal';
+import AskModal from './components/modals/AskModal';
 import HardwareModal from './components/modals/HardwareModal';
 import OnboardingModal from './components/modals/OnboardingModal';
 import DirPickerModal from './components/modals/DirPickerModal';
@@ -977,8 +979,10 @@ export default function App() {
   const handleInterruptAgent = async () => {
     try {
       const res = await fetch('/api/opalacoder/interrupt', { method: 'POST' });
-      if (res.ok) addLog('info', 'Sinal de interrupção enviado ao agente.');
-      else addLog('error', 'Falha ao enviar sinal de interrupção.');
+      if (res.ok) {
+        addLog('info', 'Sinal de interrupção enviado ao agente.');
+        setConfirmRequest(null);
+      } else addLog('error', 'Falha ao enviar sinal de interrupção.');
     } catch (err) { addLog('error', `Erro ao interromper: ${err.message}`); }
   };
 
@@ -1104,9 +1108,13 @@ export default function App() {
           }
         }
         break;
+      case 'cancelled':
+        addLog('info', 'Execução cancelada.');
+        setConfirmRequest(null);
+        break;
       case 'agent_finished': addLog('info', 'Processamento concluído.'); break;
       case 'input_request':
-        setConfirmRequest({ id: data.id, prompt: data.prompt, options: data.options || ['yes', 'no'], default: data.default || 'yes' });
+        setConfirmRequest({ ...data, id: data.id, prompt: data.prompt, options: data.options || ['yes', 'no'], default: data.default || 'yes', type: data.type || 'confirm' });
         addLog('info', `🔔 Aguardando confirmação: ${data.prompt}`);
         break;
       case 'error': addLog('error', data.message); setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Erro do Agente: ${data.message}` }]); break;
@@ -1137,7 +1145,7 @@ export default function App() {
         });
         const result = await res.json();
         if (result.status === 'confirm') {
-          setConfirmRequest({ id: result.id, prompt: result.prompt, options: result.options || ['yes', 'no'], default: result.default || 'yes', isSlashCommand: true });
+          setConfirmRequest({ id: result.id, prompt: result.prompt, options: result.options || ['yes', 'no'], default: result.default || 'yes', type: result.type || 'confirm', isSlashCommand: true });
           addLog('info', `🔔 Aguardando confirmação: ${result.prompt}`);
         } else if (result.status === 'done') {
           setChatMessages(prev => [...prev, { role: 'assistant', content: (result.messages || []).join('\n') || 'Comando executado.' }]);
@@ -1752,7 +1760,13 @@ export default function App() {
         />
       )}
 
-      <ConfirmModal confirmRequest={confirmRequest} onConfirm={sendConfirmResponse} />
+      {confirmRequest && confirmRequest.type === 'interactive_terminal' ? (
+        <InteractiveTerminalModal request={confirmRequest} onConfirm={sendConfirmResponse} activeProject={activeProject} />
+      ) : confirmRequest && confirmRequest.type === 'ask' ? (
+        <AskModal askRequest={confirmRequest} onConfirm={sendConfirmResponse} />
+      ) : confirmRequest ? (
+        <ConfirmModal confirmRequest={confirmRequest} onConfirm={sendConfirmResponse} />
+      ) : null}
 
       <DeleteProjectModal
         projectToDelete={projectToDelete}

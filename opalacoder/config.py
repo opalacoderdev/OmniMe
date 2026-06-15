@@ -138,7 +138,7 @@ _NON_LITELLM_FIELDS = {
     # LLMAgentBlock params
     "max_iterations", "max_tool_calls", "on_max_iterations",
     # Shared
-    "debug", "use_shared_router",
+    "debug", "use_shared_router", "loop_detection", "loop_detection_limit",
 }
 
 # Agent constructor params that can be overridden per-project via model_params.
@@ -208,7 +208,7 @@ def get_agent_llm_kwargs(agent_name: str) -> dict:
     """Return merged litellm kwargs for *agent_name*.
 
     Priority (highest first):
-      1. Project-specific model_params (dynamically merged if session exists)
+      1. Project-specific model_params (or worker_model_params if worker) (dynamically merged if session exists)
       2. Per-agent override in agents.yaml ``agents.<name>``
       3. Global ``llm_defaults`` in agents.yaml
       4. Hard-coded defaults above
@@ -221,7 +221,10 @@ def get_agent_llm_kwargs(agent_name: str) -> dict:
     try:
         from .tools import _PROJECT_SESSION
         if _PROJECT_SESSION:
-            if hasattr(_PROJECT_SESSION, "model_params") and _PROJECT_SESSION.model_params:
+            if agent_name == "worker" and hasattr(_PROJECT_SESSION, "worker_model_params") and _PROJECT_SESSION.worker_model_params:
+                clean_params = {k: v for k, v in _PROJECT_SESSION.worker_model_params.items() if v is not None}
+                merged.update(clean_params)
+            elif hasattr(_PROJECT_SESSION, "model_params") and _PROJECT_SESSION.model_params:
                 clean_params = {k: v for k, v in _PROJECT_SESSION.model_params.items() if v is not None}
                 merged.update(clean_params)
             
@@ -262,7 +265,7 @@ def resolve_model_for_thinking(model: str, llm_kwargs: dict) -> str:
     return model
 
 
-def get_project_agent_params() -> dict:
+def get_project_agent_params(agent_name: str = "memgpt") -> dict:
     """Return agent constructor overrides stored in the current project's model_params.
 
     Only keys that belong to _AGENT_PARAM_KEYS are returned; LiteLLM kwargs are excluded.
@@ -270,8 +273,11 @@ def get_project_agent_params() -> dict:
     """
     try:
         from .tools import _PROJECT_SESSION
-        if _PROJECT_SESSION and hasattr(_PROJECT_SESSION, "model_params") and _PROJECT_SESSION.model_params:
-            return {k: v for k, v in _PROJECT_SESSION.model_params.items() if k in _AGENT_PARAM_KEYS and v is not None}
+        if _PROJECT_SESSION:
+            if agent_name == "worker" and hasattr(_PROJECT_SESSION, "worker_model_params") and _PROJECT_SESSION.worker_model_params:
+                return {k: v for k, v in _PROJECT_SESSION.worker_model_params.items() if k in _AGENT_PARAM_KEYS and v is not None}
+            elif hasattr(_PROJECT_SESSION, "model_params") and _PROJECT_SESSION.model_params:
+                return {k: v for k, v in _PROJECT_SESSION.model_params.items() if k in _AGENT_PARAM_KEYS and v is not None}
     except Exception:
         pass
     return {}

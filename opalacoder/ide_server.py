@@ -230,6 +230,7 @@ class AsyncHTTPServer:
         self.static_dir = static_dir
         self.active_queues = []
         self.active_terminal = None
+        self.temp_terminals = {}
         self.active_agent_task = None
 
     async def start(self):
@@ -1323,32 +1324,36 @@ class AsyncHTTPServer:
 
         # 7c. Terminal stream
         elif path == '/api/terminal/stream':
+            term_id = query.get('term_id', ['main'])[0]
             project_path = query.get('projectPath', [None])[0]
-            if not project_path:
-                self.send_response(writer, 400, b'{"error":"projectPath query parameter is required"}', "application/json")
-                return
-
-            if not self.active_terminal or self.active_terminal.project_path != project_path or not self.active_terminal.is_running:
-                if self.active_terminal:
+            
+            if term_id == 'main':
+                if not self.active_terminal or (project_path and self.active_terminal.project_path != project_path) or not self.active_terminal.is_running:
+                    if self.active_terminal:
+                        try:
+                            self.active_terminal.close()
+                        except:
+                            pass
+                    if not project_path or not os.path.exists(project_path):
+                        self.send_response(writer, 400, b'{"error":"Project path required"}', "application/json")
+                        return
+                    from opalacoder.terminal_manager import TerminalSession
                     try:
-                        self.active_terminal.close()
-                    except:
-                        pass
-                if not os.path.exists(project_path):
-                    self.send_response(writer, 400, b'{"error":"Project path does not exist"}', "application/json")
+                        self.active_terminal = TerminalSession(project_path)
+                        self.active_terminal.start_reading(asyncio.get_running_loop())
+                    except Exception as e:
+                        import traceback
+                        print(f"Failed to start terminal: {e}\n{traceback.format_exc()}")
+                        with open("terminal_error.log", "a", encoding="utf-8") as f:
+                            f.write(f"Failed to start terminal: {e}\n{traceback.format_exc()}\n")
+                        self.send_response(writer, 500, f'{{"error": "{str(e)}"}}'.encode('utf-8'), "application/json")
+                        return
+                active_term = self.active_terminal
+            else:
+                if term_id not in self.temp_terminals:
+                    self.send_response(writer, 404, b'{"error":"Temp terminal not found"}', "application/json")
                     return
-
-                from opalacoder.terminal_manager import TerminalSession
-                try:
-                    self.active_terminal = TerminalSession(project_path)
-                    self.active_terminal.start_reading(asyncio.get_running_loop())
-                except Exception as e:
-                    import traceback
-                    print(f"Failed to start terminal: {e}\n{traceback.format_exc()}")
-                    with open("terminal_error.log", "a", encoding="utf-8") as f:
-                        f.write(f"Failed to start terminal: {e}\n{traceback.format_exc()}\n")
-                    self.send_response(writer, 500, f'{{"error": "{str(e)}"}}'.encode('utf-8'), "application/json")
-                    return
+                active_term = self.temp_terminals[term_id]
 
             headers = (
                 "HTTP/1.1 200 OK\r\n"
@@ -1361,7 +1366,7 @@ class AsyncHTTPServer:
             await writer.drain()
 
             term_queue = asyncio.Queue()
-            self.active_terminal.queues.append(term_queue)
+            active_term.queues.append(term_queue)
 
             def send_data(data_bytes: bytes):
                 import base64
@@ -1380,8 +1385,8 @@ class AsyncHTTPServer:
             except Exception as e:
                 print(f"Terminal stream error: {e}")
             finally:
-                if self.active_terminal and term_queue in self.active_terminal.queues:
-                    self.active_terminal.queues.remove(term_queue)
+                if active_term and term_queue in active_term.queues:
+                    active_term.queues.remove(term_queue)
                 try:
                     writer.close()
                 except:
@@ -1389,32 +1394,72 @@ class AsyncHTTPServer:
 
         # 7d. Terminal input (keys, resize)
         elif path == '/api/terminal/input' and method == 'POST':
+            term_id = data.get("term_id", "main")
             project_path = data.get("projectPath")
-            if not self.active_terminal or not self.active_terminal.is_running:
-                if project_path:
-                    from opalacoder.terminal_manager import TerminalSession
-                    try:
-                        self.active_terminal = TerminalSession(project_path)
-                        self.active_terminal.start_reading(asyncio.get_running_loop())
-                    except Exception as e:
-                        self.send_response(writer, 500, f'{{"error": "{str(e)}"}}'.encode('utf-8'), "application/json")
+            
+            if term_id == "main":
+                if not self.active_terminal or not self.active_terminal.is_running:
+                    if project_path:
+                        from opalacoder.terminal_manager import TerminalSession
+                        try:
+                            self.active_terminal = TerminalSession(project_path)
+                            self.active_terminal.start_reading(asyncio.get_running_loop())
+                        except Exception as e:
+                            self.send_response(writer, 500, f'{{"error": "{str(e)}"}}'.encode('utf-8'), "application/json")
+                            return
+                    else:
+                        self.send_response(writer, 400, b'{"error":"No active terminal session"}', "application/json")
                         return
-                else:
-                    self.send_response(writer, 400, b'{"error":"No active terminal session"}', "application/json")
+                active_term = self.active_terminal
+            else:
+                if term_id not in self.temp_terminals:
+                    self.send_response(writer, 404, b'{"error":"Temp terminal not found"}', "application/json")
                     return
+                active_term = self.temp_terminals[term_id]
 
             action = data.get("action", "input")
             if action == "input":
                 text = data.get("text", "")
-                self.active_terminal.write(text)
+                active_term.write(text)
                 self.send_response(writer, 200, b'{"ok":true}', "application/json")
             elif action == "resize":
                 cols = data.get("cols", 80)
                 rows = data.get("rows", 24)
-                self.active_terminal.resize(cols, rows)
+                active_term.resize(cols, rows)
                 self.send_response(writer, 200, b'{"ok":true}', "application/json")
             else:
                 self.send_response(writer, 400, b'{"error":"Invalid action"}', "application/json")
+                
+        elif path == '/api/terminal/temp/start' and method == 'POST':
+            term_id = data.get("term_id")
+            command = data.get("command")
+            project_path = data.get("projectPath")
+            
+            if not term_id or not command or not project_path:
+                self.send_response(writer, 400, b'{"error":"term_id, command and projectPath required"}', "application/json")
+                return
+                
+            from opalacoder.terminal_manager import TerminalSession
+            try:
+                term = TerminalSession(project_path)
+                term.start_reading(asyncio.get_running_loop())
+                self.temp_terminals[term_id] = term
+                
+                # Write command to start it
+                term.write(command + "\r")
+                self.send_response(writer, 200, b'{"ok":true}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, f'{{"error": "{str(e)}"}}'.encode('utf-8'), "application/json")
+                
+        elif path == '/api/terminal/temp/kill' and method == 'POST':
+            term_id = data.get("term_id")
+            if term_id in self.temp_terminals:
+                try:
+                    self.temp_terminals[term_id].close()
+                except:
+                    pass
+                del self.temp_terminals[term_id]
+            self.send_response(writer, 200, b'{"ok":true}', "application/json")
 
         # 7e. Git status
         elif path == '/api/git/status':

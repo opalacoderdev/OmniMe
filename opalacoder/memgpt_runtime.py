@@ -338,47 +338,57 @@ def build_run_skill_tool(
         #print("BEGIN SYSTEM_PROMPT::::: LLMAgentBlock ")
         #print(">>> ", system)
         #print("END SYSTEM_PROMPT::::::: LLMAgentBlock ")
+        from .config import get_project_agent_params
+        worker_agent_params = get_project_agent_params("worker")
+
         sub_agent = LLMAgentBlock(
             name=f"skill_{skill_name}",
             system_prompt=system,
             model=model,
             tools=tools,
             model_kwargs=worker_kwargs,
-            max_iterations=None,
-            max_tool_calls=40,
+            max_iterations=worker_agent_params.get("max_iterations", None),
+            max_tool_calls=worker_agent_params.get("max_tool_calls", 40),
+            loop_detection=worker_agent_params.get("loop_detection", True),
+            loop_detection_limit=worker_agent_params.get("loop_detection_limit", 3),
             termination_tools=["send_message"],
         )
 
-        if hasattr(memgpt, "on_thinking") and memgpt.on_thinking:
-            from opalacoder.agent_stdin import print_event
-            def _worker_on_thinking(chunk: str) -> None:
-                print_event("thought", {"content": chunk, "agent": f"worker:{skill_name}"})
+        from opalacoder.agent_stdin import print_event
+        
+        if worker_kwargs.get("stream", False):
+            if worker_kwargs.get("think", False):
+                def _worker_on_thinking(chunk: str) -> None:
+                    print_event("thought", {"content": chunk, "agent": f"worker:{skill_name}"})
+                sub_agent.on_thinking = _worker_on_thinking
+                
             def _worker_on_chunk(chunk: str) -> None:
                 print_event("stream_chunk", {"content": chunk, "agent": f"worker:{skill_name}"})
-            def _worker_on_iteration(_step: int, messages: list) -> None:
-                last = messages[-1] if messages else {}
-                content = last.get("content") or ""
-                
-                if isinstance(content, str) and "SYSTEM ALERT:" in content and "JSON string in plain text" in content:
-                    if "Example of a valid tool call" not in content:
-                        example = (
-                            "\n\nExample of a valid tool call:\n"
-                            "```json\n"
-                            "{\n"
-                            "  \"name\": \"send_message\",\n"
-                            "  \"arguments\": {\"message\": \"I am fixing my format now.\"}\n"
-                            "}\n"
-                            "```\n"
-                        )
-                        last["content"] = content + example
-                        content = last["content"]
-
-                if content:
-                    print_event("reflection", {"content": str(content), "agent": f"worker:{skill_name}"})
-
-            sub_agent.on_thinking = _worker_on_thinking
             sub_agent.on_chunk = _worker_on_chunk
-            sub_agent.on_iteration = _worker_on_iteration
+
+        # We always want on_iteration to run for reflection and format fixing
+        def _worker_on_iteration(_step: int, messages: list) -> None:
+            last = messages[-1] if messages else {}
+            content = last.get("content") or ""
+            
+            if isinstance(content, str) and "SYSTEM ALERT:" in content and "JSON string in plain text" in content:
+                if "Example of a valid tool call" not in content:
+                    example = (
+                        "\n\nExample of a valid tool call:\n"
+                        "```json\n"
+                        "{\n"
+                        "  \"name\": \"send_message\",\n"
+                        "  \"arguments\": {\"message\": \"I am fixing my format now.\"}\n"
+                        "}\n"
+                        "```\n"
+                    )
+                    last["content"] = content + example
+                    content = last["content"]
+
+            if content:
+                print_event("reflection", {"content": str(content), "agent": f"worker:{skill_name}"})
+
+        sub_agent.on_iteration = _worker_on_iteration
 
         os.environ.setdefault(
             "OPALACODER_ROOT",

@@ -169,6 +169,26 @@ async def aconfirm(prompt: str, default: bool = True) -> bool:
     return await loop.run_in_executor(None, confirm, prompt, default)
 
 
+# Optional async hook for GUI mode text input.
+_async_ask_hook = None  # type: Callable[[str], Coroutine[Any, Any, str]] | None
+
+async def aask(prompt: str) -> str:
+    """Async-capable ask: delegates to GUI hook if available, sync otherwise."""
+    if _async_ask_hook is not None:
+        return await _async_ask_hook(prompt)
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, ask, prompt)
+
+# Optional async hook for interactive embedded terminal
+_async_interactive_terminal_hook = None
+
+async def a_interactive_terminal(command: str, term_id: str) -> str:
+    if _async_interactive_terminal_hook is not None:
+        return await _async_interactive_terminal_hook(command, term_id)
+    return "Interactive terminal is not supported in this environment."
+
+
 def choose(prompt: str, options: list[str]) -> str:
     """Let user pick from a numbered list; returns chosen option string."""
     from rich.markup import escape
