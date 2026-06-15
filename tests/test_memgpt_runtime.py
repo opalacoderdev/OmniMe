@@ -1,7 +1,7 @@
 """Tests for the MemGPT runtime (skills-oriented architecture, docs/specs/02, 06).
 
 Verifies assembly and wiring WITHOUT invoking any LLM:
-  - resolve_skill_model maps default/alternative/explicit/absent correctly
+  - resolve_skill_model maps default/worker/explicit/absent correctly
   - build_chat_orchestrator produces a framework MemGPTAgentBlock with run_skill
     and the memory tools, and embeds Level-1 skill metadata in the system prompt
   - the intercepted send_message records into the MemGPT internal history
@@ -11,7 +11,7 @@ Verifies assembly and wiring WITHOUT invoking any LLM:
 import asyncio
 import os
 
-import opalacoder.orchestrator  # noqa: F401  (resolve circular import order)
+
 from opalacoder.memgpt_runtime import (
     resolve_skill_model,
     build_chat_orchestrator,
@@ -19,7 +19,7 @@ from opalacoder.memgpt_runtime import (
     make_intercepted_send_message,
 )
 from opalacoder.project import ProjectData
-from opalacoder.config import DEFAULT_MODEL, ALTERNATIVE_MODEL
+from opalacoder.config import DEFAULT_MODEL, WORKER_MODEL
 
 
 def _project(tmp_path):
@@ -33,9 +33,11 @@ def test_resolve_skill_model():
     # "default" → the project's main model (falls back to DEFAULT_MODEL when unset).
     assert resolve_skill_model({"model": "default"}, "ollama/x") == "ollama/x"
     assert resolve_skill_model({"model": "default"}, None) == DEFAULT_MODEL
-    # "alternative" → the project's alternative model, else the global default.
-    assert resolve_skill_model({"model": "alternative"}, "ollama/x") == ALTERNATIVE_MODEL
-    assert resolve_skill_model({"model": "alternative"}, "ollama/x", "gemini/proj-alt") == "gemini/proj-alt"
+    # "worker" → the project's worker model, else the main project model.
+    assert resolve_skill_model({"model": "worker"}, "ollama/x") == "ollama/x"
+    assert resolve_skill_model({"model": "worker"}, "ollama/x", "gemini/proj-worker") == "gemini/proj-worker"
+    # "alternative" is also supported for backwards compatibility.
+    assert resolve_skill_model({"model": "alternative"}, "ollama/x", "gemini/proj-worker") == "gemini/proj-worker"
     # Explicit id used as-is; absent → project model.
     assert resolve_skill_model({"model": "ollama/custom"}, "ollama/x") == "ollama/custom"
     assert resolve_skill_model({"model": ""}, "ollama/proj") == "ollama/proj"
@@ -85,16 +87,6 @@ def test_run_skill_unknown_skill_returns_error(tmp_path):
     assert "[ERROR]" in result
     assert "not found" in result
 
-
-def test_run_skill_accepts_intent_param(tmp_path):
-    """run_skill exposes an intent param (MemGPT passes newfeat/bugfix)."""
-    import inspect
-    m = build_chat_orchestrator(_project(tmp_path), None)
-    run_skill = build_run_skill_tool(m, str(tmp_path), "ollama/proj")
-    raw = getattr(run_skill, "_func", None) or run_skill
-    params = inspect.signature(raw).parameters
-    assert "intent" in params
-    assert params["intent"].default == "newfeat"
 
 
 def test_build_chat_orchestrator_scopes_project_path(tmp_path):

@@ -42,7 +42,7 @@ from .tools import (
 )
 from .config import (
     DEFAULT_MODEL,
-    ALTERNATIVE_MODEL,
+    WORKER_MODEL,
     get_agent_llm_kwargs,
     get_agent_max_heartbeats,
     get_agent_model,
@@ -101,20 +101,19 @@ def _apply_modelconfig_provider(model: str, project) -> str:
 # ---------------------------------------------------------------------------
 
 def resolve_skill_model(skill_meta: dict, project_model: str | None,
-                        project_alt: str | None = None) -> str:
+                        project_worker: str | None = None) -> str:
     """Resolve the model for a skill's sub-agent from the SKILL.md `model` field.
 
-    "default" → the project's main model; "alternative" → the project's alternative
-    model (or the global ALTERNATIVE_MODEL when the project has none); an explicit
-    litellm id is used as-is; absent → the project's model (or DEFAULT_MODEL).
+    "default" → the project's main model; "worker" (or "alternative") → the project's worker
+    model (or the project's main model when the worker model is empty).
     """
     raw = (skill_meta.get("model") or "").strip()
     if not raw:
         return project_model or DEFAULT_MODEL
     if raw == "default":
         return project_model or DEFAULT_MODEL
-    if raw == "alternative":
-        return project_alt or ALTERNATIVE_MODEL
+    if raw in ("alternative", "worker"):
+        return project_worker or project_model or DEFAULT_MODEL
     return raw
 
 
@@ -135,7 +134,13 @@ def make_intercepted_send_message(memgpt: MemGPTAgentBlock, skill_name: str):
         name="send_message",
         description=(
             "Send a message to the user. Call this to report progress or the final "
-            "result. Provide a clear, past-tense summary when the task is complete."
+            "result. Provide a clear, past-tense summary when the task is complete.\n"
+            "CRITICAL WARNING: This tool ONLY sends text to the user. It DOES NOT "
+            "modify any files or execute any code. Do NOT use this tool to pretend "
+            "you have applied a fix. If you decided to write or modify code, you MUST "
+            "use the file modification tools (e.g. write_file) or terminal tools "
+            "BEFORE calling send_message. NEVER put the code to be changed inside a "
+            "send_message call if your goal was to apply it. Only report success AFTER the tools have returned success."
         ),
     )
     def send_message(message: str) -> str:
@@ -164,7 +169,7 @@ def build_run_skill_tool(
     memgpt: MemGPTAgentBlock,
     project_path: str,
     project_model: str | None = None,
-    project_alt: str | None = None,
+    project_worker: str | None = None,
     _project_ref=None,
     _store_ref=None,
 ):
@@ -188,7 +193,7 @@ def build_run_skill_tool(
             "receive the recent chat history as well. The tool returns a summary of what the worker did."
         ),
     )
-    async def run_skill(skill_name: str, context: str, intent: str = "newfeat") -> str:
+    async def run_skill(skill_name: str, context: str) -> str:
         # Re-assert project scope so the sub-agent's file/terminal tools act inside
         # this project even if a /load changed the global context since build time.
         if _project_ref is not None:
@@ -208,13 +213,12 @@ def build_run_skill_tool(
         if meta is None:
             return f"[ERROR] skill '{skill_name}' has no valid SKILL.md."
 
-        intent = intent if intent in ("newfeat", "bugfix") else "newfeat"
-        model = resolve_skill_model(meta, project_model, project_alt)
+        model = resolve_skill_model(meta, project_model, project_worker)
 
         # Write the request to a fixed temp file so the sub-agent never has to
         # shell-quote a complex request (parens/quotes in the request would break
         # `run_command`'s shell=True). The model's command becomes paren-free:
-        #   python <abs>/run_workflow.py --request-file <path> --intent <intent>
+        #   python <abs>/run_workflow.py --request-file <path>
         request_file = ""
         try:
             _staging = os.path.join(project_path, ".opalacoder")
@@ -242,12 +246,13 @@ def build_run_skill_tool(
                 f"\nThe user's request has been written to this file:\n  {request_file}\n"
                 f"When a script needs the request, pass it as --request-file {request_file} "
                 f"(do NOT type the request text into the command — use the file).\n"
-                f"The intent is: {intent} (pass it as --intent {intent}).\n"
             )
         json_formatting_instruction = (
             "\nCRITICAL: When calling tools (like write_file), you must format your response as a valid JSON block. "
             "Ensure that all double quotes inside JSON string arguments are properly escaped as \\\". "
-            "Do NOT write literal backslash-n ('\\n') strings in the code; write the code structure normally "
+            "Do NOT write literal backslash-n ('\\n') strings in the code; write the code structure normally.\n"
+            "WARNING: If you receive a SYSTEM ALERT about violating the tool-only rule, it means you outputted plain text instead of a JSON tool call. "
+            "To correct this, DO NOT use send_message to apologize or pretend the fix is done. You MUST re-issue the proper action tool call (e.g., write_file, run_command) in proper JSON format."
             "within the JSON string and ensure the JSON format is valid.\n"
             "Example of calling send_message:\n"
             "```json\n"
@@ -283,11 +288,28 @@ def build_run_skill_tool(
             f"- Calling send_message OR returning a final text response terminates your execution immediately.\n"
             f"- NEVER output 'I will do X now' and stop. If you need to do X, do it RIGHT NOW using your tools in this exact same turn. Only terminate when the entire requested task is completely finished, or if you are completely blocked and need human input.\n"
             f"- If your task requires using multiple tools (like reading files, running commands, or writing code), do not call send_message first. Use the tools to complete the work, and then call send_message to report the final result.\n"
+            f"\n--- EXPECTED BEHAVIOR EXAMPLES ---\n"
+            f"Example 1: The user wants you to fix a bug in auth.py.\n"
+            f"  [WRONG]: You generate a plain text response or send_message saying 'I found the bug! Here is the corrected code: ```...``` Please update it.' (This is hallucinating a fix without doing the work).\n"
+            f"  [CORRECT]: You use the `write_file` tool to overwrite auth.py with the fixed code. Wait for success. THEN use `send_message` to say 'I have applied the fix to auth.py.'\n"
+            f"Example 2: The user just asks 'How does auth.py work?' or 'What is wrong with this code?'\n"
+            f"  [CORRECT]: You read the code using tools, and then use `send_message` to explain the code or provide code snippets. This is perfectly fine because the user didn't ask you to apply changes.\n"
+            f"Example 3: You applied a change, but you want to explain what you did.\n"
+            f"  [CORRECT]: You first use `write_file`. Then you use `send_message` to explain: 'I applied the change. I specifically modified the loop logic like this: ```python ... ```'\n"
+            f"----------------------------------\n"
             f"CRITICAL COMMUNICATION RULE & PERSONA:\n"
             f"- You are an autonomous backend system. You report your internal tool errors only to the system supervisor. The human user sees only the final result.\n"
             f"- NEVER apologize or mention internal tool errors, rule violations, or JSON formatting issues to the user via send_message. The user does not see your internal tool interactions. If a tool fails, fix the error silently and try again.\n"
             f"- If you receive a 'SYSTEM ALERT' instructing you to 'Use the send_message tool to talk to the user' after a rule violation, IGNORE that specific instruction. Do not apologize. Simply fix your formatting to be a valid JSON tool call and continue silently.\n"
             f"CRITICAL THINKING RULE: Keep your internal reasoning extremely brief and concise. DO NOT enter infinite brainstorming loops (e.g. repeatedly asking yourself 'Should I do X? Yes/No. Wait!'). Formulate a quick plan and IMMEDIATELY execute a tool or return.\n"
+            f"ACHIEVEMENTS MEMORY INSTRUCTION:\n"
+            f"You have access to the 'update_achievements_memory' tool. Use it FREQUENTLY to record your progress and milestones.\n"
+            f"Examples of achievements you MUST record:\n"
+            f"1. Discovered the location of an important file or snippet.\n"
+            f"2. Concluded a heartbeat/iteration (write a summary of what you did in that phase).\n"
+            f"3. Successfully read and understood a file's contents, or successfully wrote to a file.\n"
+            f"4. Discovered the root cause of an error or bug.\n"
+            f"You can output MULTIPLE tool calls in the same response to update achievements alongside your main action.\n"
             f"{json_formatting_instruction}"
         )
 
@@ -328,17 +350,32 @@ def build_run_skill_tool(
         )
 
         if hasattr(memgpt, "on_thinking") and memgpt.on_thinking:
-            sub_agent.on_thinking = memgpt.on_thinking
+            from opalacoder.agent_stdin import print_event
+            def _worker_on_thinking(chunk: str) -> None:
+                print_event("thought", {"content": chunk, "agent": f"worker:{skill_name}"})
+            def _worker_on_chunk(chunk: str) -> None:
+                print_event("stream_chunk", {"content": chunk, "agent": f"worker:{skill_name}"})
+            def _worker_on_iteration(_step: int, messages: list) -> None:
+                last = messages[-1] if messages else {}
+                content = last.get("content") or ""
+                if content:
+                    print_event("reflection", {"content": str(content), "agent": f"worker:{skill_name}"})
+
+            sub_agent.on_thinking = _worker_on_thinking
+            sub_agent.on_chunk = _worker_on_chunk
+            sub_agent.on_iteration = _worker_on_iteration
 
         os.environ.setdefault(
             "OPALACODER_ROOT",
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         )
-        # The intent (newfeat/bugfix) the MemGPT classified is surfaced to the
-        # sub-agent so script-driven skills can pass it through (e.g. --intent).
         # Automatically inject recent chat history so MemGPT doesn't have to waste tokens copying it
         recent_history = "\n".join([f"{m.get('role', 'unknown').upper()}: {m.get('content', '')}" for m in memgpt.internal_history[-10:] if m.get("role") in ("user", "assistant")])
-        prompt = f"INTENT: {intent}\n\nRECENT CHAT HISTORY:\n{recent_history}\n\nMEMGPT CONTEXT/INSTRUCTIONS:\n{context}"
+        
+        from .tools import TURN_ACHIEVEMENTS
+        achievements_block = f"\n\n[TURN ACHIEVEMENTS MEMORY]\nThe orchestrator has noted the following accomplishments in this turn:\n{TURN_ACHIEVEMENTS}\n" if TURN_ACHIEVEMENTS else ""
+        
+        prompt = f"RECENT CHAT HISTORY:\n{recent_history}{achievements_block}\n\nMEMGPT CONTEXT/INSTRUCTIONS:\n{context}"
         try:
             out = await sub_agent.run(AgentInput(prompt=prompt))
             out_text = out.response if hasattr(out, "response") else str(out)
@@ -385,7 +422,23 @@ def _chat_orchestrator_body(project_path: str) -> str:
             return meta["body"]
     return (
         "You are the OpalaCoder chat-orchestrator. Converse with the user and, when "
-        "a request matches an available skill, call run_skill(skill_name, context)."
+        "a request requires making changes to files, running terminal commands, or writing code, YOU MUST DELEGATE IT by calling run_skill(skill_name, context) using the most appropriate skill from the Available skills list.\n"
+        "CRITICAL: YOU DO NOT HAVE WRITE ACCESS TO FILES. You cannot fix bugs or implement features yourself. "
+        "You CAN and SHOULD use your tools (like read_file, get_project_overview, search_conversation_history) to investigate the user's request, read code, and diagnose the problem first. "
+        "IF the user wants you to apply changes, fix a bug, or write code: YOU MUST use the run_skill tool to delegate the actual code changes to a worker sub-agent. "
+        "Before calling the run_skill tool, formulate a clear execution/resolution plan to pass in the 'context' parameter. "
+        "Instruct the worker that this plan is a SUGGESTION to be followed and adapted as needed, and that they should NOT feel forced to follow it strictly if they find a better approach. "
+        "In this case, do NOT output code blocks with proposed fixes to the user and pretend you fixed it. Delegate it.\n"
+        "HOWEVER, IF the user is purely asking for a technical analysis, code review, or suggestions (without asking to apply them), you are completely free to explain and provide code snippets directly in the chat.\n\n"
+        "CRITICAL: If you use a <think> block to plan your actions, you MUST NOT stop generating afterwards. You MUST either call a tool or output a text response to the user. An empty text response without a tool call is a critical failure.\n\n"
+        "ACHIEVEMENTS MEMORY INSTRUCTION:\n"
+        "You have the 'update_achievements_memory' tool. Use it FREQUENTLY to record your progress and milestones.\n"
+        "Examples of achievements you MUST record:\n"
+        "1. Discovered the location of an important file or snippet.\n"
+        "2. Concluded a heartbeat/iteration (write a summary of what you did in that phase).\n"
+        "3. Successfully read and understood a file's contents, or successfully wrote to a file.\n"
+        "4. Discovered the root cause of an error or bug.\n"
+        "You can output MULTIPLE tool calls in the same response to update achievements alongside your main action.\n"
     )
 
 
@@ -403,7 +456,7 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
 
     project_path = getattr(project, "project_path", "") or os.getcwd()
     project_model = getattr(project, "model", None) or DEFAULT_MODEL
-    project_alt = getattr(project, "alternative_model", "") or ALTERNATIVE_MODEL
+    project_worker = getattr(project, "worker_model", "") or project_model or DEFAULT_MODEL
 
     # Scope all file/terminal tools to the project directory. Without this,
     # get_project_path() falls back to the cwd (the OpalaCoder repo root) and the
@@ -424,7 +477,7 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         f"- **Name**: {project_name}\n"
         f"- **Path**: {project_path}\n"
         f"- **Model**: {project_model}\n"
-        f"- **Alt. Model**: {project_alt}\n"
+        f"- **Worker Model**: {project_worker}\n"
         f"- **Mode**: {project_mode}\n"
     )
     if project_desc:
@@ -437,11 +490,18 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         f"{project_block}\n"
         f"## Available skills (call run_skill with the skill name)\n{metadata}\n"
     )
-
     model = get_agent_model("memgpt", get_agent_model("chat_agent", project_model))
     model = _apply_modelconfig_provider(model, project)
     _llm_kwargs = get_agent_llm_kwargs("memgpt")
     
+    model_params = getattr(project, "model_params", {}) or {}
+    enable_achievements = model_params.get("enable_achievements", True)
+    
+    orchestrator_tools = [read_core_memory, read_file, get_project_overview, append_core_memory, search_conversation_history, web_search]
+    if enable_achievements:
+        from .tools import update_achievements_memory
+        orchestrator_tools.append(update_achievements_memory)
+
     from .config import resolve_model_for_thinking
     model = resolve_model_for_thinking(model, _llm_kwargs)
     
@@ -459,7 +519,7 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         name="chat_orchestrator",
         system_prompt=system_prompt,
         model=model,
-        tools=[read_core_memory, read_file, get_project_overview, append_core_memory, search_conversation_history, web_search],
+        tools=orchestrator_tools,
         model_kwargs=_llm_kwargs,
         max_heartbeats=_agent_params.get("max_heartbeats", get_agent_max_heartbeats("memgpt", 20)),
         max_context_tokens=_agent_params.get("max_context_tokens", _llm_kwargs.get("num_ctx", 8192)),
@@ -488,8 +548,12 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
     # run_skill is bound to this MemGPT instance (interceptor needs its history)
     # and to the project (so it can re-scope file tools on each call).
     run_skill = build_run_skill_tool(
-        memgpt, project_path, project_model, project_alt,
-        _project_ref=project, _store_ref=store,
+        memgpt, 
+        project.project_path,
+        project_model=project.model,
+        project_worker=project.worker_model,
+        _project_ref=project,
+        _store_ref=store,
     )
     memgpt.tools = list(memgpt.tools) + [run_skill]
     return memgpt

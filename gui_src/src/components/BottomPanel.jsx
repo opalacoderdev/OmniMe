@@ -22,6 +22,7 @@ export default function BottomPanel({
   startResizing,
   isBottomMaximized,
   onToggleMaximizeBottom,
+  achievementsMemory,
 }) {
   const { t } = useTranslation();
   const contentRef = useRef(null);
@@ -85,7 +86,7 @@ export default function BottomPanel({
         {/* Tab header */}
         <div className="vscode-bottom-tabs">
           <div className="vscode-bottom-tab-list">
-            {['output', 'problems', 'terminal'].map((tab) => (
+            {['output', 'problems', 'achievements', 'terminal'].map((tab) => (
               <span
                 key={tab}
                 className={`vscode-bottom-tab ${activeBottomTab === tab ? 'active' : ''}`}
@@ -103,12 +104,13 @@ export default function BottomPanel({
                   </>
                 )}
                 {tab === 'terminal' && t('bottomPanel.terminalTab')}
+                {tab === 'achievements' && 'Achievements'}
               </span>
             ))}
           </div>
 
           <div className="flex items-center" style={{ gap: '8px' }}>
-            {(activeBottomTab === 'output' || activeBottomTab === 'problems') && (
+            {(activeBottomTab === 'output' || activeBottomTab === 'problems' || activeBottomTab === 'achievements') && (
               <button
                 onClick={
                   activeBottomTab === 'output'
@@ -183,6 +185,7 @@ export default function BottomPanel({
                       <div key={i} style={{ ...colorStyle, display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '3px' }}>
                         <span style={{ color: '#5a5a5a' }}>[{log.timestamp}]</span>
                         <span style={{ fontWeight: 'bold' }}>[{label}]</span>
+                        {log.agent && <span style={{ color: '#9cdcfe', fontWeight: 'bold' }}>[{log.agent}]</span>}
                         <span style={{ whiteSpace: 'pre-wrap', flex: 1 }}>{log.message}</span>
                       </div>
                     );
@@ -211,6 +214,21 @@ export default function BottomPanel({
                       </div>
                     </div>
                   ))
+                )}
+              </div>
+            )}
+
+            {/* Achievements tab */}
+            {activeBottomTab === 'achievements' && (
+              <div className="vscode-logs" style={{ padding: '12px', overflowY: 'auto', height: '100%', color: '#cccccc', fontFamily: 'Consolas, monospace', fontSize: '13px' }}>
+                {!achievementsMemory ? (
+                  <div style={{ color: '#808080', fontStyle: 'italic' }}>
+                    No achievements recorded in this turn yet.
+                  </div>
+                ) : (
+                  <pre style={{ whiteSpace: 'pre-wrap', margin: 0, color: '#4ec9b0', fontFamily: 'inherit' }}>
+                    {achievementsMemory}
+                  </pre>
                 )}
               </div>
             )}

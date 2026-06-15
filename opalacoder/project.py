@@ -39,7 +39,7 @@ def _init_schema(db_path: str) -> None:
                 subplans        TEXT NOT NULL DEFAULT '[]',
                 results         TEXT NOT NULL DEFAULT '{}',
                 core_memory     TEXT NOT NULL DEFAULT '',
-                alternative_model TEXT NOT NULL DEFAULT '',
+                worker_model    TEXT NOT NULL DEFAULT '',
                 model_params    TEXT NOT NULL DEFAULT '{}'
             );
 
@@ -59,9 +59,13 @@ def _init_schema(db_path: str) -> None:
         except sqlite3.OperationalError:
             pass
 
-        # Migração: modelo alternativo por projeto ("" → usa o ALTERNATIVE_MODEL global)
+        # Migração: modelo do worker por projeto
         try:
-            conn.execute("ALTER TABLE projects ADD COLUMN alternative_model TEXT NOT NULL DEFAULT ''")
+            conn.execute("ALTER TABLE projects ADD COLUMN worker_model TEXT NOT NULL DEFAULT ''")
+            try:
+                conn.execute("UPDATE projects SET worker_model = alternative_model WHERE alternative_model != ''")
+            except sqlite3.OperationalError:
+                pass
         except sqlite3.OperationalError:
             pass
 
@@ -77,7 +81,7 @@ class ProjectData:
     name: str
     mode: str = "plan"
     model: str = ""
-    alternative_model: str = ""   # "" → falls back to the global ALTERNATIVE_MODEL
+    worker_model: str = ""   # "" → falls back to the project.model
     project_name: str = ""
     project_path: str = ""
     skills: list = field(default_factory=lambda: ["opalacoder"])
@@ -90,6 +94,8 @@ class ProjectData:
     model_params: dict = field(default_factory=lambda: {"think": False, "stream": False})
     api_key: str = ""
     api_base: str = ""
+    worker_api_key: str = ""
+    worker_api_base: str = ""
     history: list = field(default_factory=list)   # [{role, content}]
 
     def clear_state(self) -> None:
@@ -124,7 +130,7 @@ class ProjectStore:
     def list_projects(self) -> list[dict]:
         with _conn(self.db_path) as conn:
             rows = conn.execute(
-                "SELECT name, project_name, project_path, created_at, updated_at, mode, model, alternative_model, description, model_params FROM projects ORDER BY updated_at DESC"
+                "SELECT name, project_name, project_path, created_at, updated_at, mode, model, worker_model, description, model_params FROM projects ORDER BY updated_at DESC"
             ).fetchall()
             res = []
             for r in rows:
@@ -143,6 +149,8 @@ class ProjectStore:
                 # Load api_key and api_base from local .env if it exists
                 d["api_key"] = ""
                 d["api_base"] = ""
+                d["worker_api_key"] = ""
+                d["worker_api_base"] = ""
                 proj_path = d.get("project_path")
                 if proj_path:
                     abs_proj_path = os.path.expanduser(proj_path)
@@ -158,6 +166,10 @@ class ProjectStore:
                                             d["api_key"] = line.split("=", 1)[1].strip().strip('"').strip("'")
                                         elif line.startswith("OPENAI_API_BASE="):
                                             d["api_base"] = line.split("=", 1)[1].strip().strip('"').strip("'")
+                                        elif line.startswith("WORKER_API_KEY="):
+                                            d["worker_api_key"] = line.split("=", 1)[1].strip().strip('"').strip("'")
+                                        elif line.startswith("WORKER_API_BASE="):
+                                            d["worker_api_base"] = line.split("=", 1)[1].strip().strip('"').strip("'")
 
                             except Exception:
                                 pass
@@ -165,7 +177,7 @@ class ProjectStore:
                 res.append(d)
             return res
 
-    def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "", api_key: str = None, api_base: str = None, model_params: dict = None, apply_modelconfig: bool = True) -> ProjectData:
+    def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", worker_model: str = "", api_key: str = None, api_base: str = None, worker_api_key: str = None, worker_api_base: str = None, model_params: dict = None, apply_modelconfig: bool = True) -> ProjectData:
         now = datetime.now(timezone.utc).isoformat()
         _skills = skills if skills is not None else ["opalacoder"]
         if "opalacoder" not in _skills:
@@ -228,6 +240,10 @@ class ProjectStore:
                 upsert_env("OPENAI_API_KEY", api_key)
             if api_base:
                 upsert_env("OPENAI_API_BASE", api_base)
+            if worker_api_key:
+                upsert_env("WORKER_API_KEY", worker_api_key)
+            if worker_api_base:
+                upsert_env("WORKER_API_BASE", worker_api_base)
                 
             with open(env_path, "w", encoding="utf-8") as f:
                 f.writelines(env_lines)
@@ -320,10 +336,10 @@ class ProjectStore:
                                 api_key = config_api_key
                                 upsert_env("OPENAI_API_KEY", api_key)
                                 
-                        if 'alternative_model' in config:
-                            alt_model = config.pop('alternative_model')
-                            if not alternative_model:
-                                alternative_model = alt_model
+                        if 'worker_model' in config:
+                            alt_model = config.pop('worker_model')
+                            if not worker_model:
+                                worker_model = alt_model
                                 
                         for k, v in config.items():
                             if v is not None:
@@ -346,14 +362,14 @@ class ProjectStore:
 
         with _conn(self.db_path) as conn:
             conn.execute(
-                "INSERT INTO projects (name, created_at, updated_at, mode, model, alternative_model, project_name, project_path, skills, description, core_memory, model_params) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (name, now, now, mode, model, alternative_model, project_name, abs_proj_path, json.dumps(_skills), description, "", json.dumps(_model_params)),
+                "INSERT INTO projects (name, created_at, updated_at, mode, model, worker_model, project_name, project_path, skills, description, core_memory, model_params) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name, now, now, mode, model, worker_model, project_name, abs_proj_path, json.dumps(_skills), description, "", json.dumps(_model_params)),
             )
-        return ProjectData(name=name, mode=mode, model=model, alternative_model=alternative_model, project_name=project_name, project_path=abs_proj_path, skills=_skills, description=description, core_memory="", model_params=_model_params, api_key=api_key or "", api_base=api_base or "")
+        return ProjectData(name=name, mode=mode, model=model, worker_model=worker_model, project_name=project_name, project_path=abs_proj_path, skills=_skills, description=description, core_memory="", model_params=_model_params, api_key=api_key or "", api_base=api_base or "", worker_api_key=worker_api_key or "", worker_api_base=worker_api_base or "")
 
-    def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", alternative_model: str = "", api_key: str = None, api_base: str = None, model_params: dict = None) -> ProjectData:
+    def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", worker_model: str = "", api_key: str = None, api_base: str = None, worker_api_key: str = None, worker_api_base: str = None, model_params: dict = None) -> ProjectData:
         self.delete(name)
-        return self.create(name, mode, model, project_name, project_path, skills, description, alternative_model, api_key=api_key, api_base=api_base, model_params=model_params, apply_modelconfig=False)
+        return self.create(name, mode, model, project_name, project_path, skills, description, worker_model, api_key=api_key, api_base=api_base, worker_api_key=worker_api_key, worker_api_base=worker_api_base, model_params=model_params, apply_modelconfig=False)
 
     def delete(self, name: str) -> None:
         with _conn(self.db_path) as conn:
@@ -406,7 +422,7 @@ class ProjectStore:
                 name=name,
                 mode=row["mode"],
                 model=row["model"],
-                alternative_model=row["alternative_model"] if "alternative_model" in row.keys() else "",
+                worker_model=row["worker_model"] if "worker_model" in row.keys() else (row["alternative_model"] if "alternative_model" in row.keys() else ""),
                 project_name=row["project_name"],
                 project_path=row["project_path"],
                 skills=json.loads(row["skills"]),
@@ -433,7 +449,7 @@ class ProjectStore:
         _model_params = project.model_params if hasattr(project, "model_params") else {}
         
         # Save api_key and api_base to project's local .env
-        if hasattr(project, "api_key") or hasattr(project, "api_base"):
+        if hasattr(project, "api_key") or hasattr(project, "api_base") or hasattr(project, "worker_api_key") or hasattr(project, "worker_api_base"):
             env_path = os.path.join(project.project_path, ".env")
             env_lines = []
             if os.path.isfile(env_path):
@@ -454,6 +470,8 @@ class ProjectStore:
 
             upsert_env("OPENAI_API_KEY", getattr(project, "api_key", ""))
             upsert_env("OPENAI_API_BASE", getattr(project, "api_base", ""))
+            upsert_env("WORKER_API_KEY", getattr(project, "worker_api_key", ""))
+            upsert_env("WORKER_API_BASE", getattr(project, "worker_api_base", ""))
 
             try:
                 os.makedirs(project.project_path, exist_ok=True)
@@ -464,13 +482,13 @@ class ProjectStore:
 
         with _conn(self.db_path) as conn:
             conn.execute(
-                """UPDATE projects SET updated_at=?, mode=?, model=?, alternative_model=?, project_name=?, project_path=?,
+                """UPDATE projects SET updated_at=?, mode=?, model=?, worker_model=?, project_name=?, project_path=?,
                    skills=?, description=?, request=?, plan_text=?, subplans=?, results=?, core_memory=?, model_params=? WHERE name=?""",
                 (
                     now,
                     project.mode,
                     project.model,
-                    project.alternative_model,
+                    project.worker_model,
                     project.project_name,
                     project.project_path,
                     json.dumps(_skills, ensure_ascii=False),

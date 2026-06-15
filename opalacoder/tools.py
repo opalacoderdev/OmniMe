@@ -13,6 +13,10 @@ from . import terminal as T
 # ─── Shared progress state ───────────────────────────────────────────────────
 # The orchestrator reads these to render a live progress panel.
 
+TURN_ACHIEVEMENTS = ""
+
+
+
 class _AgentProgress:
     def __init__(self):
         self.heartbeat: int = 0
@@ -58,6 +62,8 @@ class _AgentProgress:
         self.heartbeat += 1
         self.last_tool = tool_name
         self.last_args = args_preview[:80] if args_preview else ""
+
+
 
     def elapsed(self) -> str:
         secs = int(time.monotonic() - self.start_time)
@@ -112,7 +118,7 @@ def set_project_context(session, store=None) -> None:
                 
         # Also explicitly propagate api_key and api_base from session if present
         model_name = getattr(session, "model", None)
-        alt_model_name = getattr(session, "alternative_model", None)
+        alt_model_name = getattr(session, "worker_model", None)
         env_vars = set()
         from .api_keys import get_env_var_for_model
         if model_name:
@@ -158,6 +164,12 @@ def set_project_context(session, store=None) -> None:
 
         if getattr(session, "api_base", None):
             os.environ["OPENAI_API_BASE"] = session.api_base
+        
+        if getattr(session, "worker_api_key", None):
+            os.environ["WORKER_API_KEY"] = session.worker_api_key
+            
+        if getattr(session, "worker_api_base", None):
+            os.environ["WORKER_API_BASE"] = session.worker_api_base
         else:
             env_file_has_base = False
             if os.path.isfile(env_path):
@@ -287,6 +299,7 @@ def write_file(path: str, content: str) -> str:
             CODE_INDEX.rebuild_file(resolved)
         except Exception:
             pass
+            
         return f"Successfully wrote to {_preview(resolved)}."
     except Exception as e:
         raise ValueError(f"Error writing {_preview(resolved)}: {e}")
@@ -320,6 +333,7 @@ def run_command(command: str) -> str:
             output += f"STDERR:\n{err}\n"
         if res.returncode != 0:
             raise ValueError(f"ERROR: Command failed (exit code {res.returncode}).\n{output}Do NOT report success. Fix the error or use a different tool.")
+            
         return output if output else "Command executed successfully (no output)."
     except subprocess.TimeoutExpired:
         raise ValueError("Error: Command timed out after 120 seconds.")
@@ -361,6 +375,7 @@ def run_python_script(script_path: str, args: str = "") -> str:
             output += f"STDERR:\n{err}\n"
         if res.returncode != 0:
             raise ValueError(f"ERROR: Command failed (exit code {res.returncode}).\n{output}Do NOT report success. Fix the error or use a different tool.")
+            
         return output if output else "Command executed successfully (no output)."
     except subprocess.TimeoutExpired:
         raise ValueError("Error: Command timed out after 120 seconds.")
@@ -386,6 +401,7 @@ def run_interactive_command(command: str) -> str:
         )
         if res.returncode != 0:
             raise ValueError(f"Interactive command failed or was cancelled by the user (exit code {res.returncode}).")
+            
         return "Interactive command completed. The user interacted with it successfully."
     except Exception as e:
         raise ValueError(f"Error running interactive command: {e}")
@@ -615,16 +631,38 @@ def _rel(path: str, root: str) -> str:
 
 def get_available_tools():
     return [
+        search_conversation_history,
+        update_achievements_memory,
         get_project_overview,
         read_file,
         read_content_pos,
         write_file,
         write_content_pos,
         run_command,
-        run_interactive_command,
-        ask_human,
-        search_conversation_history
+        run_interactive_command
     ]
+
+# ─── Achievements Memory ─────────────────────────────────────────────────────
+@as_tool(
+    name="update_achievements_memory", 
+    description=(
+        "Update the transient Achievements Memory with a summary of the important milestones and tasks "
+        "you have accomplished so far during this turn. Keep it concise (e.g. bullet points). "
+        "This memory is passed to worker sub-agents so they know what has already been done. "
+        "Use this FREQUENTLY for: discovering an important file, finishing a heartbeat iteration, "
+        "successfully reading/writing a file, or finding the root cause of a bug."
+    )
+)
+def update_achievements_memory(summary: str) -> str:
+    global TURN_ACHIEVEMENTS
+    AGENT_PROGRESS.update("update_achievements_memory", f"summary={summary[:50]}")
+    TURN_ACHIEVEMENTS = summary
+    try:
+        from opalacoder.agent_stdin import print_event
+        print_event("achievements_update", {"content": summary})
+    except Exception as e:
+        pass
+    return "Achievements Memory updated successfully."
 
 # ─── Long-Term Memory (MemGPT-style) ──────────────────────────────────────────
 @as_tool(name="read_core_memory", description="Read the global 'Core Memory' of the project. Contains rules, persistent context, and architectural decisions you should follow.")

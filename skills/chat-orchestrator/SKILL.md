@@ -67,9 +67,9 @@ All native OpalaCoder commands **start with a slash (`/`)**. If the user types a
 | `/skills` | List all skills (active ones marked with `*`) |
 | `/lsskills` | List only active skills of the project |
 | `/addskill <name>` / `/rmskill <name>` | Add/remove a skill |
-| `/models` | Show primary and alternative models of the project |
+| `/models` | Show primary and worker models of the project |
 | `/set-main-model <id>` | Define primary model of the project |
-| `/set-alternative-model <id>` | Define alternative model of the project |
+| `/set-worker-model <id>` | Define worker model of the project |
 | `/undo` | Revert the last change (shadow git) |
 | `/commit <msg>` | Manual commit in shadow git |
 | `/exit` or `/quit` | Exit OpalaCoder |

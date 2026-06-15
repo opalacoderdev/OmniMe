@@ -1,6 +1,6 @@
-import { useRef, useEffect } from 'react';
-import Editor from '@monaco-editor/react';
-import { Files, RefreshCw, Check, X, Maximize2, Minimize2 } from 'lucide-react';
+import { useRef, useEffect, useState } from 'react';
+import Editor, { DiffEditor } from '@monaco-editor/react';
+import { Files, RefreshCw, Check, X, Maximize2, Minimize2, GitCompare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getLanguage } from '../utils/language';
 import InlinePromptOverlay from './InlinePromptOverlay';
@@ -33,6 +33,8 @@ export default function EditorPanel({
   onToggleTerminal,
 }) {
   const { t } = useTranslation();
+  const [isDiffMode, setIsDiffMode] = useState(false);
+
   // Ref so the Monaco command closure always calls the latest callback,
   // even after React re-renders update isTerminalCollapsed state.
   const onToggleTerminalRef = useRef(onToggleTerminal);
@@ -43,10 +45,19 @@ export default function EditorPanel({
   // Wrap the external mount handler so we can also register the context-menu
   // actions and the Ctrl+L shortcut ourselves.
   const handleMount = (editor, monaco) => {
-    localEditorRef.current = editor;
+    const isDiff = typeof editor.getModifiedEditor === 'function';
+    const actualEditor = isDiff ? editor.getModifiedEditor() : editor;
+
+    localEditorRef.current = actualEditor;
+
+    if (isDiff) {
+      actualEditor.onDidChangeModelContent(() => {
+        setFileContent(actualEditor.getValue());
+      });
+    }
 
     // ── Ctrl+J — toggle terminal ────────────────────────────────────────────
-    editor.addCommand(
+    actualEditor.addCommand(
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ,
       () => {
         if (onToggleTerminalRef.current) onToggleTerminalRef.current();
@@ -57,16 +68,16 @@ export default function EditorPanel({
     editor.addCommand(
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyL,
       () => {
-        const model = editor.getModel();
-        const sel = editor.getSelection();
+        const model = actualEditor.getModel();
+        const sel = actualEditor.getSelection();
         if (!model || !sel) return;
 
         const selectedText = model.getValueInRange(sel);
-        const pos = editor.getPosition();
+        const pos = actualEditor.getPosition();
 
         // Get pixel coordinates near the cursor
-        const coords = editor.getScrolledVisiblePosition(pos);
-        const domNode = editor.getDomNode();
+        const coords = actualEditor.getScrolledVisiblePosition(pos);
+        const domNode = actualEditor.getDomNode();
         const rect = domNode?.getBoundingClientRect() ?? { left: 200, top: 100 };
 
         setInlinePrompt({
@@ -84,7 +95,7 @@ export default function EditorPanel({
     // ── Paste via backend (navigator.clipboard.readText fails while context
     //    menu is open because hasTextFocus() is false; run() receives the
     //    editor directly so it works regardless of focus state).
-    editor.addAction({
+    actualEditor.addAction({
       id: 'opalacoder.paste',
       label: 'Paste',
       contextMenuGroupId: '9_cutcopypaste',
@@ -102,7 +113,7 @@ export default function EditorPanel({
     });
 
     // ── Monaco context menu — Refine Selection ───────────────────────────────
-    editor.addAction({
+    actualEditor.addAction({
       id: 'opalacoder.refineSelection',
       label: t('editorPanel.refineSelection'),
       contextMenuGroupId: 'opalacoder',
@@ -131,7 +142,7 @@ export default function EditorPanel({
     });
 
     // ── Monaco context menu — Generate Code ──────────────────────────────────
-    editor.addAction({
+    actualEditor.addAction({
       id: 'opalacoder.generateCode',
       label: t('editorPanel.generateCode'),
       contextMenuGroupId: 'opalacoder',
@@ -160,10 +171,10 @@ export default function EditorPanel({
     });
 
     // Delegate to the parent-level mount handler (font-size, Ctrl+S, etc.)
-    if (handleEditorDidMount) handleEditorDidMount(editor, monaco);
+    if (handleEditorDidMount) handleEditorDidMount(actualEditor, monaco);
     
     // Focus the editor when it is first mounted
-    setTimeout(() => editor.focus(), 50);
+    setTimeout(() => actualEditor.focus(), 50);
   };
 
   useEffect(() => {
@@ -226,6 +237,15 @@ export default function EditorPanel({
           </button>
 
           <button
+            onClick={() => setIsDiffMode(!isDiffMode)}
+            className="vscode-bottom-panel-clear-btn"
+            style={{ padding: '6px' }}
+            title={isDiffMode ? t('editorPanel.disableDiff') : t('editorPanel.enableDiff')}
+          >
+            <GitCompare size={12} style={{ color: isDiffMode ? '#4daafc' : 'inherit' }} />
+          </button>
+
+          <button
             onClick={onToggleMaximize}
             className="vscode-bottom-panel-clear-btn"
             style={{ padding: '6px' }}
@@ -238,23 +258,45 @@ export default function EditorPanel({
 
       {/* Monaco editor */}
       <div className="vscode-editor-container">
-        <Editor
-          height="100%"
-          path={selectedFile}
-          language={getLanguage(selectedFile)}
-          theme={theme === 'light' ? 'light' : 'vs-dark'}
-          value={fileContent}
-          onChange={(val) => setFileContent(val)}
-          onMount={handleMount}
-          options={{
-            minimap: { enabled: true },
-            fontSize: editorFontSize,
-            lineNumbers: 'on',
-            tabSize: editorTabSize,
-            wordWrap: editorWordWrap,
-            automaticLayout: true,
-          }}
-        />
+        {isDiffMode ? (
+          <DiffEditor
+            height="100%"
+            language={getLanguage(selectedFile)}
+            theme={theme === 'light' ? 'light' : 'vs-dark'}
+            original={originalFileContents ? (originalFileContents[selectedFile] || '') : ''}
+            modified={fileContent}
+            onMount={handleMount}
+            options={{
+              minimap: { enabled: true },
+              fontSize: editorFontSize,
+              lineNumbers: 'on',
+              tabSize: editorTabSize,
+              wordWrap: editorWordWrap,
+              automaticLayout: true,
+              renderSideBySide: true,
+              readOnly: false,
+              originalEditable: false,
+            }}
+          />
+        ) : (
+          <Editor
+            height="100%"
+            path={selectedFile}
+            language={getLanguage(selectedFile)}
+            theme={theme === 'light' ? 'light' : 'vs-dark'}
+            value={fileContent}
+            onChange={(val) => setFileContent(val)}
+            onMount={handleMount}
+            options={{
+              minimap: { enabled: true },
+              fontSize: editorFontSize,
+              lineNumbers: 'on',
+              tabSize: editorTabSize,
+              wordWrap: editorWordWrap,
+              automaticLayout: true,
+            }}
+          />
+        )}
       </div>
 
       {/* Inline prompt overlay (rendered inside the panel for correct stacking) */}

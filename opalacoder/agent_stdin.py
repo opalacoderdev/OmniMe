@@ -550,16 +550,16 @@ async def handle_run(data: dict):
             })
             
     def _on_thinking(chunk: str) -> None:
-        print_event("thought", {"content": chunk})
+        print_event("thought", {"content": chunk, "agent": agent_type})
 
     def _on_chunk(chunk: str) -> None:
-        print_event("stream_chunk", {"content": chunk})
+        print_event("stream_chunk", {"content": chunk, "agent": agent_type})
 
     def _on_iteration(_step: int, messages: list) -> None:
         last = messages[-1] if messages else {}
         content = last.get("content") or ""
         if content:
-            print_event("reflection", {"content": str(content)})
+            print_event("reflection", {"content": str(content), "agent": agent_type})
 
     if hasattr(agent, "on_thinking"):
         agent.on_thinking = _on_thinking
@@ -578,19 +578,29 @@ async def handle_run(data: dict):
 
     print_event("agent_started", {"agent": agent_type, "model": agent.model})
 
+    from opalacoder.tools import TURN_ACHIEVEMENTS
+    import opalacoder.tools as tools_mod
+    if agent_type == "chat_orchestrator":
+        tools_mod.TURN_ACHIEVEMENTS = ""
+
     try:
         try:
             with apply_meta_params(agent, _meta_overrides):
                 resp_obj = await agent.run(AgentInput(prompt=prompt))
-            #print("PROMPT ", prompt)
             response = resp_obj.response.strip() if resp_obj.response else ""
-            #print("RESPONSE ", ">>>"*50)
-            #print(response)
-            #print("END_RESPONSE ", "<<<"*50)
+            
+            if not response:
+                print_event("info", {"message": "O modelo gerou uma resposta vazia. Forçando uma tentativa de correção automática..."})
+                retry_prompt = "CRITICAL: You just finished your turn with an empty text response and no tool calls. This is an invalid format. Did you forget to output your final text or call a tool? Please provide a valid response."
+                with apply_meta_params(agent, _meta_overrides):
+                    resp_obj = await agent.run(AgentInput(prompt=retry_prompt))
+                response = resp_obj.response.strip() if resp_obj.response else ""
             
             # Save to store if using chat_orchestrator
             if agent_type == "chat_orchestrator" and current_store and current_project:
                 current_store.append_message(current_project, "user", prompt)
+                if tools_mod.TURN_ACHIEVEMENTS:
+                    current_store.append_message(current_project, "system", f"Achievements logged during this turn:\n{tools_mod.TURN_ACHIEVEMENTS}")
                 if response:
                     current_store.append_message(current_project, "assistant", response)
                 current_store.save(current_project)
@@ -628,6 +638,8 @@ async def handle_create_project(data: dict):
     skills = data.get("skills", [])
     api_key = data.get("api_key")
     api_base = data.get("api_base")
+    worker_api_key = data.get("worker_api_key")
+    worker_api_base = data.get("worker_api_base")
     
     db_key = project_name.replace(" ", "_").lower()
     if store.exists(db_key):
@@ -643,6 +655,8 @@ async def handle_create_project(data: dict):
         description=description,
         api_key=api_key,
         api_base=api_base,
+        worker_api_key=worker_api_key,
+        worker_api_base=worker_api_base,
     )
     print_event("project_created", {
         "project_name": project.project_name,
@@ -650,6 +664,8 @@ async def handle_create_project(data: dict):
         "skills": project.skills,
         "api_key": project.api_key,
         "api_base": project.api_base,
+        "worker_api_key": project.worker_api_key,
+        "worker_api_base": project.worker_api_base,
     })
 
 async def handle_update_project(data: dict):
@@ -670,8 +686,8 @@ async def handle_update_project(data: dict):
         project.project_name = data["display_name"]
     if "model" in data and data["model"]:
         project.model = data["model"]
-    if "alternative_model" in data:
-        project.alternative_model = data["alternative_model"]
+    if "worker_model" in data:
+        project.worker_model = data["worker_model"]
     if "description" in data:
         project.description = data["description"]
     if "mode" in data and data["mode"]:
@@ -682,6 +698,10 @@ async def handle_update_project(data: dict):
         project.api_key = data["api_key"]
     if "api_base" in data:
         project.api_base = data["api_base"]
+    if "worker_api_key" in data:
+        project.worker_api_key = data["worker_api_key"]
+    if "worker_api_base" in data:
+        project.worker_api_base = data["worker_api_base"]
     if "model_params" in data:
         project.model_params = data["model_params"]
         
@@ -691,11 +711,13 @@ async def handle_update_project(data: dict):
         "project_name": project.project_name,
         "project_path": project.project_path,
         "model": project.model,
-        "alternative_model": project.alternative_model,
+        "worker_model": project.worker_model,
         "mode": project.mode,
         "description": project.description,
         "api_key": project.api_key,
         "api_base": project.api_base,
+        "worker_api_key": project.worker_api_key,
+        "worker_api_base": project.worker_api_base,
         "model_params": project.model_params,
     })
 

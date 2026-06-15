@@ -1,11 +1,11 @@
-"""Tests for the /models, /set-main-model, /set-alternative-model REPL commands
-and per-project alternative_model persistence."""
+"""Tests for the /models, /set-main-model, /set-worker-model REPL commands
+and per-project worker_model persistence."""
 
 import asyncio
 import os
 import tempfile
 
-import opalacoder.orchestrator  # noqa: F401  (resolve circular import order)
+
 from opalacoder.cli_commands import REPLState, _registry
 from opalacoder.project import ProjectStore
 from opalacoder.memgpt_runtime import resolve_skill_model
@@ -26,35 +26,35 @@ def test_set_main_model_persists(tmp_path):
     assert store.load("t").model == "ollama/mistral-nemo"
 
 
-def test_set_alternative_model_persists(tmp_path):
+def test_set_worker_model_persists(tmp_path):
     state, store = _state(tmp_path)
-    asyncio.run(_registry.dispatch(state, "/set-alternative-model", ["gemini/gemini-2.0-flash"]))
-    assert state.project.alternative_model == "gemini/gemini-2.0-flash"
-    assert store.load("t").alternative_model == "gemini/gemini-2.0-flash"
+    asyncio.run(_registry.dispatch(state, "/set-worker-model", ["gemini/gemini-2.0-flash"]))
+    assert state.project.worker_model == "gemini/gemini-2.0-flash"
+    assert store.load("t").worker_model == "gemini/gemini-2.0-flash"
 
 
-def test_alternative_model_resolves_for_skill(tmp_path):
-    """A skill declaring model: alternative resolves to the project's alternative."""
+def test_worker_model_resolves_for_skill(tmp_path):
+    """A skill declaring model: worker resolves to the project's worker model."""
     state, _ = _state(tmp_path)
-    asyncio.run(_registry.dispatch(state, "/set-alternative-model", ["gemini/custom"]))
-    resolved = resolve_skill_model({"model": "alternative"},
-                                   state.project.model, state.project.alternative_model)
+    asyncio.run(_registry.dispatch(state, "/set-worker-model", ["gemini/custom"]))
+    resolved = resolve_skill_model({"model": "worker"},
+                                   state.project.model, state.project.worker_model)
     assert resolved == "gemini/custom"
 
 
-def test_alternative_model_falls_back_to_global_when_unset(tmp_path):
-    from opalacoder.config import ALTERNATIVE_MODEL
+def test_worker_model_falls_back_to_global_when_unset(tmp_path):
+    from opalacoder.config import DEFAULT_MODEL
     state, _ = _state(tmp_path)
-    # No project alternative set → resolve_skill_model uses the global default.
-    resolved = resolve_skill_model({"model": "alternative"}, state.project.model, "")
-    assert resolved == ALTERNATIVE_MODEL
+    # No project worker set → resolve_skill_model uses the main project model.
+    resolved = resolve_skill_model({"model": "worker"}, state.project.model, "")
+    assert resolved == state.project.model
 
 
 def test_clear_preserves_models(tmp_path):
-    """/clear must not reset the project's main/alternative model."""
+    """/clear must not reset the project's main/worker model."""
     state, store = _state(tmp_path)
     asyncio.run(_registry.dispatch(state, "/set-main-model", ["ollama/m1"]))
-    asyncio.run(_registry.dispatch(state, "/set-alternative-model", ["gemini/a1"]))
+    asyncio.run(_registry.dispatch(state, "/set-worker-model", ["gemini/a1"]))
     # Patch confirm to auto-yes
     import opalacoder.terminal as T
     orig = T.confirm
@@ -64,11 +64,11 @@ def test_clear_preserves_models(tmp_path):
     finally:
         T.confirm = orig
     assert state.project.model == "ollama/m1"
-    assert state.project.alternative_model == "gemini/a1"
+    assert state.project.worker_model == "gemini/a1"
 
 
-def test_old_db_migrates_without_alternative_model_column(tmp_path):
-    """A pre-existing DB lacking the alternative_model column migrates cleanly."""
+def test_old_db_migrates_without_worker_model_column(tmp_path):
+    """A pre-existing DB lacking the worker_model column migrates cleanly."""
     import sqlite3
     db = os.path.join(str(tmp_path), "old.db")
     c = sqlite3.connect(db)
@@ -89,10 +89,10 @@ def test_old_db_migrates_without_alternative_model_column(tmp_path):
     store = ProjectStore(db_path=db)  # __init__ runs the migration
     p = store.load("old")
     assert p.model == "ollama/old"        # existing data preserved
-    assert p.alternative_model == ""      # new column defaults empty
-    p.alternative_model = "gemini/x"
+    assert p.worker_model == ""      # new column defaults empty
+    p.worker_model = "gemini/x"
     store.save(p)
-    assert store.load("old").alternative_model == "gemini/x"
+    assert store.load("old").worker_model == "gemini/x"
 
 
 def test_set_model_param_valid(tmp_path):

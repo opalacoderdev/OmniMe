@@ -106,6 +106,8 @@ export default function GitSidebar({
   onStageFile,
   onUnstageFile,
   onDiscardFile,
+  useShadowGit,
+  setUseShadowGit,
 }) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('changes'); // 'changes' | 'log'
@@ -121,7 +123,7 @@ export default function GitSidebar({
     if (!projectPath) return;
     setLoadingLog(true);
     try {
-      const res = await fetch(`/api/git/log?projectPath=${encodeURIComponent(projectPath)}&limit=30`);
+      const res = await fetch(`/api/git/log?projectPath=${encodeURIComponent(projectPath)}&limit=30&shadow=${useShadowGit}`);
       if (res.ok) { const d = await res.json(); setCommits(d.commits || []); }
     } catch { /* ignore */ }
     finally { setLoadingLog(false); }
@@ -129,7 +131,11 @@ export default function GitSidebar({
 
   useEffect(() => {
     if (activeTab === 'log' && projectPath) fetchLog();
-  }, [activeTab, projectPath, fetchLog]);
+  }, [activeTab, projectPath, fetchLog, useShadowGit]);
+
+  useEffect(() => {
+    fetchGitStatus();
+  }, [useShadowGit]);
 
   useEffect(() => {
     setExpandedDiffs({});
@@ -142,7 +148,7 @@ export default function GitSidebar({
     if (next && !diffs[filePath]) {
       setLoadingDiffs(prev => ({ ...prev, [filePath]: true }));
       try {
-        const res = await fetch(`/api/git/diff?projectPath=${encodeURIComponent(projectPath)}&filePath=${encodeURIComponent(filePath)}`);
+        const res = await fetch(`/api/git/diff?projectPath=${encodeURIComponent(projectPath)}&filePath=${encodeURIComponent(filePath)}&shadow=${useShadowGit}`);
         if (res.ok) { const d = await res.json(); setDiffs(prev => ({ ...prev, [filePath]: d.diff || '' })); }
       } catch { /* ignore */ }
       finally { setLoadingDiffs(prev => ({ ...prev, [filePath]: false })); }
@@ -171,13 +177,11 @@ export default function GitSidebar({
 
   const handleStageAll = async () => {
     if (!projectPath) return;
-    try {
-      await fetch('/api/git/commit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectPath, stageOnly: true }) });
-    } catch { /* ignore */ }
     for (const f of gitChanges) {
-      await fetch('/api/git/stage', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectPath, filePath: f.path, action: 'stage' }) });
+      if (!f.staged) {
+        await fetch('/api/git/stage', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectPath, filePath: f.path, action: 'stage', shadow: useShadowGit }) });
+      }
     }
     setDiffs({});
     fetchGitStatus();
@@ -211,6 +215,19 @@ export default function GitSidebar({
         >
           <RefreshCw size={13} />
         </button>
+      </div>
+
+      <div style={{ padding: '0 12px 8px' }}>
+        <select
+          value={useShadowGit ? "shadow" : "user"}
+          onChange={(e) => {
+            setUseShadowGit(e.target.value === "shadow");
+          }}
+          style={{ width: '100%', padding: '4px', background: '#2d2d2d', color: '#cccccc', border: '1px solid #3c3c3c', borderRadius: '3px', fontSize: '11px' }}
+        >
+          <option value="user">👤 Meu Repositório (Git)</option>
+          <option value="shadow">🤖 Histórico do Agente (Shadow)</option>
+        </select>
       </div>
 
       {/* Tabs */}

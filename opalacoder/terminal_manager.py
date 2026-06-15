@@ -61,7 +61,11 @@ class TerminalSession:
         try:
             while self.is_running:
                 if sys.platform == "win32":
-                    data_str = self.process.read(4096)
+                    try:
+                        data_str = self.process.read(4096)
+                    except (ConnectionAbortedError, EOFError, OSError):
+                        # WinError 10053 and similar: terminal closed normally
+                        break
                     if not data_str:
                         break
                     data = data_str.encode('utf-8')
@@ -82,10 +86,11 @@ class TerminalSession:
                 if self.loop and self.is_running:
                     self.loop.call_soon_threadsafe(self._forward_data, data)
         except Exception as e:
-            import traceback
-            print(f"[Terminal] Read loop error: {e}\n{traceback.format_exc()}")
-            with open("terminal_read_error.log", "a", encoding="utf-8") as f:
-                f.write(f"[Terminal] Read loop error: {e}\n{traceback.format_exc()}\n")
+            # Only log unexpected errors, not normal close-related ones
+            err_str = str(e)
+            if "10053" not in err_str and "ConnectionAbortedError" not in err_str:
+                import traceback
+                print(f"[Terminal] Read loop error: {e}\n{traceback.format_exc()}")
         finally:
             if self.loop:
                 self.loop.call_soon_threadsafe(self.close)

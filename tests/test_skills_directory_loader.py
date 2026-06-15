@@ -41,14 +41,14 @@ def test_parse_skill_md_extracts_fields(tmp_path):
         ---
         name: demo
         description: A demo skill. Use when testing.
-        model: alternative
+        model: worker
         ---
     """, "These are the instructions.")
     meta = parse_skill_md(d)
     assert meta is not None
     assert meta["name"] == "demo"
     assert meta["description"] == "A demo skill. Use when testing."
-    assert meta["model"] == "alternative"
+    assert meta["model"] == "worker"
     assert "instructions" in meta["body"]
 
 

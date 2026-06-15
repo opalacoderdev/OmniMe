@@ -193,17 +193,17 @@ export default function EditProjectModal({
             )}
           </div>
 
-          {/* Alternative model */}
+          {/* Worker model */}
           <div className="flex flex-col" style={{ gap: '4px' }}>
-            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.alternativeModel')}</label>
+            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.workerModel')}</label>
             <input
               type="text"
-              list="edit-alt-models"
-              value={editingProject.alternative_model}
-              onChange={e => setEditingProject(p => ({ ...p, alternative_model: e.target.value }))}
-              placeholder={t('editProjectModal.altModelPlaceholder')}
+              list="edit-worker-models"
+              value={editingProject.worker_model}
+              onChange={e => setEditingProject(p => ({ ...p, worker_model: e.target.value }))}
+              placeholder={t('editProjectModal.workerModelPlaceholder')}
             />
-            <datalist id="edit-alt-models">
+            <datalist id="edit-worker-models">
               <option value="gemini/gemini-flash-lite-latest" />
               <option value="anthropic/claude-3-5-sonnet-latest" />
               <option value="ollama/gemma4:12b" />
@@ -211,7 +211,7 @@ export default function EditProjectModal({
             </datalist>
           </div>
 
-          {/* API credentials */}
+          {/* API credentials (main model) */}
           <div style={{ display: 'flex', gap: '12px' }}>
             <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
               <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.apiKey')}</label>
@@ -220,6 +220,18 @@ export default function EditProjectModal({
             <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
               <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.apiBase')}</label>
               <input type="text" value={editingProject.api_base} onChange={e => setEditingProject(p => ({ ...p, api_base: e.target.value }))} placeholder={t('editProjectModal.apiBasePlaceholder')} />
+            </div>
+          </div>
+
+          {/* API credentials (worker model) */}
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
+              <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.workerApiKey')}</label>
+              <input type="password" value={editingProject.worker_api_key} onChange={e => setEditingProject(p => ({ ...p, worker_api_key: e.target.value }))} placeholder={t('editProjectModal.apiKeyPlaceholder')} />
+            </div>
+            <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
+              <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('editProjectModal.workerApiBase')}</label>
+              <input type="text" value={editingProject.worker_api_base} onChange={e => setEditingProject(p => ({ ...p, worker_api_base: e.target.value }))} placeholder={t('editProjectModal.apiBasePlaceholder')} />
             </div>
           </div>
 

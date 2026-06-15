@@ -59,6 +59,7 @@ export default function App() {
   // ── Bottom panel ──────────────────────────────────────────────────────────
   const [terminalLogs, setTerminalLogs] = useState([]);
   const [problems, setProblems] = useState([]);
+  const [achievementsMemory, setAchievementsMemory] = useState('');
   const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false);
   const [activeBottomTab, setActiveBottomTab] = useState('output');
   const [panelMaxLines, setPanelMaxLines] = useState(() => {
@@ -80,6 +81,7 @@ export default function App() {
   const [gitChanges, setGitChanges] = useState([]);
   const [commitMessage, setCommitMessage] = useState('');
   const [isCommitting, setIsCommitting] = useState(false);
+  const [useShadowGit, setUseShadowGit] = useState(false);
 
   // ── Drag-and-drop ─────────────────────────────────────────────────────────
   const [draggedNode, setDraggedNode] = useState(null);
@@ -102,6 +104,8 @@ export default function App() {
   const [newProjModelParams, setNewProjModelParams] = useState({});
   const [newProjApiKey, setNewProjApiKey] = useState('');
   const [newProjApiBase, setNewProjApiBase] = useState('http://localhost:11434/v1');
+  const [newProjWorkerApiKey, setNewProjWorkerApiKey] = useState('');
+  const [newProjWorkerApiBase, setNewProjWorkerApiBase] = useState('');
   const [newProjError, setNewProjError] = useState('');
 
   const [editingProject, setEditingProject] = useState(null);
@@ -238,6 +242,18 @@ export default function App() {
   }, [activeProject]);
 
   useEffect(() => {
+    if (!activeProject || !selectedFile) return;
+    fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(selectedFile)}&shadow=${useShadowGit}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(gitData => {
+        if (gitData && gitData.content !== undefined) {
+          setOriginalFileContents(prev => ({ ...prev, [selectedFile]: gitData.content }));
+        }
+      })
+      .catch(() => {});
+  }, [useShadowGit, selectedFile, activeProject]);
+
+  useEffect(() => {
     const disableContextMenu = (e) => e.preventDefault();
     const closeMenu = () => setContextMenu(null);
     document.addEventListener('contextmenu', disableContextMenu);
@@ -307,16 +323,16 @@ export default function App() {
   // ── Helpers ───────────────────────────────────────────────────────────────
   const trimToLimit = (arr, limit) => arr.length > limit ? arr.slice(arr.length - limit) : arr;
 
-  const addLog = (type, message) =>
+  const addLog = (type, message, agent) =>
     setTerminalLogs(prev => {
       let next;
       if (prev.length > 0) {
         const last = prev[prev.length - 1];
-        if (last.type === type && (type === 'thought' || type === 'reflection' || type === 'stream_chunk' || type === 'stdout' || type === 'stderr')) {
+        if (last.type === type && last.agent === agent && (type === 'thought' || type === 'reflection' || type === 'stream_chunk' || type === 'stdout' || type === 'stderr')) {
           next = [...prev.slice(0, -1), { ...last, message: last.message + message }];
         }
       }
-      if (!next) next = [...prev, { type, message, timestamp: new Date().toLocaleTimeString() }];
+      if (!next) next = [...prev, { type, message, agent, timestamp: new Date().toLocaleTimeString() }];
       return trimToLimit(next, panelMaxLines);
     });
 
@@ -361,10 +377,10 @@ export default function App() {
   const fetchGitStatus = async () => {
     if (!activeProject) return;
     try {
-      const res = await fetch(`/api/git/status?projectPath=${encodeURIComponent(activeProject.project_path)}`);
+      const res = await fetch(`/api/git/status?projectPath=${encodeURIComponent(activeProject.project_path)}&shadow=${useShadowGit}`);
       if (res.ok) {
         const data = await res.json();
-        console.log(`[DEBUG fetchGitStatus] projectPath="${activeProject.project_path}" files=`, data.files);
+        console.log(`[DEBUG fetchGitStatus] projectPath="${activeProject.project_path}" shadow=${useShadowGit} files=`, data.files);
         setGitChanges(data.files || []);
       }
     } catch (err) { console.error('Failed to fetch git status', err); }
@@ -420,7 +436,7 @@ export default function App() {
     try {
       const res = await fetch('/api/git/commit', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectPath: activeProject.project_path, message: commitMessage }),
+        body: JSON.stringify({ projectPath: activeProject.project_path, message: commitMessage, shadow: useShadowGit }),
       });
       const data = await res.json();
       console.log(`[DEBUG handleGitCommit] Response status=${res.status}`, data);
@@ -435,7 +451,7 @@ export default function App() {
     try {
       await fetch('/api/git/stage', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectPath: activeProject.project_path, filePath, action: 'stage' }),
+        body: JSON.stringify({ projectPath: activeProject.project_path, filePath, action: 'stage', shadow: useShadowGit }),
       });
       fetchGitStatus();
     } catch (err) { addLog('error', t('app.stageError', { error: err.message })); }
@@ -446,7 +462,7 @@ export default function App() {
     try {
       await fetch('/api/git/stage', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectPath: activeProject.project_path, filePath, action: 'unstage' }),
+        body: JSON.stringify({ projectPath: activeProject.project_path, filePath, action: 'unstage', shadow: useShadowGit }),
       });
       fetchGitStatus();
     } catch (err) { addLog('error', t('app.unstageError', { error: err.message })); }
@@ -457,7 +473,7 @@ export default function App() {
     try {
       const res = await fetch('/api/git/discard', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectPath: activeProject.project_path, filePath }),
+        body: JSON.stringify({ projectPath: activeProject.project_path, filePath, shadow: useShadowGit }),
       });
       if (res.ok) { addLog('info', `Alterações descartadas: ${filePath}`); fetchGitStatus(); fetchFiles(); }
       else { const d = await res.json(); addLog('error', `Erro ao descartar: ${d.error}`); }
@@ -536,6 +552,15 @@ export default function App() {
         setFileContent(data.content); 
         setFileContents(prev => ({ ...prev, [filePath]: data.content })); 
         setOriginalFileContents(prev => ({ ...prev, [filePath]: data.content }));
+        
+        fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(filePath)}&shadow=${useShadowGit}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(gitData => {
+            if (gitData && gitData.content !== undefined) {
+               setOriginalFileContents(prev => ({ ...prev, [filePath]: gitData.content }));
+            }
+          })
+          .catch(() => {});
       }
       else addLog('error', `Erro ao ler arquivo: ${filePath}`);
     } catch (err) { addLog('error', `Erro de leitura: ${err.message}`); }
@@ -552,7 +577,17 @@ export default function App() {
       if (res.ok) { 
         addLog('info', `Arquivo salvo: ${selectedFile}`); 
         setFileContents(prev => ({ ...prev, [selectedFile]: fileContent })); 
-        setOriginalFileContents(prev => ({ ...prev, [selectedFile]: fileContent }));
+        
+        fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(selectedFile)}&shadow=${useShadowGit}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(gitData => {
+            if (gitData && gitData.content !== undefined) {
+               setOriginalFileContents(prev => ({ ...prev, [selectedFile]: gitData.content }));
+            }
+          })
+          .catch(() => {
+             // Do not overwrite originalFileContents on error or 404, keep the previous diff context
+          });
         fetchGitStatus(); 
         fetchProblems(); 
       }
@@ -687,11 +722,11 @@ export default function App() {
     try {
       const res = await fetch('/api/opalacoder/create-project', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_name: newProjName, project_path: newProjPath, description: newProjDesc, model: newProjModel, mode: newProjMode, api_key: newProjApiKey, api_base: newProjApiBase, model_params: Object.keys(newProjModelParams).length ? newProjModelParams : undefined }),
+        body: JSON.stringify({ project_name: newProjName, project_path: newProjPath, description: newProjDesc, model: newProjModel, worker_model: newProjWorkerModel, mode: newProjMode, api_key: newProjApiKey, api_base: newProjApiBase, worker_api_key: newProjWorkerApiKey, worker_api_base: newProjWorkerApiBase, model_params: Object.keys(newProjModelParams).length ? newProjModelParams : undefined }),
       });
       if (res.ok) {
         addLog('info', `Projeto '${newProjName}' registrado.`);
-        setShowNewProjectModal(false); setNewProjName(''); setNewProjPath(''); setNewProjDesc(''); setNewProjApiKey(''); setNewProjApiBase('http://localhost:11434/v1');
+        setShowNewProjectModal(false); setNewProjName(''); setNewProjPath(''); setNewProjDesc(''); setNewProjApiKey(''); setNewProjApiBase('http://localhost:11434/v1'); setNewProjWorkerApiKey(''); setNewProjWorkerApiBase('');
         fetchProjects();
       } else { const err = await res.json(); setNewProjError(err.error || 'Erro ao criar projeto.'); addLog('error', `Erro ao criar projeto: ${err.error}`); }
     } catch (err) { setNewProjError(err.message || 'Erro ao criar projeto.'); addLog('error', `Erro ao criar: ${err.message}`); }
@@ -727,7 +762,7 @@ export default function App() {
     } catch (_) { }
     setModelConfigMsg('');
     setEditProjError('');
-    const newState = { name: fresh.name, project_name: fresh.project_name || fresh.name, project_path: fresh.project_path || '', model: fresh.model || '', alternative_model: fresh.alternative_model || '', mode: fresh.mode || 'auto', description: fresh.description || '', model_params: fresh.model_params || {}, api_key: fresh.api_key || '', api_base: fresh.api_base || '' };
+    const newState = { name: fresh.name, project_name: fresh.project_name || fresh.name, project_path: fresh.project_path || '', model: fresh.model || '', worker_model: fresh.worker_model || '', mode: fresh.mode || 'auto', description: fresh.description || '', model_params: fresh.model_params || {}, api_key: fresh.api_key || '', api_base: fresh.api_base || '', worker_api_key: fresh.worker_api_key || '', worker_api_base: fresh.worker_api_base || '' };
     console.log("[DEBUG APP] Estado editingProject final que vai para a Modal:", newState);
     setEditingProject(newState);
   };
@@ -740,7 +775,7 @@ export default function App() {
     try {
       const res = await fetch('/api/opalacoder/update-project', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_name: editingProject.name, display_name: editingProject.project_name, project_path: editingProject.project_path, model: editingProject.model, alternative_model: editingProject.alternative_model, mode: editingProject.mode, description: editingProject.description, model_params: editingProject.model_params, api_key: editingProject.api_key, api_base: editingProject.api_base }),
+        body: JSON.stringify({ project_name: editingProject.name, display_name: editingProject.project_name, project_path: editingProject.project_path, model: editingProject.model, worker_model: editingProject.worker_model, mode: editingProject.mode, description: editingProject.description, model_params: editingProject.model_params, api_key: editingProject.api_key, api_base: editingProject.api_base, worker_api_key: editingProject.worker_api_key, worker_api_base: editingProject.worker_api_base }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -826,7 +861,7 @@ export default function App() {
       }
 
       if (editingProject.api_base) payloadParams.api_base = editingProject.api_base;
-      if (editingProject.alternative_model) payloadParams.alternative_model = editingProject.alternative_model;
+      if (editingProject.worker_model) payloadParams.worker_model = editingProject.worker_model;
 
       if (editingProject.model && editingProject.model.includes('/')) {
         const [provider] = editingProject.model.split('/');
@@ -921,20 +956,23 @@ export default function App() {
   const handleAgentEvent = (eventObj) => {
     const { event, ...data } = eventObj;
     switch (event) {
-      case 'server_ready': addLog('info', 'Agente pronto.'); break;
-      case 'agent_started': addLog('info', `Agente ${data.agent} iniciado.`); break;
+      case 'server_ready': addLog('info', 'Agente pronto.', data.agent); break;
+      case 'agent_started': addLog('info', `Agente ${data.agent} iniciado.`, data.agent); break;
       case 'thought':
-        addLog('thought', data.content);
+        addLog('thought', data.content, data.agent);
         break;
       case 'reflection':
-        addLog('reflection', data.content);
+        addLog('reflection', data.content, data.agent);
+        break;
+      case 'achievements_update':
+        setAchievementsMemory(data.content);
         break;
       case 'stream_chunk':
-        addLog('stream_chunk', data.content);
+        addLog('stream_chunk', data.content, data.agent);
         break;
-      case 'cancelled': addLog('warning', data.message || 'Execução cancelada.'); setChatMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Interrompido: ${data.message || 'A execução do agente foi parada.'}` }]); break;
+      case 'cancelled': addLog('warning', data.message || 'Execução cancelada.', data.agent); setChatMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Interrompido: ${data.message || 'A execução do agente foi parada.'}` }]); break;
       case 'tool_call':
-        addLog('tool_call', `Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`);
+        addLog('tool_call', `Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`, data.agent);
         if (['write_file', 'write_content_pos', 'edit_file'].includes(data.tool)) {
           const writePath = data.arguments?.path;
           console.log(`[DEBUG tool_call] ${data.tool} path="${writePath}" — currentEditorCached=${fileContents[writePath] !== undefined}`);
@@ -943,9 +981,9 @@ export default function App() {
         break;
       case 'tool_result':
         if (data.is_error) {
-          addLog('error', `Falha na ferramenta: ${data.tool}`);
+          addLog('error', `Falha na ferramenta: ${data.tool}`, data.agent);
         } else {
-          addLog('tool_result', `Sucesso: ${data.tool}`);
+          addLog('tool_result', `Sucesso: ${data.tool}`, data.agent);
         }
         if (['write_file', 'write_content_pos', 'edit_file'].includes(data.tool)) {
           console.log(`[DEBUG tool_result] ${data.tool} result="${data.result}"`);
@@ -978,6 +1016,18 @@ export default function App() {
                       console.log(`[DEBUG tool_result] Reloaded open file "${selectedFile}" from disk.`);
                       setFileContent(d.content);
                       setFileContents(prev => ({ ...prev, [selectedFile]: d.content }));
+                      fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(selectedFile)}&shadow=${useShadowGit}`)
+                        .then(r => r.ok ? r.json() : null)
+                        .then(gitData => {
+                          if (gitData && gitData.content !== undefined) {
+                             setOriginalFileContents(prev => ({ ...prev, [selectedFile]: gitData.content }));
+                          } else {
+                             setOriginalFileContents(prev => ({ ...prev, [selectedFile]: d.content }));
+                          }
+                        })
+                        .catch(() => {
+                           setOriginalFileContents(prev => ({ ...prev, [selectedFile]: d.content }));
+                        });
                     }
                   })
                   .catch(() => {});
@@ -988,11 +1038,16 @@ export default function App() {
         break;
       case 'agent_response':
         addLog('info', 'Resposta recebida.');
+        const responseText = (data.response && data.response.trim() !== '') 
+          ? data.response 
+          : "⚠️ *O agente concluiu o processamento, mas não emitiu nenhuma resposta textual ou chamada de ferramenta. Isso geralmente acontece quando o modelo de IA sofre uma falha de geração (ex: esqueceu de usar o formato correto após pensar).*";
+
         setChatMessages(prev => {
           const last = prev[prev.length - 1];
-          if (last?.role === 'assistant' && last.content === data.response) return prev;
-          return [...prev, { role: 'assistant', content: data.response }];
+          if (last?.role === 'assistant' && last.content === responseText) return prev;
+          return [...prev, { role: 'assistant', content: responseText }];
         });
+
         // ── Auto-replace: if there is a pending inline selection range, extract
         //    the first fenced code block from the response and apply it.
         if (pendingInlineRangeRef.current && editorRef.current && monacoRef.current) {
@@ -1042,6 +1097,7 @@ export default function App() {
     setChatMessages(prev => [...prev, { role: 'user', content: userText }]);
     setIsAgentRunning(true);
     setProblems([]);
+    setAchievementsMemory('');
     addLog('info', `Iniciando: "${userText}"`);
 
     if (userText.trim().startsWith('/')) {
@@ -1229,11 +1285,11 @@ export default function App() {
               if (textContent.startsWith('{"result":') || textContent.startsWith('{"error":') || textContent.startsWith('{"name":')) continue;
 
               let typeName = data.event;
-              addLog(typeName, textContent);
+              addLog(typeName, textContent, data.agent);
             } else if (data.event === 'tool_call') {
-              addLog('tool_call', `[Inline] Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`);
+              addLog('tool_call', `[Inline] Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`, data.agent);
             } else if (data.event === 'tool_result') {
-              addLog('tool_result', `[Inline] Retorno: ${data.tool}`);
+              addLog('tool_result', `[Inline] Retorno: ${data.tool}`, data.agent);
             }
           } catch (e) {
             // ignore non-json logs
@@ -1419,6 +1475,8 @@ export default function App() {
                 onStageFile={handleStageFile}
                 onUnstageFile={handleUnstageFile}
                 onDiscardFile={handleDiscardFile}
+                useShadowGit={useShadowGit}
+                setUseShadowGit={setUseShadowGit}
               />
             )}
           </aside>
@@ -1489,6 +1547,7 @@ export default function App() {
               setTerminalLogs={setTerminalLogs}
               problems={problems}
               setProblems={setProblems}
+              achievementsMemory={achievementsMemory}
               bottomPanelHeight={bottomPanelHeight}
               activeProject={activeProject}
               terminalRef={terminalRef}
@@ -1585,7 +1644,7 @@ export default function App() {
           modelConfigMsg={modelConfigMsg}
           onLoadModelConfig={(silent = false) => loadModelConfig(editingProject.project_path, editingProject.model, (cfg) => setEditingProject(p => {
             const loaded = cfg.model_params || {};
-            const { api_base, api_key, alternative_model, ...restParams } = loaded;
+            const { api_base, api_key, worker_model, ...restParams } = loaded;
             const cleanRestParams = Object.fromEntries(Object.entries(restParams).filter(([_, v]) => v !== null && v !== undefined));
             return {
               ...p,
@@ -1593,7 +1652,9 @@ export default function App() {
               model: cfg.model || p.model,
               api_base: (api_base !== undefined && api_base !== "") ? api_base : p.api_base,
               api_key: (api_key !== undefined && api_key !== "") ? api_key : p.api_key,
-              alternative_model: alternative_model !== undefined ? alternative_model : p.alternative_model
+              worker_model: worker_model !== undefined ? worker_model : p.worker_model,
+              worker_api_base: worker_api_base !== undefined ? worker_api_base : p.worker_api_base,
+              worker_api_key: worker_api_key !== undefined ? worker_api_key : p.worker_api_key
             };
           }), silent)}
           onOpenDirPicker={openDirPicker}

@@ -115,7 +115,7 @@ def _get_agents_config() -> dict:
 # Evaluated at module load to serve as CLI defaults (will read ~/.opalacoder/agents.yaml if present)
 _initial_cfg = _get_agents_config()
 DEFAULT_MODEL = _initial_cfg.get("default", os.getenv("OPALA_MODEL", "ollama/gemma4:12b"))
-ALTERNATIVE_MODEL = _initial_cfg.get("alternative", "gemini/gemini-3.1-flash-lite")
+WORKER_MODEL = _initial_cfg.get("worker", _initial_cfg.get("alternative", "gemini/gemini-3.1-flash-lite"))
 
 def _get_llm_defaults():
     cfg = _get_agents_config()
@@ -225,9 +225,17 @@ def get_agent_llm_kwargs(agent_name: str) -> dict:
                 clean_params = {k: v for k, v in _PROJECT_SESSION.model_params.items() if v is not None}
                 merged.update(clean_params)
             
-            if getattr(_PROJECT_SESSION, "api_base", None):
+            w_api_base = getattr(_PROJECT_SESSION, "worker_api_base", None) if agent_name == "worker" else None
+            w_api_key = getattr(_PROJECT_SESSION, "worker_api_key", None) if agent_name == "worker" else None
+            
+            if w_api_base:
+                merged["api_base"] = w_api_base
+            elif getattr(_PROJECT_SESSION, "api_base", None):
                 merged["api_base"] = _PROJECT_SESSION.api_base
-            if getattr(_PROJECT_SESSION, "api_key", None):
+                
+            if w_api_key:
+                merged["api_key"] = w_api_key
+            elif getattr(_PROJECT_SESSION, "api_key", None):
                 merged["api_key"] = _PROJECT_SESSION.api_key
     except Exception:
         pass

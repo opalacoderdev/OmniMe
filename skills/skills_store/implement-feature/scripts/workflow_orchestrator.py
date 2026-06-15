@@ -13,7 +13,7 @@ Architecture (specs3.md compliant):
   Cycle:
     1. PLAN   — oracle produces PlanOutput JSON (with reflection on failure)
     2. EXECUTE — LLMAgentBlock workers with composite tools (specs3 #1–#3, #5–#6)
-                 + escalation to ALTERNATIVE_MODEL on failure (specs3 #4)
+                 + escalation to WORKER_MODEL on failure (specs3 #4)
     3. VERIFY  — oracle produces VerifyOutput JSON (with reflection on failure)
     4. LOOP   — repeat until done=True or heartbeat budget exhausted.
 """
@@ -431,69 +431,6 @@ Hard rules:
             if skill_tool_names else ""
         )
 
-    def _planner_system_bugfix(self, project_context: str, session, skill_tool_names: list[str] = None) -> str:
-        proj_path = "."
-        if project_context:
-            m = re.search(r"PATH:\s*(.+?)\]", project_context)
-            proj_path = m.group(1).strip() if m else "."
-
-        task_schema_example = json.dumps({
-            "id": "t1",
-            "goal": "Fix the divide-by-zero error in calculator.py line 42",
-            "commands": [
-                "Read calculator.py lines 38-50 to confirm the buggy division expression",
-                "Edit calculator.py: add guard `if divisor == 0: return None` before line 42"
-            ],
-            "related_files": ["calculator.py"],
-            "context": (
-                "Bug is in function `divide(a, b)` at line 42: `return a / b` raises ZeroDivisionError "
-                "when b=0. Fix must return None (or raise ValueError) without changing function signature."
-            ),
-            "depends_on": [],
-            "review_only": False
-        }, indent=2)
-
-        return f"""\
-You are a software bugfix planner for the project at `{proj_path}`.
-You have received VECTOR CONTEXT: ranked code chunks most semantically similar to the bug report.
-Use them as the primary source of truth for locating the defect.
-
-Break the fix into focused, fully self-contained IMPLEMENTATION tasks.
-
-IMPORTANT: Workers share NO memory and have NO access to each other's output.
-Every task description must be 100% self-contained.
-
-Output ONLY valid JSON — no prose, no markdown fences:
-{{"tasks": [<task>, ...]}}
-
-Each task MUST follow this exact schema:
-{task_schema_example}
-
-Field rules:
-- id: short unique identifier (t1, t2, ...)
-- goal: one sentence — what specific bug this task fixes and in which file/function
-- commands: ordered list of atomic steps; each step is a PLAIN TEXT STRING
-  * CRITICAL: every element MUST be a string. NEVER put a JSON object or dict inside commands.
-  * The FIRST command MUST be a string like: "Read script.js lines 38-50 to inspect the buggy section"
-  * Be concrete about line numbers and exact expressions when known from vector context
-- related_files: only files mentioned in the vector context or directly implicated by the bug
-- context: exact details from vector context the worker needs (function names, line ranges, expressions)
-- depends_on: task ids that must complete first (usually empty for bugfixes)
-- review_only: true if the task ONLY reads, inspects, or runs diagnostic tools — no file writes expected.
-  Set to false for any task that creates or modifies files.
-
-Hard rules:
-- ONLY modify files present in the vector context unless the bug clearly propagates to another file.
-- Do NOT create new files unless explicitly required by the fix.
-- Do NOT refactor, rename, or clean up code beyond what is needed to fix the reported bug.
-- Never add tasks like "gather requirements" or "ask the user".
-- The user request is COMPLETE — fix it directly.
-""" + (
-            f"\nAvailable skill tools (workers have these as callable functions):\n"
-            + "\n".join(f"- {name}" for name in skill_tool_names)
-            + "\nFor fix tasks, the first command MUST call the relevant skill tool on the target file.\n"
-            if skill_tool_names else ""
-        )
 
     def _reviewer_system(self, project_context: str) -> str:
         """System prompt for the planner-review oracle.
@@ -726,11 +663,11 @@ Correction task schema:
             # specs3 #4 — escalate on failure signals
             if any(s in result.lower() for s in _failure):
                 try:
-                    from opalacoder.config import ALTERNATIVE_MODEL
+                    from opalacoder.config import WORKER_MODEL
                     from opalacoder.api_keys import ensure_api_key
-                    if self.model != ALTERNATIVE_MODEL and ensure_api_key(ALTERNATIVE_MODEL):
-                        AGENT_PROGRESS.last_tool = f"Escalating → {ALTERNATIVE_MODEL[:20]}"
-                        alt = await _run_command(cmd_index, command, ALTERNATIVE_MODEL)
+                    if self.model != WORKER_MODEL and ensure_api_key(WORKER_MODEL):
+                        AGENT_PROGRESS.last_tool = f"Escalating → {WORKER_MODEL[:20]}"
+                        alt = await _run_command(cmd_index, command, WORKER_MODEL)
                         if not any(s in alt.lower() for s in _failure):
                             result = alt
                 except Exception:
@@ -754,7 +691,6 @@ Correction task schema:
     async def run(self, user_request: str, history: str, **kwargs) -> str:
         session = kwargs.get("session")
         store = kwargs.get("store")
-        intent: str = kwargs.get("intent", "newfeat")
         interactive: bool = kwargs.get("interactive", True)
 
         project_context = (
@@ -834,11 +770,7 @@ Correction task schema:
         # implicit worker-injected reviewer. No skill tools/reviewers are loaded.
         _skill_tool_names: list[str] = []
 
-        _is_bugfix = intent == "bugfix"
-        if _is_bugfix:
-            planner_sys = self._planner_system_bugfix(project_context, session, _skill_tool_names or None)
-        else:
-            planner_sys = self._planner_system(project_context, session, _skill_tool_names or None)
+        planner_sys = self._planner_system(project_context, session, _skill_tool_names or None)
         reviewer_sys = self._reviewer_system(project_context)
 
         # Project snapshot fetched once — used to prime oracle without tools
@@ -1162,37 +1094,9 @@ Correction task schema:
                     + file_snippets + "\n"
                 )
 
-            # ── bugfix: build vector index and retrieve relevant chunks ──
+            # The vector chunk section and bugfix retrieval have been retired
+            # as part of intent classifier removal.
             vector_chunk_section = ""
-            if _is_bugfix:
-                try:
-                    from opalacoder.vector_index import set_vector_project
-                    from opalacoder.config import get_vector_config
-                    vcfg = get_vector_config()
-                    vidx = set_vector_project(get_project_path())
-                    T.debug_oracle("vector_index", 0, "Building vector index…")
-                    vstats = vidx.build(
-                        embedding_model=vcfg["embedding_model"],
-                        embedding_fallback=vcfg["embedding_fallback"],
-                        chunk_size=vcfg["chunk_size"],
-                        chunk_overlap=vcfg["chunk_overlap"],
-                    )
-                    T.debug_oracle("vector_index", 0, f"Vector index ready: {vstats}")
-                    ranked = vidx.retrieve(
-                        query=user_request,
-                        top_k=vcfg["top_k"],
-                        embedding_model=vcfg["embedding_model"],
-                        embedding_fallback=vcfg["embedding_fallback"],
-                    )
-                    if ranked:
-                        vector_chunk_section = (
-                            "\nChunks most likely related to the bug (retrieved by semantic search — use as leads, not restrictions):\n"
-                            + vidx.format_for_prompt(ranked)
-                            + "\n"
-                        )
-                        T.debug_oracle("vector_index", 0, f"Retrieved {len(ranked)} chunks for bugfix planner")
-                except Exception as _vidx_err:
-                    T.debug_oracle("vector_index", 0, f"Vector retrieval skipped: {_vidx_err}")
 
             planning_prompt = (
                 f"Project files:\n{snapshot}\n"

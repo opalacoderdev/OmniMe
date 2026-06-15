@@ -8,11 +8,10 @@ a project context and invokes `orchestrator.run(...)`.
 
 Usage:
     python run_workflow.py --project-name <name> --request "<text>" \
-        --intent <newfeat|bugfix> [--model <litellm-model>]
+        [--model <litellm-model>]
 
     # Or, without a saved project, point at a directory:
-    python run_workflow.py --project-path /path/to/proj --request "<text>" \
-        --intent newfeat
+    python run_workflow.py --project-path /path/to/proj --request "<text>"
 
 The script prints the orchestrator's final summary to stdout.
 """
@@ -49,15 +48,15 @@ def _resolve_model(cli_model: str | None) -> str:
 
     The runner forwards the SKILL.md `model:` field as --model (docs/specs/06 §1),
     so cli_model already encodes the skill's preference when present. Values
-    "default"/"alternative" map to the configured models.
+    "default"/"worker" map to the configured models.
     """
-    from opalacoder.config import DEFAULT_MODEL, ALTERNATIVE_MODEL
+    from opalacoder.config import DEFAULT_MODEL, WORKER_MODEL
     if not cli_model:
         return DEFAULT_MODEL
     if cli_model == "default":
         return DEFAULT_MODEL
-    if cli_model == "alternative":
-        return ALTERNATIVE_MODEL
+    if cli_model in ("worker", "alternative"):
+        return WORKER_MODEL
     return cli_model
 
 
@@ -103,7 +102,6 @@ async def _run(args) -> str:
         history="",
         session=session,
         store=store,
-        intent=args.intent,
         project_skills=[],
         interactive=args.interactive,
     )
@@ -118,9 +116,8 @@ def main(argv=None) -> int:
     parser.add_argument("--request-file", default=None,
                         help="Path to a file containing the request (avoids shell "
                              "quoting of complex requests). Takes precedence over --request.")
-    parser.add_argument("--intent", choices=["newfeat", "bugfix"], default="newfeat")
     parser.add_argument("--model", default=None,
-                        help="Model override (default/alternative or a litellm id).")
+                        help="Model override (default/worker or a litellm id).")
     parser.add_argument("--project-name", default=None,
                         help="Name of a saved project to load (memory + history).")
     parser.add_argument("--project-path", default=None,

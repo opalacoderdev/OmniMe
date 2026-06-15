@@ -72,7 +72,7 @@ async def cmd_clear(state: REPLState, _args: list[str]) -> None:
             state.project.name, state.project.mode, state.project.model,
             state.project.project_name, state.project.project_path,
             state.project.skills, state.project.description,
-            alternative_model=state.project.alternative_model,
+            worker_model=state.project.worker_model,
             api_key=state.project.api_key,
             api_base=state.project.api_base,
             model_params=state.project.model_params,
@@ -240,19 +240,19 @@ async def cmd_rmskill(state: REPLState, args: list[str]) -> str | None:
 
 @_registry.register("/models", description="Show the models in use for this project")
 async def cmd_models(state: REPLState, _args: list[str]) -> None:
-    from .config import DEFAULT_MODEL, ALTERNATIVE_MODEL
+    from .config import DEFAULT_MODEL, WORKER_MODEL
     main_model = state.project.model or DEFAULT_MODEL
-    alt_model = state.project.alternative_model or ALTERNATIVE_MODEL
-    alt_origin = "project" if state.project.alternative_model else "global (agents.yaml)"
+    alt_model = state.project.worker_model or WORKER_MODEL
+    alt_origin = "project" if state.project.worker_model else "global (agents.yaml)"
     T.console.print(f"\n[dim]Models for project '{state.display_name}':[/dim]")
     T.console.print(f"  [cyan]main[/cyan]        {main_model}")
-    T.console.print(f"  [cyan]alternative[/cyan] {alt_model}  [dim]({alt_origin})[/dim]")
+    T.console.print(f"  [cyan]worker[/cyan]      {alt_model}  [dim]({alt_origin})[/dim]")
     params = getattr(state.project, "model_params", {})
     if params:
         T.console.print(f"  [cyan]parameters[/cyan]")
         for k, v in params.items():
             T.console.print(f"    {k}: {v}")
-    T.console.print(f"\n[dim]Change with /set-main-model <id>, /set-alternative-model <id>, or /set-model-param <name> <value>.[/dim]\n")
+    T.console.print(f"\n[dim]Change with /set-main-model <id>, /set-worker-model <id>, or /set-model-param <name> <value>.[/dim]\n")
 
 
 @_registry.register("/set-main-model", usage="<model_id>",
@@ -268,17 +268,17 @@ async def cmd_set_main_model(state: REPLState, args: list[str]) -> str | None:
     T.success(f"Main model set to '{model_id}' for this project.")
 
 
-@_registry.register("/set-alternative-model", usage="<model_id>",
-                    description="Set the alternative model for this project")
-async def cmd_set_alternative_model(state: REPLState, args: list[str]) -> str | None:
+@_registry.register("/set-worker-model", usage="<model_id>",
+                    description="Set the worker model for this project")
+async def cmd_set_worker_model(state: REPLState, args: list[str]) -> str | None:
     if not args:
-        T.error("Usage: /set-alternative-model <model_id>  (e.g. gemini/gemini-2.0-flash)")
+        T.error("Usage: /set-worker-model <model_id>  (e.g. gemini/gemini-2.0-flash)")
         return "continue"
     model_id = args[0].strip()
-    state.project.alternative_model = model_id
+    state.project.worker_model = model_id
     state.store.save(state.project)
     _rebuild_memgpt(state)
-    T.success(f"Alternative model set to '{model_id}' for this project.")
+    T.success(f"Worker model set to '{model_id}' for this project.")
 
 
 def _parse_model_param_value(val_str: str):
