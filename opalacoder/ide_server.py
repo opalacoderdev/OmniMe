@@ -1065,6 +1065,18 @@ class AsyncHTTPServer:
                 return
             self.send_response(writer, 200, json.dumps({"chats": project.chats}).encode(), "application/json")
 
+        elif path == '/api/chat/search' and method == 'GET':
+            from opalacoder.config import DEFAULT_DB_PATH
+            from opalacoder.project import ProjectStore
+            store = ProjectStore(db_path=DEFAULT_DB_PATH)
+            project_name = query.get("project_name", [""])[0]
+            q = query.get("q", [""])[0]
+            if not project_name or not q:
+                self.send_response(writer, 400, b'{"error":"project_name and q required"}', "application/json")
+                return
+            results = store.search_chat_content(project_name, q)
+            self.send_response(writer, 200, json.dumps({"results": results}).encode(), "application/json")
+
         elif path == '/api/chat/create' and method == 'POST':
             from opalacoder.config import DEFAULT_DB_PATH
             from opalacoder.project import ProjectStore

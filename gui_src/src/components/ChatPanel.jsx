@@ -1,10 +1,11 @@
 import { useRef, useState, useCallback, useLayoutEffect } from 'react';
-import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings, Plus, Trash2 } from 'lucide-react';
+import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings, Plus, Trash2, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatMessageContent } from '../utils/formatMessage';
 import { readClipboard } from '../utils/clipboard.js';
 import { useTextContextMenu } from '../hooks/useTextContextMenu.js';
 import TextContextMenu from './TextContextMenu.jsx';
+import SearchChatsModal from './modals/SearchChatsModal.jsx';
 
 // Right-side chat panel for interacting with the OpalaCoder agent.
 export default function ChatPanel({
@@ -84,6 +85,7 @@ export default function ChatPanel({
   // Custom prompt state for new chat
   const [showNewChatPrompt, setShowNewChatPrompt] = useState(false);
   const [newChatName, setNewChatName] = useState('');
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   // Custom confirm state for deleting chat
   const [chatToDelete, setChatToDelete] = useState(null);
@@ -351,6 +353,9 @@ export default function ChatPanel({
           ))}
         </select>
         <div style={{ display: 'flex', gap: '4px' }}>
+          <button onClick={() => setShowSearchModal(true)} title={t('chat.searchChats', 'Search Chats')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0', display: 'flex', alignItems: 'center', padding: '2px' }}>
+            <Search size={14} />
+          </button>
           <button onClick={handleCreateChatClick} title="Novo Chat" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#4ec9b0', display: 'flex', alignItems: 'center', padding: '2px' }}>
             <Plus size={14} />
           </button>
@@ -374,6 +379,14 @@ export default function ChatPanel({
             </button>
           </div>
         </div>
+      )}
+
+      {showSearchModal && (
+        <SearchChatsModal
+          onClose={() => setShowSearchModal(false)}
+          activeProject={activeProject?.name}
+          onSwitchChat={handleSwitchChat}
+        />
       )}
 
       {showNewChatPrompt && (

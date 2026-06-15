@@ -601,6 +601,23 @@ class ProjectStore:
             row = conn.execute("SELECT core_memory FROM project_chats WHERE project = ? AND id = ?", (name, chat_id)).fetchone()
             return row["core_memory"] if row else ""
 
+    def search_chat_content(self, name: str, query: str) -> list[dict]:
+        with _conn(self.db_path) as conn:
+            # We want to return chats that contain the query string in their history.
+            # We will return the chat id, name, and a snippet of the matching content.
+            # We group by chat_id to return each chat only once.
+            sql = """
+                SELECT c.id, c.name, MIN(h.content) as snippet
+                FROM project_history h
+                JOIN project_chats c ON h.chat_id = c.id AND h.project = c.project
+                WHERE h.project = ? AND h.content LIKE ?
+                GROUP BY c.id
+                ORDER BY MAX(h.timestamp) DESC
+                LIMIT 20
+            """
+            rows = conn.execute(sql, (name, f"%{query}%")).fetchall()
+            return [dict(r) for r in rows]
+
     def update_chat_core_memory(self, name: str, chat_id: str, core_memory: str) -> None:
         with _conn(self.db_path) as conn:
             conn.execute("UPDATE project_chats SET core_memory = ? WHERE project = ? AND id = ?", (core_memory, name, chat_id))
