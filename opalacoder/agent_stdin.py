@@ -641,6 +641,8 @@ async def handle_create_project(data: dict):
     api_base = data.get("api_base")
     worker_api_key = data.get("worker_api_key")
     worker_api_base = data.get("worker_api_base")
+    model_params = data.get("model_params")
+    worker_model_params = data.get("worker_model_params")
     
     db_key = project_name.replace(" ", "_").lower()
     if store.exists(db_key):
@@ -658,6 +660,8 @@ async def handle_create_project(data: dict):
         api_base=api_base,
         worker_api_key=worker_api_key,
         worker_api_base=worker_api_base,
+        model_params=model_params,
+        worker_model_params=worker_model_params,
     )
     print_event("project_created", {
         "project_name": project.project_name,
@@ -705,6 +709,8 @@ async def handle_update_project(data: dict):
         project.worker_api_base = data["worker_api_base"]
     if "model_params" in data:
         project.model_params = data["model_params"]
+    if "worker_model_params" in data:
+        project.worker_model_params = data["worker_model_params"]
         
     store.save(project)
     print_event("project_updated", {

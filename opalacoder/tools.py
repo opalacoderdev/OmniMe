@@ -382,33 +382,41 @@ def run_python_script(script_path: str, args: str = "") -> str:
     except Exception as e:
         raise ValueError(f"Error running script: {e}")
 
-@as_tool(name="run_interactive_command", description="Run a command that requires user interaction (e.g. npm create, interactive scripts, prompts). The terminal control will be temporarily handed over to the user. Use this ONLY when a command needs human choices.")
+@as_tool(name="run_interactive_command", description="Run a command that requires user interaction (e.g. npm create, interactive scripts, prompts) directly in the GUI Terminal tab. Use this ONLY when a command needs human choices or requires a PTY.")
 def run_interactive_command(command: str) -> str:
-    import sys
+    import urllib.request
+    import json
     AGENT_PROGRESS.update("interactive_cmd", f"$ {_preview(command)}")
-    cwd = get_project_path()
     
-    # Pause the live context if it exists to prevent UI tearing
-    if getattr(AGENT_PROGRESS, "live_context", None):
-        AGENT_PROGRESS.live_context.stop()
-        
+    project_path = get_project_path()
+    
+    # Send the command to the active terminal via IDE Server API
     try:
-        T.warning(f"\n[Interactive Mode]: Giving terminal control to user for command: {command}")
-        res = subprocess.run(
-            command,
-            shell=True,
-            cwd=cwd,
+        req = urllib.request.Request(
+            "http://127.0.0.1:3000/api/terminal/input",
+            data=json.dumps({"action": "input", "text": command + "\n", "projectPath": project_path}).encode('utf-8'),
+            headers={'Content-Type': 'application/json'},
+            method='POST'
         )
-        if res.returncode != 0:
-            raise ValueError(f"Interactive command failed or was cancelled by the user (exit code {res.returncode}).")
-            
-        return "Interactive command completed. The user interacted with it successfully."
+        with urllib.request.urlopen(req, timeout=5) as response:
+            if response.status != 200:
+                T.warning("Failed to inject command into IDE Terminal (non-200 response).")
     except Exception as e:
-        raise ValueError(f"Error running interactive command: {e}")
-    finally:
-        # Resume live context
-        if getattr(AGENT_PROGRESS, "live_context", None):
-            AGENT_PROGRESS.live_context.start()
+        T.warning(f"Error communicating with IDE Terminal API: {e}")
+        # We don't abort completely because ask_human will still pop up and they could run it manually if needed.
+
+    # Now pause the agent and ask the human to confirm when it's done.
+    # ask_human uses the generic UI prompt modal which halts execution here.
+    question = (
+        f"Enviei o seguinte comando para execução na aba TERMINAL da IDE:\n\n"
+        f"    {command}\n\n"
+        f"Por favor, abra a aba TERMINAL no painel inferior, acompanhe a execução e "
+        f"interaja com o prompt se necessário.\n"
+        f"Quando o comando terminar (ou se ocorrer algum erro), descreva o resultado abaixo "
+        f"ou apenas digite 'pronto' para eu continuar."
+    )
+    
+    return ask_human(question)
 
 @as_tool(name="search_code", description="Search for a specific string across all files using grep. Searches inside the project directory by default.")
 def search_code(query: str, path: str = ".") -> str:

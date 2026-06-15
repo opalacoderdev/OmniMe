@@ -103,6 +103,7 @@ export default function App() {
   const [newProjWorkerModel, setNewProjWorkerModel] = useState('');
   const [newProjMode, setNewProjMode] = useState('auto');
   const [newProjModelParams, setNewProjModelParams] = useState({});
+  const [newProjWorkerModelParams, setNewProjWorkerModelParams] = useState({});
   const [newProjApiKey, setNewProjApiKey] = useState('');
   const [newProjApiBase, setNewProjApiBase] = useState('http://localhost:11434/v1');
   const [newProjWorkerApiKey, setNewProjWorkerApiKey] = useState('');
@@ -750,11 +751,11 @@ export default function App() {
     try {
       const res = await fetch('/api/opalacoder/create-project', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_name: newProjName, project_path: newProjPath, description: newProjDesc, model: newProjModel, worker_model: newProjWorkerModel, mode: newProjMode, api_key: newProjApiKey, api_base: newProjApiBase, worker_api_key: newProjWorkerApiKey, worker_api_base: newProjWorkerApiBase, model_params: Object.keys(newProjModelParams).length ? newProjModelParams : undefined }),
+        body: JSON.stringify({ project_name: newProjName, project_path: newProjPath, description: newProjDesc, model: newProjModel, worker_model: newProjWorkerModel, mode: newProjMode, api_key: newProjApiKey, api_base: newProjApiBase, worker_api_key: newProjWorkerApiKey, worker_api_base: newProjWorkerApiBase, model_params: Object.keys(newProjModelParams).length ? newProjModelParams : undefined, worker_model_params: Object.keys(newProjWorkerModelParams).length ? newProjWorkerModelParams : undefined }),
       });
       if (res.ok) {
         addLog('info', `Projeto '${newProjName}' registrado.`);
-        setShowNewProjectModal(false); setNewProjName(''); setNewProjPath(''); setNewProjDesc(''); setNewProjApiKey(''); setNewProjApiBase('http://localhost:11434/v1'); setNewProjWorkerApiKey(''); setNewProjWorkerApiBase('');
+        setShowNewProjectModal(false); setNewProjName(''); setNewProjPath(''); setNewProjDesc(''); setNewProjApiKey(''); setNewProjApiBase('http://localhost:11434/v1'); setNewProjWorkerApiKey(''); setNewProjWorkerApiBase(''); setNewProjModelParams({}); setNewProjWorkerModelParams({});
         fetchProjects();
       } else { const err = await res.json(); setNewProjError(err.error || 'Erro ao criar projeto.'); addLog('error', `Erro ao criar projeto: ${err.error}`); }
     } catch (err) { setNewProjError(err.message || 'Erro ao criar projeto.'); addLog('error', `Erro ao criar: ${err.message}`); }
@@ -790,7 +791,7 @@ export default function App() {
     } catch (_) { }
     setModelConfigMsg('');
     setEditProjError('');
-    const newState = { name: fresh.name, project_name: fresh.project_name || fresh.name, project_path: fresh.project_path || '', model: fresh.model || '', worker_model: fresh.worker_model || '', mode: fresh.mode || 'auto', description: fresh.description || '', model_params: fresh.model_params || {}, api_key: fresh.api_key || '', api_base: fresh.api_base || '', worker_api_key: fresh.worker_api_key || '', worker_api_base: fresh.worker_api_base || '', use_shared_memory: fresh.use_shared_memory ?? false };
+    const newState = { name: fresh.name, project_name: fresh.project_name || fresh.name, project_path: fresh.project_path || '', model: fresh.model || '', worker_model: fresh.worker_model || '', mode: fresh.mode || 'auto', description: fresh.description || '', model_params: fresh.model_params || {}, worker_model_params: fresh.worker_model_params || {}, api_key: fresh.api_key || '', api_base: fresh.api_base || '', worker_api_key: fresh.worker_api_key || '', worker_api_base: fresh.worker_api_base || '', use_shared_memory: fresh.use_shared_memory ?? false };
     console.log("[DEBUG APP] Estado editingProject final que vai para a Modal:", newState);
     setEditingProject(newState);
   };
@@ -803,7 +804,7 @@ export default function App() {
     try {
       const res = await fetch('/api/opalacoder/update-project', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_name: editingProject.name, display_name: editingProject.project_name, project_path: editingProject.project_path, model: editingProject.model, worker_model: editingProject.worker_model, mode: editingProject.mode, description: editingProject.description, model_params: editingProject.model_params, api_key: editingProject.api_key, api_base: editingProject.api_base, worker_api_key: editingProject.worker_api_key, worker_api_base: editingProject.worker_api_base, use_shared_memory: editingProject.use_shared_memory }),
+        body: JSON.stringify({ project_name: editingProject.name, display_name: editingProject.project_name, project_path: editingProject.project_path, model: editingProject.model, worker_model: editingProject.worker_model, mode: editingProject.mode, description: editingProject.description, model_params: editingProject.model_params, worker_model_params: editingProject.worker_model_params, api_key: editingProject.api_key, api_base: editingProject.api_base, worker_api_key: editingProject.worker_api_key, worker_api_base: editingProject.worker_api_base, use_shared_memory: editingProject.use_shared_memory }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -1650,6 +1651,8 @@ export default function App() {
           newProjApiBase={newProjApiBase} setNewProjApiBase={setNewProjApiBase}
           newProjWorkerApiKey={newProjWorkerApiKey} setNewProjWorkerApiKey={setNewProjWorkerApiKey}
           newProjWorkerApiBase={newProjWorkerApiBase} setNewProjWorkerApiBase={setNewProjWorkerApiBase}
+          newProjModelParams={newProjModelParams} setNewProjModelParams={setNewProjModelParams}
+          newProjWorkerModelParams={newProjWorkerModelParams} setNewProjWorkerModelParams={setNewProjWorkerModelParams}
           newProjError={newProjError}
           modelConfigMsg={modelConfigMsg}
           onLoadModelConfig={() => loadModelConfig(newProjPath, newProjModel, (cfg) => {
@@ -1662,7 +1665,18 @@ export default function App() {
               delete loaded.api_key;
               setNewProjModelParams(loaded);
             }
+            if (cfg.worker_model_params) {
+              const loadedWorker = { ...cfg.worker_model_params };
+              setNewProjWorkerModelParams(loadedWorker);
+            } else if (cfg.model_params) {
+              // Fallback if missing
+              const loadedFallback = { ...cfg.model_params };
+              delete loadedFallback.api_base;
+              delete loadedFallback.api_key;
+              setNewProjWorkerModelParams(loadedFallback);
+            }
             if (cfg.model) setNewProjModel(cfg.model);
+            if (cfg.worker_model) setNewProjWorkerModel(cfg.worker_model);
           })}
           onOpenDirPicker={openDirPicker}
         />

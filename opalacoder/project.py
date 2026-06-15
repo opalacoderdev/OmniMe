@@ -82,6 +82,12 @@ def _init_schema(db_path: str) -> None:
         except sqlite3.OperationalError:
             pass
 
+        # Migração: worker_model_params
+        try:
+            conn.execute("ALTER TABLE projects ADD COLUMN worker_model_params TEXT NOT NULL DEFAULT '{}'")
+        except sqlite3.OperationalError:
+            pass
+
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS project_chats (
                 id          TEXT PRIMARY KEY,
@@ -118,6 +124,7 @@ class ProjectData:
     results: dict = field(default_factory=dict)
     core_memory: str = ""
     model_params: dict = field(default_factory=lambda: {"think": False, "stream": False})
+    worker_model_params: dict = field(default_factory=lambda: {"think": False, "stream": False})
     api_key: str = ""
     api_base: str = ""
     worker_api_key: str = ""
@@ -156,12 +163,13 @@ class ProjectStore:
     def list_projects(self) -> list[dict]:
         with _conn(self.db_path) as conn:
             rows = conn.execute(
-                "SELECT name, project_name, project_path, created_at, updated_at, mode, model, worker_model, description, model_params, use_shared_memory FROM projects ORDER BY updated_at DESC"
+                "SELECT name, project_name, project_path, created_at, updated_at, mode, model, worker_model, description, model_params, worker_model_params, use_shared_memory FROM projects ORDER BY updated_at DESC"
             ).fetchall()
             res = []
             for r in rows:
                 d = dict(r)
                 d["use_shared_memory"] = bool(d.get("use_shared_memory", True))
+                
                 if "model_params" in d and d["model_params"]:
                     try:
                         d["model_params"] = json.loads(d["model_params"])
@@ -169,6 +177,14 @@ class ProjectStore:
                         d["model_params"] = {}
                 else:
                     d["model_params"] = {}
+                    
+                if "worker_model_params" in d and d["worker_model_params"]:
+                    try:
+                        d["worker_model_params"] = json.loads(d["worker_model_params"])
+                    except Exception:
+                        d["worker_model_params"] = {}
+                else:
+                    d["worker_model_params"] = {}
                 # Apply defaults for params added after project creation
                 d["model_params"].setdefault("think", False)
                 d["model_params"].setdefault("stream", False)
@@ -204,12 +220,13 @@ class ProjectStore:
                 res.append(d)
             return res
 
-    def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", worker_model: str = "", api_key: str = None, api_base: str = None, worker_api_key: str = None, worker_api_base: str = None, model_params: dict = None, apply_modelconfig: bool = True) -> ProjectData:
+    def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", worker_model: str = "", api_key: str = None, api_base: str = None, worker_api_key: str = None, worker_api_base: str = None, model_params: dict = None, worker_model_params: dict = None, apply_modelconfig: bool = True) -> ProjectData:
         now = datetime.now(timezone.utc).isoformat()
         _skills = skills if skills is not None else ["opalacoder"]
         if "opalacoder" not in _skills:
             _skills = ["opalacoder"] + _skills
         _model_params = model_params if model_params is not None else {}
+        _worker_model_params = worker_model_params if worker_model_params is not None else _model_params.copy()
 
         # Ensure the project path is absolute and exists
         abs_proj_path = os.path.abspath(project_path) if project_path else os.getcwd()
@@ -373,6 +390,8 @@ class ProjectStore:
                                 # Only set if it's missing or if the current value is empty/None
                                 if k not in _model_params or _model_params[k] in (None, ""):
                                     _model_params[k] = v
+                                if k not in _worker_model_params or _worker_model_params[k] in (None, ""):
+                                    _worker_model_params[k] = v
                                 
                 except Exception:
                     pass
@@ -389,8 +408,8 @@ class ProjectStore:
 
         with _conn(self.db_path) as conn:
             conn.execute(
-                "INSERT INTO projects (name, created_at, updated_at, mode, model, worker_model, project_name, project_path, skills, description, core_memory, model_params, use_shared_memory) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (name, now, now, mode, model, worker_model, project_name, abs_proj_path, json.dumps(_skills), description, "", json.dumps(_model_params), 0),
+                "INSERT INTO projects (name, created_at, updated_at, mode, model, worker_model, project_name, project_path, skills, description, core_memory, model_params, worker_model_params, use_shared_memory) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name, now, now, mode, model, worker_model, project_name, abs_proj_path, json.dumps(_skills), description, "", json.dumps(_model_params), json.dumps(_worker_model_params), 0),
             )
             # Create default main chat
             chat_id = f"main_{name}"
@@ -398,11 +417,11 @@ class ProjectStore:
                 "INSERT INTO project_chats (id, project, name, created_at, core_memory) VALUES (?,?,?,?,?)",
                 (chat_id, name, "Main Chat", now, "")
             )
-        return ProjectData(name=name, use_shared_memory=False, chats=[{"id": chat_id, "name": "Main Chat"}], current_chat_id=chat_id, mode=mode, model=model, worker_model=worker_model, project_name=project_name, project_path=abs_proj_path, skills=_skills, description=description, core_memory="", model_params=_model_params, api_key=api_key or "", api_base=api_base or "", worker_api_key=worker_api_key or "", worker_api_base=worker_api_base or "")
+        return ProjectData(name=name, use_shared_memory=False, chats=[{"id": chat_id, "name": "Main Chat"}], current_chat_id=chat_id, mode=mode, model=model, worker_model=worker_model, project_name=project_name, project_path=abs_proj_path, skills=_skills, description=description, core_memory="", model_params=_model_params, worker_model_params=_worker_model_params, api_key=api_key or "", api_base=api_base or "", worker_api_key=worker_api_key or "", worker_api_base=worker_api_base or "")
 
-    def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", worker_model: str = "", api_key: str = None, api_base: str = None, worker_api_key: str = None, worker_api_base: str = None, model_params: dict = None, use_shared_memory: bool = False) -> ProjectData:
+    def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", worker_model: str = "", api_key: str = None, api_base: str = None, worker_api_key: str = None, worker_api_base: str = None, model_params: dict = None, worker_model_params: dict = None, use_shared_memory: bool = False) -> ProjectData:
         self.delete(name)
-        new_proj = self.create(name, mode, model, project_name, project_path, skills, description, worker_model, api_key=api_key, api_base=api_base, worker_api_key=worker_api_key, worker_api_base=worker_api_base, model_params=model_params, apply_modelconfig=False)
+        new_proj = self.create(name, mode, model, project_name, project_path, skills, description, worker_model, api_key=api_key, api_base=api_base, worker_api_key=worker_api_key, worker_api_base=worker_api_base, model_params=model_params, worker_model_params=worker_model_params, apply_modelconfig=False)
         new_proj.use_shared_memory = use_shared_memory
         self.save(new_proj)
         return new_proj
@@ -494,6 +513,10 @@ class ProjectStore:
                     "think": False, "stream": False,
                     **(json.loads(row["model_params"]) if "model_params" in row.keys() else {}),
                 },
+                worker_model_params={
+                    "think": False, "stream": False,
+                    **(json.loads(row["worker_model_params"]) if "worker_model_params" in row.keys() and row["worker_model_params"] else (json.loads(row["model_params"]) if "model_params" in row.keys() else {})),
+                },
                 api_key=api_key,
                 api_base=api_base,
                 history=[dict(r) for r in hist_rows],
@@ -505,6 +528,7 @@ class ProjectStore:
         if "opalacoder" not in _skills:
             _skills = ["opalacoder"] + _skills
         _model_params = project.model_params if hasattr(project, "model_params") else {}
+        _worker_model_params = project.worker_model_params if hasattr(project, "worker_model_params") and project.worker_model_params else _model_params.copy()
         
         # Save api_key and api_base to project's local .env
         if hasattr(project, "api_key") or hasattr(project, "api_base") or hasattr(project, "worker_api_key") or hasattr(project, "worker_api_base"):
@@ -541,7 +565,7 @@ class ProjectStore:
         with _conn(self.db_path) as conn:
             conn.execute(
                 """UPDATE projects SET updated_at=?, mode=?, model=?, worker_model=?, project_name=?, project_path=?,
-                   skills=?, description=?, request=?, plan_text=?, subplans=?, results=?, core_memory=?, model_params=?, use_shared_memory=? WHERE name=?""",
+                   skills=?, description=?, request=?, plan_text=?, subplans=?, results=?, core_memory=?, model_params=?, worker_model_params=?, use_shared_memory=? WHERE name=?""",
                 (
                     now,
                     project.mode,
@@ -557,6 +581,7 @@ class ProjectStore:
                     json.dumps(project.results, ensure_ascii=False),
                     project.core_memory,
                     json.dumps(_model_params, ensure_ascii=False),
+                    json.dumps(_worker_model_params, ensure_ascii=False),
                     1 if getattr(project, "use_shared_memory", False) else 0,
                     project.name,
                 ),

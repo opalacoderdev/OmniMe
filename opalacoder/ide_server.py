@@ -921,6 +921,8 @@ class AsyncHTTPServer:
                 
             model_params_raw = data.get("model_params")
             model_params = sanitize_model_params(model_params_raw) if isinstance(model_params_raw, dict) else None
+            worker_model_params_raw = data.get("worker_model_params")
+            worker_model_params = sanitize_model_params(worker_model_params_raw) if isinstance(worker_model_params_raw, dict) else None
 
             db_key = project_name.replace(" ", "_").lower()
             original_db_key = db_key
@@ -943,6 +945,7 @@ class AsyncHTTPServer:
                     worker_api_key=worker_api_key,
                     worker_api_base=worker_api_base,
                     model_params=model_params,
+                    worker_model_params=worker_model_params,
                 )
             except Exception as e:
                 import traceback
@@ -1142,6 +1145,18 @@ class AsyncHTTPServer:
                         self.send_response(writer, 400, f'{{"error":"invalid parameter name: {k}"}}'.encode('utf-8'), "application/json")
                         return
                 project.model_params = sanitize_model_params(params)
+
+            if "worker_model_params" in data:
+                params = data["worker_model_params"]
+                if not isinstance(params, dict):
+                    self.send_response(writer, 400, b'{"error":"worker_model_params must be a JSON object"}', "application/json")
+                    return
+                import re as _re
+                for k in params.keys():
+                    if not k or not _re.fullmatch(r'[A-Za-z0-9_-]+', k):
+                        self.send_response(writer, 400, f'{{"error":"invalid parameter name: {k}"}}'.encode('utf-8'), "application/json")
+                        return
+                project.worker_model_params = sanitize_model_params(params)
 
             if "api_key" in data:
                 project.api_key = data["api_key"]
