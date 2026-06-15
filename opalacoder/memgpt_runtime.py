@@ -358,6 +358,21 @@ def build_run_skill_tool(
             def _worker_on_iteration(_step: int, messages: list) -> None:
                 last = messages[-1] if messages else {}
                 content = last.get("content") or ""
+                
+                if isinstance(content, str) and "SYSTEM ALERT:" in content and "JSON string in plain text" in content:
+                    if "Example of a valid tool call" not in content:
+                        example = (
+                            "\n\nExample of a valid tool call:\n"
+                            "```json\n"
+                            "{\n"
+                            "  \"name\": \"send_message\",\n"
+                            "  \"arguments\": {\"message\": \"I am fixing my format now.\"}\n"
+                            "}\n"
+                            "```\n"
+                        )
+                        last["content"] = content + example
+                        content = last["content"]
+
                 if content:
                     print_event("reflection", {"content": str(content), "agent": f"worker:{skill_name}"})
 
@@ -574,4 +589,24 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         _store_ref=store,
     )
     memgpt.tools = list(memgpt.tools) + [run_skill]
+
+    def _memgpt_on_iteration(_step: int, messages: list) -> None:
+        last = messages[-1] if messages else {}
+        content = last.get("content") or ""
+        
+        if isinstance(content, str) and "SYSTEM ALERT:" in content and "JSON string in plain text" in content:
+            if "Example of a valid tool call" not in content:
+                example = (
+                    "\n\nExample of a valid tool call:\n"
+                    "```json\n"
+                    "{\n"
+                    "  \"name\": \"send_message\",\n"
+                    "  \"arguments\": {\"message\": \"I am fixing my format now.\"}\n"
+                    "}\n"
+                    "```\n"
+                )
+                last["content"] = content + example
+
+    memgpt.on_iteration = _memgpt_on_iteration
+
     return memgpt
