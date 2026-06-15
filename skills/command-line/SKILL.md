@@ -16,6 +16,7 @@ This skill provides the sub-agent with tools to manipulate files and directories
         read_content_pos,
         write_content_pos,
         run_command,
+        run_interactive_command,
         search_conversation_history,
         exec
 
@@ -61,21 +62,26 @@ write_content_pos("tictactoe.html", "1", "10", "<content>")
 write_content_pos("src/utils.js", "10", "20", "<content>")
 ```
 
-5. exec: use exec for directly access shell without shell. For example:
+6. exec: use exec for directly access shell without shell. For example:
 ```
 exec("<command>")
 ```
-Examples:
+Examples (NON-INTERACTIVE commands only):
 ```
 exec("ls -l")
 exec("pwd")
 exec("node --version")
-exec("npm create vite@latest app -- --template react")
 exec("uv pip install django")
-exec("uv init -p python3.9")
+```
+WARNING: Do NOT use `exec` for commands that require user input (like `npm create`, `npm init`, etc). For those, you MUST use `run_interactive_command`.
+
+7. run_interactive_command: use this specifically for commands that require human interaction, choices, or input. It will open a popup terminal for the user.
+```
+run_interactive_command("npm create vite@latest app -- --template react")
+run_interactive_command("npm init")
 ```
 
-6. get_project_overview: use get_project_overview for directly access project tree of files. Try with a minimum depth of 5.
+8. get_project_overview: use get_project_overview for directly access project tree of files. Try with a minimum depth of 5.
 Example:
 ```
 get_project_overview(5)

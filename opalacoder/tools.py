@@ -382,7 +382,7 @@ def run_python_script(script_path: str, args: str = "") -> str:
     except Exception as e:
         raise ValueError(f"Error running script: {e}")
 
-@as_tool(name="run_interactive_command", description="Run a command that requires user interaction (e.g. npm create, interactive scripts, prompts) directly in the GUI Terminal tab. Use this ONLY when a command needs human choices or requires a PTY.")
+@as_tool(name="run_interactive_command", description="Run a command that requires user interaction (e.g. npm create, interactive scripts, prompts). This opens a dedicated interactive terminal popup in the user's GUI, allowing them to answer the prompts safely. Use this WHENEVER a command needs human choices, waits for input, or requires a PTY. Do NOT use standard `exec` or `run_command` for interactive tasks, as they will hang.")
 async def run_interactive_command(command: str) -> str:
     import uuid
     import opalacoder.terminal as T
