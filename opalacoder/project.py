@@ -17,6 +17,7 @@ def _ensure_dir(path: str) -> None:
 def _conn(db_path: str) -> sqlite3.Connection:
     _ensure_dir(db_path)
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -75,10 +76,35 @@ def _init_schema(db_path: str) -> None:
         except sqlite3.OperationalError:
             pass
 
+        # Migração: Multi-Chat support
+        try:
+            conn.execute("ALTER TABLE projects ADD COLUMN use_shared_memory INTEGER NOT NULL DEFAULT 1")
+        except sqlite3.OperationalError:
+            pass
+
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS project_chats (
+                id          TEXT PRIMARY KEY,
+                project     TEXT NOT NULL,
+                name        TEXT NOT NULL,
+                created_at  TEXT NOT NULL,
+                core_memory TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY (project) REFERENCES projects(name) ON DELETE CASCADE
+            );
+        """)
+
+        try:
+            conn.execute("ALTER TABLE project_history ADD COLUMN chat_id TEXT NOT NULL DEFAULT 'main'")
+        except sqlite3.OperationalError:
+            pass
+
 
 @dataclass
 class ProjectData:
     name: str
+    use_shared_memory: bool = False
+    chats: list = field(default_factory=list)
+    current_chat_id: str = "main"
     mode: str = "plan"
     model: str = ""
     worker_model: str = ""   # "" → falls back to the project.model
@@ -130,11 +156,12 @@ class ProjectStore:
     def list_projects(self) -> list[dict]:
         with _conn(self.db_path) as conn:
             rows = conn.execute(
-                "SELECT name, project_name, project_path, created_at, updated_at, mode, model, worker_model, description, model_params FROM projects ORDER BY updated_at DESC"
+                "SELECT name, project_name, project_path, created_at, updated_at, mode, model, worker_model, description, model_params, use_shared_memory FROM projects ORDER BY updated_at DESC"
             ).fetchall()
             res = []
             for r in rows:
                 d = dict(r)
+                d["use_shared_memory"] = bool(d.get("use_shared_memory", True))
                 if "model_params" in d and d["model_params"]:
                     try:
                         d["model_params"] = json.loads(d["model_params"])
@@ -362,14 +389,23 @@ class ProjectStore:
 
         with _conn(self.db_path) as conn:
             conn.execute(
-                "INSERT INTO projects (name, created_at, updated_at, mode, model, worker_model, project_name, project_path, skills, description, core_memory, model_params) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (name, now, now, mode, model, worker_model, project_name, abs_proj_path, json.dumps(_skills), description, "", json.dumps(_model_params)),
+                "INSERT INTO projects (name, created_at, updated_at, mode, model, worker_model, project_name, project_path, skills, description, core_memory, model_params, use_shared_memory) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name, now, now, mode, model, worker_model, project_name, abs_proj_path, json.dumps(_skills), description, "", json.dumps(_model_params), 0),
             )
-        return ProjectData(name=name, mode=mode, model=model, worker_model=worker_model, project_name=project_name, project_path=abs_proj_path, skills=_skills, description=description, core_memory="", model_params=_model_params, api_key=api_key or "", api_base=api_base or "", worker_api_key=worker_api_key or "", worker_api_base=worker_api_base or "")
+            # Create default main chat
+            chat_id = f"main_{name}"
+            conn.execute(
+                "INSERT INTO project_chats (id, project, name, created_at, core_memory) VALUES (?,?,?,?,?)",
+                (chat_id, name, "Main Chat", now, "")
+            )
+        return ProjectData(name=name, use_shared_memory=False, chats=[{"id": chat_id, "name": "Main Chat"}], current_chat_id=chat_id, mode=mode, model=model, worker_model=worker_model, project_name=project_name, project_path=abs_proj_path, skills=_skills, description=description, core_memory="", model_params=_model_params, api_key=api_key or "", api_base=api_base or "", worker_api_key=worker_api_key or "", worker_api_base=worker_api_base or "")
 
-    def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", worker_model: str = "", api_key: str = None, api_base: str = None, worker_api_key: str = None, worker_api_base: str = None, model_params: dict = None) -> ProjectData:
+    def overwrite(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", worker_model: str = "", api_key: str = None, api_base: str = None, worker_api_key: str = None, worker_api_base: str = None, model_params: dict = None, use_shared_memory: bool = False) -> ProjectData:
         self.delete(name)
-        return self.create(name, mode, model, project_name, project_path, skills, description, worker_model, api_key=api_key, api_base=api_base, worker_api_key=worker_api_key, worker_api_base=worker_api_base, model_params=model_params, apply_modelconfig=False)
+        new_proj = self.create(name, mode, model, project_name, project_path, skills, description, worker_model, api_key=api_key, api_base=api_base, worker_api_key=worker_api_key, worker_api_base=worker_api_base, model_params=model_params, apply_modelconfig=False)
+        new_proj.use_shared_memory = use_shared_memory
+        self.save(new_proj)
+        return new_proj
 
     def delete(self, name: str) -> None:
         with _conn(self.db_path) as conn:
@@ -389,16 +425,35 @@ class ProjectStore:
             conn.execute("UPDATE project_history SET project=? WHERE project=?", (new_name, old_name))
         return True
 
-    def load(self, name: str) -> Optional[ProjectData]:
+    def load(self, name: str, chat_id: str = "main") -> Optional[ProjectData]:
         with _conn(self.db_path) as conn:
             row = conn.execute(
                 "SELECT * FROM projects WHERE name = ?", (name,)
             ).fetchone()
             if row is None:
                 return None
+                
+            chats_rows = conn.execute(
+                "SELECT id, name FROM project_chats WHERE project = ? ORDER BY created_at ASC", (name,)
+            ).fetchall()
+            chats = [{"id": r["id"], "name": r["name"]} for r in chats_rows]
+            
+            if not any(c["id"] == chat_id for c in chats):
+                if chats:
+                    chat_id = chats[-1]["id"]
+                else:
+                    chat_id = f"main_{name}"
+                    try:
+                        conn.execute("INSERT INTO project_chats (id, project, name, created_at, core_memory) VALUES (?,?,?,?,?)", (chat_id, name, "Main Chat", datetime.now(timezone.utc).isoformat(), ""))
+                    except sqlite3.IntegrityError:
+                        # Fallback if somehow it already exists but wasn't in chats?
+                        chat_id = str(uuid.uuid4())
+                        conn.execute("INSERT INTO project_chats (id, project, name, created_at, core_memory) VALUES (?,?,?,?,?)", (chat_id, name, "Main Chat", datetime.now(timezone.utc).isoformat(), ""))
+                    chats = [{"id": chat_id, "name": "Main Chat"}]
+                    
             hist_rows = conn.execute(
-                "SELECT role, content FROM project_history WHERE project = ? ORDER BY id",
-                (name,),
+                "SELECT role, content FROM project_history WHERE project = ? AND chat_id = ? ORDER BY id",
+                (name, chat_id),
             ).fetchall()
             # Read api_key and api_base from local .env if it exists
             api_key = ""
@@ -420,6 +475,9 @@ class ProjectStore:
 
             return ProjectData(
                 name=name,
+                use_shared_memory=bool(row["use_shared_memory"] if "use_shared_memory" in row.keys() else 1),
+                chats=chats,
+                current_chat_id=chat_id,
                 mode=row["mode"],
                 model=row["model"],
                 worker_model=row["worker_model"] if "worker_model" in row.keys() else (row["alternative_model"] if "alternative_model" in row.keys() else ""),
@@ -483,7 +541,7 @@ class ProjectStore:
         with _conn(self.db_path) as conn:
             conn.execute(
                 """UPDATE projects SET updated_at=?, mode=?, model=?, worker_model=?, project_name=?, project_path=?,
-                   skills=?, description=?, request=?, plan_text=?, subplans=?, results=?, core_memory=?, model_params=? WHERE name=?""",
+                   skills=?, description=?, request=?, plan_text=?, subplans=?, results=?, core_memory=?, model_params=?, use_shared_memory=? WHERE name=?""",
                 (
                     now,
                     project.mode,
@@ -499,6 +557,7 @@ class ProjectStore:
                     json.dumps(project.results, ensure_ascii=False),
                     project.core_memory,
                     json.dumps(_model_params, ensure_ascii=False),
+                    1 if getattr(project, "use_shared_memory", False) else 0,
                     project.name,
                 ),
             )
@@ -508,8 +567,8 @@ class ProjectStore:
         message_id = None
         with _conn(self.db_path) as conn:
             cursor = conn.execute(
-                "INSERT INTO project_history (project, timestamp, role, content) VALUES (?,?,?,?)",
-                (project.name, now, role, content),
+                "INSERT INTO project_history (project, chat_id, timestamp, role, content) VALUES (?,?,?,?,?)",
+                (project.name, project.current_chat_id, now, role, content),
             )
             message_id = cursor.lastrowid
             
@@ -523,11 +582,38 @@ class ProjectStore:
                 message_id=str(message_id),
                 role=role,
                 content=content,
-                timestamp=now
+                timestamp=now,
+                chat_id=project.current_chat_id
             )
         except Exception:
             pass
 
+
+    def clear_project_history(self, name: str, chat_id: str = None) -> None:
+        with _conn(self.db_path) as conn:
+            if chat_id:
+                conn.execute("DELETE FROM project_history WHERE project = ? AND chat_id = ?", (name, chat_id))
+            else:
+                conn.execute("DELETE FROM project_history WHERE project = ?", (name,))
+
+    def get_chat_core_memory(self, name: str, chat_id: str) -> str:
+        with _conn(self.db_path) as conn:
+            row = conn.execute("SELECT core_memory FROM project_chats WHERE project = ? AND id = ?", (name, chat_id)).fetchone()
+            return row["core_memory"] if row else ""
+
+    def update_chat_core_memory(self, name: str, chat_id: str, core_memory: str) -> None:
+        with _conn(self.db_path) as conn:
+            conn.execute("UPDATE project_chats SET core_memory = ? WHERE project = ? AND id = ?", (core_memory, name, chat_id))
+
+    def create_chat(self, name: str, chat_id: str, chat_name: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with _conn(self.db_path) as conn:
+            conn.execute("INSERT INTO project_chats (id, project, name, created_at, core_memory) VALUES (?,?,?,?,?)", (chat_id, name, chat_name, now, ""))
+
+    def delete_chat(self, name: str, chat_id: str) -> None:
+        with _conn(self.db_path) as conn:
+            conn.execute("DELETE FROM project_chats WHERE project = ? AND id = ?", (name, chat_id))
+            conn.execute("DELETE FROM project_history WHERE project = ? AND chat_id = ?", (name, chat_id))
 
 # Backward-compat alias
 SessionStore = ProjectStore

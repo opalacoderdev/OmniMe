@@ -470,7 +470,18 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
     project_name = getattr(project, "project_name", "") or getattr(project, "name", "(unknown)")
     project_desc = getattr(project, "description", "") or ""
     project_mode = getattr(project, "mode", "auto") or "auto"
-    core_memory = getattr(project, "core_memory", "") or ""
+    
+    # Load the appropriate core memory based on sharing mode
+    use_shared = getattr(project, "use_shared_memory", False)
+    if use_shared:
+        core_memory = getattr(project, "core_memory", "") or ""
+    else:
+        # Per-chat isolated core memory
+        chat_id = getattr(project, "current_chat_id", "main")
+        if store:
+            core_memory = store.get_chat_core_memory(project.name, chat_id) or ""
+        else:
+            core_memory = ""
 
     project_block = (
         f"## Current Project\n"
@@ -483,7 +494,14 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
     if project_desc:
         project_block += f"- **Description**: {project_desc}\n"
     if core_memory:
-        project_block += f"\n### Core Memory (persisted facts)\n{core_memory}\n"
+        project_block += (
+            f"\n### Core Memory (persisted facts from previous conversations)\n"
+            f"**IMPORTANT**: The entries below represent YOUR persistent memory — things you learned "
+            f"from prior conversations with the user across different chat sessions. "
+            f"Treat these as facts you already know. When the user asks if you remember something "
+            f"or if you have talked before, refer to this section.\n\n"
+            f"{core_memory}\n"
+        )
 
     system_prompt = (
         f"{body}\n\n"

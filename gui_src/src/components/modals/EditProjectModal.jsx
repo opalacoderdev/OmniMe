@@ -246,6 +246,20 @@ export default function EditProjectModal({
               style={{ resize: 'none' }}
             />
           </div>
+          
+          {/* Shared Memory Checkbox */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+            <input
+              id="use-shared-memory-edit"
+              type="checkbox"
+              checked={editingProject.use_shared_memory ?? false}
+              onChange={e => setEditingProject(p => ({ ...p, use_shared_memory: e.target.checked }))}
+              style={{ cursor: 'pointer' }}
+            />
+            <label htmlFor="use-shared-memory-edit" style={{ fontSize: '12px', color: '#ccc', cursor: 'pointer', userSelect: 'none' }}>
+              Compartilhar Memória Core entre os Chats
+            </label>
+          </div>
 
           {/* Advanced params (collapsible) */}
           <div className="flex flex-col" style={{ marginTop: '4px' }}>

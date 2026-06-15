@@ -239,8 +239,9 @@ async def handle_load_project(data: dict):
     db_path = data.get("db") or DEFAULT_DB_PATH
     
     current_store = ProjectStore(db_path=db_path)
+    chat_id = data.get("chat_id", "main")
     if current_store.exists(project_name):
-        current_project = current_store.load(project_name)
+        current_project = current_store.load(project_name, chat_id=chat_id)
         if data.get("project_path"):
             current_project.project_path = os.path.abspath(project_path)
     else:

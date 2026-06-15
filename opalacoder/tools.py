@@ -670,7 +670,14 @@ def read_core_memory() -> str:
     AGENT_PROGRESS.update("read_core_memory")
     if not _PROJECT_SESSION:
         return "Core memory not available (no active session)."
-    return getattr(_PROJECT_SESSION, "core_memory", "") or "(Core memory is empty)"
+    
+    if getattr(_PROJECT_SESSION, "use_shared_memory", True):
+        return getattr(_PROJECT_SESSION, "core_memory", "") or "(Core memory is empty)"
+    else:
+        if not _PROJECT_STORE:
+            return "(Core memory is empty)"
+        mem = _PROJECT_STORE.get_chat_core_memory(_PROJECT_SESSION.name, getattr(_PROJECT_SESSION, "current_chat_id", "main"))
+        return mem or "(Core memory is empty)"
 
 @as_tool(name="append_core_memory", description="Append a new persistent rule, context, or decision to the Core Memory. Do this when you learn something about the user's preferences or the project's state that you want to remember across different executions.")
 def append_core_memory(content: str) -> str:
@@ -678,14 +685,26 @@ def append_core_memory(content: str) -> str:
     if not _PROJECT_SESSION or not _PROJECT_STORE:
         return "Core memory not available (no active session)."
     
-    current = getattr(_PROJECT_SESSION, "core_memory", "")
-    new_mem = current + ("\n" if current else "") + "- " + content
-    _PROJECT_SESSION.core_memory = new_mem
-    try:
-        _PROJECT_STORE.save(_PROJECT_SESSION)
-        return "Successfully appended to Core Memory."
-    except Exception as e:
-        raise ValueError(f"Error saving Core Memory: {e}")
+    use_shared = getattr(_PROJECT_SESSION, "use_shared_memory", True)
+    
+    if use_shared:
+        current = getattr(_PROJECT_SESSION, "core_memory", "")
+        new_mem = current + ("\n" if current else "") + "- " + content
+        _PROJECT_SESSION.core_memory = new_mem
+        try:
+            _PROJECT_STORE.save(_PROJECT_SESSION)
+            return "Successfully appended to global Core Memory."
+        except Exception as e:
+            raise ValueError(f"Error saving Core Memory: {e}")
+    else:
+        chat_id = getattr(_PROJECT_SESSION, "current_chat_id", "main")
+        current = _PROJECT_STORE.get_chat_core_memory(_PROJECT_SESSION.name, chat_id)
+        new_mem = current + ("\n" if current else "") + "- " + content
+        try:
+            _PROJECT_STORE.update_chat_core_memory(_PROJECT_SESSION.name, chat_id, new_mem)
+            return f"Successfully appended to chat '{chat_id}' isolated Core Memory."
+        except Exception as e:
+            raise ValueError(f"Error saving isolated Core Memory: {e}")
 
 @as_tool(name="search_conversation_history", description="Search through the past conversations of this project using semantic search (RAG) to remember previous context, decisions, or user instructions. Use this when you need context about past tasks.")
 def search_conversation_history(query: str, limit: int = 5) -> str:
@@ -695,7 +714,10 @@ def search_conversation_history(query: str, limit: int = 5) -> str:
     
     try:
         from .archival import search_archival
-        results = search_archival(_PROJECT_SESSION.name, query, limit=limit)
+        chat_id = None
+        if not getattr(_PROJECT_SESSION, "use_shared_memory", True):
+            chat_id = getattr(_PROJECT_SESSION, "current_chat_id", "main")
+        results = search_archival(_PROJECT_SESSION.name, query, limit=limit, chat_id=chat_id)
         if not results:
             return f"No results found in archival memory for query: '{query}'"
             

@@ -100,6 +100,7 @@ export default function App() {
   const [newProjPath, setNewProjPath] = useState('');
   const [newProjDesc, setNewProjDesc] = useState('');
   const [newProjModel, setNewProjModel] = useState('ollama/gemma4:12b');
+  const [newProjWorkerModel, setNewProjWorkerModel] = useState('');
   const [newProjMode, setNewProjMode] = useState('auto');
   const [newProjModelParams, setNewProjModelParams] = useState({});
   const [newProjApiKey, setNewProjApiKey] = useState('');
@@ -120,6 +121,8 @@ export default function App() {
 
   // ── IDE settings ──────────────────────────────────────────────────────────
   const [settingsTab, setSettingsTab] = useState('preferences');
+  const [activeChatId, setActiveChatId] = useState('main');
+  const [chats, setChats] = useState([]);
   const [theme, setTheme] = useState(() => safeGetLocalStorage('theme', 'dark'));
   const [editorFontSize, setEditorFontSize] = useState(() => Number(safeGetLocalStorage('editorFontSize', 13)));
   const [editorTabSize, setEditorTabSize] = useState(() => Number(safeGetLocalStorage('editorTabSize', 4)));
@@ -219,10 +222,35 @@ export default function App() {
       fetchFiles();
       fetchProblems();
       if (prevProjectNameRef.current !== activeProject.name) {
-        setChatMessages([
-          { role: 'assistant', content: t('app.greeting', { projectName: activeProject.project_name || activeProject.name }) }
-        ]);
         prevProjectNameRef.current = activeProject.name;
+        
+        // Load initial greeting
+        const greeting = activeProject.project_name || activeProject.name;
+        setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+
+        // Fetch chats
+        fetch(`/api/chat/list?project_name=${encodeURIComponent(activeProject.name)}&t=${Date.now()}`)
+          .then(res => res.json())
+          .then(data => {
+            const loadedChats = data.chats || [];
+            setChats(loadedChats);
+            
+            // Set active chat id, default to main
+            const currentChatId = activeProject.current_chat_id || 'main';
+            setActiveChatId(currentChatId);
+
+            // Now fetch history for this chat
+            fetch(`/api/chat/history?project_name=${encodeURIComponent(activeProject.name)}&chat_id=${encodeURIComponent(currentChatId)}&t=${Date.now()}`)
+              .then(res => res.json())
+              .then(histData => {
+                 if (histData.history && histData.history.length > 0) {
+                   setChatMessages(histData.history);
+                 }
+              })
+              .catch(err => console.error("Failed to fetch chat history:", err));
+          })
+          .catch(err => console.error("Failed to fetch chat list:", err));
+
         setOpenFiles([]);
         setSelectedFile(null);
         setFileContent('');
@@ -377,7 +405,7 @@ export default function App() {
   const fetchGitStatus = async () => {
     if (!activeProject) return;
     try {
-      const res = await fetch(`/api/git/status?projectPath=${encodeURIComponent(activeProject.project_path)}&shadow=${useShadowGit}`);
+      const res = await fetch(`/api/git/status?projectPath=${encodeURIComponent(activeProject.project_path)}&shadow=${useShadowGit}&t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         console.log(`[DEBUG fetchGitStatus] projectPath="${activeProject.project_path}" shadow=${useShadowGit} files=`, data.files);
@@ -578,7 +606,7 @@ export default function App() {
         addLog('info', `Arquivo salvo: ${selectedFile}`); 
         setFileContents(prev => ({ ...prev, [selectedFile]: fileContent })); 
         
-        fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(selectedFile)}&shadow=${useShadowGit}`)
+        fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(selectedFile)}&shadow=${useShadowGit}&t=${Date.now()}`)
           .then(r => r.ok ? r.json() : null)
           .then(gitData => {
             if (gitData && gitData.content !== undefined) {
@@ -762,7 +790,7 @@ export default function App() {
     } catch (_) { }
     setModelConfigMsg('');
     setEditProjError('');
-    const newState = { name: fresh.name, project_name: fresh.project_name || fresh.name, project_path: fresh.project_path || '', model: fresh.model || '', worker_model: fresh.worker_model || '', mode: fresh.mode || 'auto', description: fresh.description || '', model_params: fresh.model_params || {}, api_key: fresh.api_key || '', api_base: fresh.api_base || '', worker_api_key: fresh.worker_api_key || '', worker_api_base: fresh.worker_api_base || '' };
+    const newState = { name: fresh.name, project_name: fresh.project_name || fresh.name, project_path: fresh.project_path || '', model: fresh.model || '', worker_model: fresh.worker_model || '', mode: fresh.mode || 'auto', description: fresh.description || '', model_params: fresh.model_params || {}, api_key: fresh.api_key || '', api_base: fresh.api_base || '', worker_api_key: fresh.worker_api_key || '', worker_api_base: fresh.worker_api_base || '', use_shared_memory: fresh.use_shared_memory ?? false };
     console.log("[DEBUG APP] Estado editingProject final que vai para a Modal:", newState);
     setEditingProject(newState);
   };
@@ -775,7 +803,7 @@ export default function App() {
     try {
       const res = await fetch('/api/opalacoder/update-project', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_name: editingProject.name, display_name: editingProject.project_name, project_path: editingProject.project_path, model: editingProject.model, worker_model: editingProject.worker_model, mode: editingProject.mode, description: editingProject.description, model_params: editingProject.model_params, api_key: editingProject.api_key, api_base: editingProject.api_base, worker_api_key: editingProject.worker_api_key, worker_api_base: editingProject.worker_api_base }),
+        body: JSON.stringify({ project_name: editingProject.name, display_name: editingProject.project_name, project_path: editingProject.project_path, model: editingProject.model, worker_model: editingProject.worker_model, mode: editingProject.mode, description: editingProject.description, model_params: editingProject.model_params, api_key: editingProject.api_key, api_base: editingProject.api_base, worker_api_key: editingProject.worker_api_key, worker_api_base: editingProject.worker_api_base, use_shared_memory: editingProject.use_shared_memory }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -1130,7 +1158,7 @@ export default function App() {
     try {
       const res = await fetch('/api/opalacoder/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: 'run', agent: 'chat_orchestrator', prompt: userText, project_name: activeProject.name, project_path: activeProject.project_path, model: activeProject.model, current_file: selectedFile || '', editor_content: fileContent || '', selected_text: selectedText || '' }),
+        body: JSON.stringify({ command: 'run', agent: 'chat_orchestrator', prompt: userText, project_name: activeProject.name, project_path: activeProject.project_path, model: activeProject.model, current_file: selectedFile || '', editor_content: fileContent || '', selected_text: selectedText || '', chat_id: activeChatId }),
       });
       if (!res.body) { addLog('error', 'ReadableStream não suportado pelo backend.'); setIsAgentRunning(false); return; }
       const reader = res.body.getReader();
@@ -1390,7 +1418,7 @@ export default function App() {
     try {
       const res = await fetch('/api/opalacoder/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: 'run', agent: 'chat_orchestrator', prompt: userText, project_name: activeProject.name, project_path: activeProject.project_path, model: activeProject.model, current_file: selectedFile || '', editor_content: fileContent || '', selected_text: selectedText || '', model_params: ephemeralParams }),
+        body: JSON.stringify({ command: 'run', agent: 'chat_orchestrator', prompt: userText, project_name: activeProject.name, project_path: activeProject.project_path, model: activeProject.model, current_file: selectedFile || '', editor_content: fileContent || '', selected_text: selectedText || '', chat_id: activeChatId, model_params: ephemeralParams }),
       });
       if (!res.body) { addLog('error', 'ReadableStream não suportado pelo backend.'); setIsAgentRunning(false); return; }
       const reader = res.body.getReader();
@@ -1587,6 +1615,11 @@ export default function App() {
             chatEndRef={chatEndRef}
             webSearchConfig={webSearchConfig}
             setWebSearchConfig={setWebSearchConfig}
+            activeChatId={activeChatId}
+            setActiveChatId={setActiveChatId}
+            chats={chats}
+            setChats={setChats}
+            setChatMessages={setChatMessages}
           />
         )}
       </div>
@@ -1611,9 +1644,12 @@ export default function App() {
           newProjPath={newProjPath} setNewProjPath={setNewProjPath}
           newProjDesc={newProjDesc} setNewProjDesc={setNewProjDesc}
           newProjModel={newProjModel} setNewProjModel={setNewProjModel}
+          newProjWorkerModel={newProjWorkerModel} setNewProjWorkerModel={setNewProjWorkerModel}
           newProjMode={newProjMode} setNewProjMode={setNewProjMode}
           newProjApiKey={newProjApiKey} setNewProjApiKey={setNewProjApiKey}
           newProjApiBase={newProjApiBase} setNewProjApiBase={setNewProjApiBase}
+          newProjWorkerApiKey={newProjWorkerApiKey} setNewProjWorkerApiKey={setNewProjWorkerApiKey}
+          newProjWorkerApiBase={newProjWorkerApiBase} setNewProjWorkerApiBase={setNewProjWorkerApiBase}
           newProjError={newProjError}
           modelConfigMsg={modelConfigMsg}
           onLoadModelConfig={() => loadModelConfig(newProjPath, newProjModel, (cfg) => {
@@ -1644,7 +1680,7 @@ export default function App() {
           modelConfigMsg={modelConfigMsg}
           onLoadModelConfig={(silent = false) => loadModelConfig(editingProject.project_path, editingProject.model, (cfg) => setEditingProject(p => {
             const loaded = cfg.model_params || {};
-            const { api_base, api_key, worker_model, ...restParams } = loaded;
+            const { api_base, api_key, worker_model, worker_api_base, worker_api_key, ...restParams } = loaded;
             const cleanRestParams = Object.fromEntries(Object.entries(restParams).filter(([_, v]) => v !== null && v !== undefined));
             return {
               ...p,

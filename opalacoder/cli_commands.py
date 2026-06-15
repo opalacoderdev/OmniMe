@@ -65,9 +65,9 @@ async def cmd_help(_state: REPLState, _args: list[str]) -> None:
     T.console.print()
 
 
-@_registry.register("/clear", description="Clear project memory and history")
+@_registry.register("/clear", description="Clear project memory and ALL chats histories")
 async def cmd_clear(state: REPLState, _args: list[str]) -> None:
-    if await T.aconfirm("Are you sure you want to clear this project's memory?"):
+    if await T.aconfirm("Are you sure you want to clear this project's global memory and ALL chats?"):
         state.project = state.store.overwrite(
             state.project.name, state.project.mode, state.project.model,
             state.project.project_name, state.project.project_path,
@@ -75,11 +75,32 @@ async def cmd_clear(state: REPLState, _args: list[str]) -> None:
             worker_model=state.project.worker_model,
             api_key=state.project.api_key,
             api_base=state.project.api_base,
+            worker_api_key=state.project.worker_api_key,
+            worker_api_base=state.project.worker_api_base,
             model_params=state.project.model_params,
+            use_shared_memory=state.project.use_shared_memory,
         )
         from .memgpt_runtime import build_chat_orchestrator
         state.memgpt = build_chat_orchestrator(state.project, state.store)
-        T.success("Project memory cleared.")
+        from .archival import clear_archival
+        clear_archival(state.project.name)
+        T.success("Project global memory and all chats cleared.")
+
+@_registry.register("/clear_chat", description="Clear only the current chat's history and its isolated memory (if any)")
+async def cmd_clear_chat(state: REPLState, _args: list[str]) -> None:
+    chat_id = getattr(state.project, "current_chat_id", "main")
+    if await T.aconfirm(f"Are you sure you want to clear chat '{chat_id}' history?"):
+        state.store.clear_project_history(state.project.name, chat_id)
+        if not getattr(state.project, "use_shared_memory", True):
+            state.store.update_chat_core_memory(state.project.name, chat_id, "")
+        # Re-load project
+        state.project = state.store.load(state.project.name, chat_id=chat_id)
+        from .memgpt_runtime import build_chat_orchestrator
+        state.memgpt = build_chat_orchestrator(state.project, state.store)
+        from .archival import clear_archival_chat
+        clear_archival_chat(state.project.name, chat_id)
+        T.success(f"Chat '{chat_id}' cleared.")
+
 
 
 @_registry.register("/rename", usage="<new_name>", description="Rename the current project")

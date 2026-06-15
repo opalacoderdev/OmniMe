@@ -11,9 +11,12 @@ export default function NewProjectModal({
   newProjPath, setNewProjPath,
   newProjDesc, setNewProjDesc,
   newProjModel, setNewProjModel,
+  newProjWorkerModel, setNewProjWorkerModel,
   newProjMode, setNewProjMode,
   newProjApiKey, setNewProjApiKey,
   newProjApiBase, setNewProjApiBase,
+  newProjWorkerApiKey, setNewProjWorkerApiKey,
+  newProjWorkerApiBase, setNewProjWorkerApiBase,
   newProjError,
   modelConfigMsg,
   onLoadModelConfig,
@@ -144,6 +147,36 @@ export default function NewProjectModal({
                 {modelConfigMsg}
               </span>
             )}
+          </div>
+
+          {/* Worker model */}
+          <div className="flex flex-col" style={{ gap: '4px' }}>
+            <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Worker Model</label>
+            <input
+              type="text"
+              list="default-worker-models"
+              value={newProjWorkerModel}
+              onChange={e => setNewProjWorkerModel(e.target.value)}
+              placeholder="ollama/gemma4:12b"
+            />
+            <datalist id="default-worker-models">
+              <option value="gemini/gemini-flash-lite-latest" />
+              <option value="anthropic/claude-3-5-sonnet-latest" />
+              <option value="ollama/gemma4:12b" />
+              <option value="ollama/gemma4:31b-cloud" />
+            </datalist>
+          </div>
+
+          {/* API credentials (worker model) */}
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
+              <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Worker API Key</label>
+              <input type="password" value={newProjWorkerApiKey} onChange={e => setNewProjWorkerApiKey(e.target.value)} placeholder="API Key for Worker" />
+            </div>
+            <div className="flex flex-col flex-1" style={{ gap: '4px' }}>
+              <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Worker API Base</label>
+              <input type="text" value={newProjWorkerApiBase} onChange={e => setNewProjWorkerApiBase(e.target.value)} placeholder="http://localhost:11434/v1" />
+            </div>
           </div>
 
           {newProjError && (

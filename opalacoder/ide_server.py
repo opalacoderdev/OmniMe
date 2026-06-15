@@ -834,10 +834,10 @@ class AsyncHTTPServer:
                 clean_name = clean_name.split('/', 1)[1]
             
             try:
-                import urllib.request
+                import urllib.request as urllib_req
                 import json as _json
-                req = urllib.request.Request("http://127.0.0.1:11434/api/tags")
-                with urllib.request.urlopen(req, timeout=2) as response:
+                req = urllib_req.Request("http://127.0.0.1:11434/api/tags")
+                with urllib_req.urlopen(req, timeout=2) as response:
                     data_obj = _json.loads(response.read().decode())
                     models = data_obj.get("models", [])
                     
@@ -1019,6 +1019,66 @@ class AsyncHTTPServer:
             else:
                 self.send_response(writer, 404, json.dumps({"error": f"Project '{project_name}' not found"}).encode('utf-8'), "application/json")
 
+        elif path == '/api/chat/delete' and method == 'POST':
+            from opalacoder.config import DEFAULT_DB_PATH
+            from opalacoder.project import ProjectStore
+            store = ProjectStore(db_path=DEFAULT_DB_PATH)
+            project_name = data.get("project_name")
+            chat_id = data.get("chat_id")
+            if not project_name or not chat_id:
+                self.send_response(writer, 400, b'{"error":"project_name and chat_id required"}', "application/json")
+                return
+            if chat_id == "main":
+                self.send_response(writer, 400, b'{"error":"Cannot delete main chat"}', "application/json")
+                return
+            store.delete_chat(project_name, chat_id)
+            from opalacoder.archival import clear_archival_chat
+            clear_archival_chat(project_name, chat_id)
+            self.send_response(writer, 200, b'{"status":"ok"}', "application/json")
+
+        elif path == '/api/chat/history' and method == 'GET':
+            from opalacoder.config import DEFAULT_DB_PATH
+            from opalacoder.project import ProjectStore
+            store = ProjectStore(db_path=DEFAULT_DB_PATH)
+            project_name = query.get("project_name", [""])[0]
+            chat_id = query.get("chat_id", ["main"])[0]
+            if not project_name:
+                self.send_response(writer, 400, b'{"error":"project_name required"}', "application/json")
+                return
+            project = store.load(project_name, chat_id=chat_id)
+            if not project:
+                self.send_response(writer, 404, b'{"error":"project not found"}', "application/json")
+                return
+            self.send_response(writer, 200, json.dumps({"history": project.history}).encode(), "application/json")
+
+        elif path == '/api/chat/list' and method == 'GET':
+            from opalacoder.config import DEFAULT_DB_PATH
+            from opalacoder.project import ProjectStore
+            store = ProjectStore(db_path=DEFAULT_DB_PATH)
+            project_name = query.get("project_name", [""])[0]
+            if not project_name:
+                self.send_response(writer, 400, b'{"error":"project_name required"}', "application/json")
+                return
+            project = store.load(project_name)
+            if not project:
+                self.send_response(writer, 404, b'{"error":"project not found"}', "application/json")
+                return
+            self.send_response(writer, 200, json.dumps({"chats": project.chats}).encode(), "application/json")
+
+        elif path == '/api/chat/create' and method == 'POST':
+            from opalacoder.config import DEFAULT_DB_PATH
+            from opalacoder.project import ProjectStore
+            import uuid
+            store = ProjectStore(db_path=DEFAULT_DB_PATH)
+            project_name = data.get("project_name")
+            chat_name = data.get("chat_name")
+            if not project_name or not chat_name:
+                self.send_response(writer, 400, b'{"error":"project_name and chat_name required"}', "application/json")
+                return
+            chat_id = str(uuid.uuid4())
+            store.create_chat(project_name, chat_id, chat_name)
+            self.send_response(writer, 200, json.dumps({"id": chat_id, "name": chat_name}).encode(), "application/json")
+
         # 6b. Update Project (patch fields without resetting history)
         elif path == '/api/opalacoder/update-project' and method == 'POST':
             from opalacoder.config import DEFAULT_DB_PATH
@@ -1049,6 +1109,9 @@ class AsyncHTTPServer:
                     self.send_response(writer, 400, b'{"error":"Project path does not exist or is not a directory"}', "application/json")
                     return
                 project.project_path = os.path.abspath(new_path)
+            
+            if "use_shared_memory" in data:
+                project.use_shared_memory = bool(data["use_shared_memory"])
 
             if "model_params" in data:
                 params = data["model_params"]

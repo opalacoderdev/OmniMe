@@ -28,7 +28,7 @@ def get_collection(project_name: str):
         safe_name = "default_project"
     return client.get_or_create_collection(name=safe_name)
 
-def append_to_archival(project_name: str, message_id: str, role: str, content: str, timestamp: str):
+def append_to_archival(project_name: str, message_id: str, role: str, content: str, timestamp: str, chat_id: str = None):
     """
     Adiciona uma mensagem ao Archival Memory (ChromaDB) do projeto.
     """
@@ -41,6 +41,8 @@ def append_to_archival(project_name: str, message_id: str, role: str, content: s
         "role": role,
         "timestamp": timestamp
     }
+    if chat_id:
+        metadata["chat_id"] = chat_id
     
     collection.add(
         documents=[content],
@@ -48,16 +50,20 @@ def append_to_archival(project_name: str, message_id: str, role: str, content: s
         ids=[f"{message_id}"]
     )
 
-def search_archival(project_name: str, query: str, limit: int = 5) -> list[dict]:
+def search_archival(project_name: str, query: str, limit: int = 5, chat_id: str = None) -> list[dict]:
     """
     Pesquisa o histórico usando similaridade de cosseno via ChromaDB.
     """
     try:
         collection = get_collection(project_name)
-        results = collection.query(
-            query_texts=[query],
-            n_results=limit
-        )
+        kwargs = {
+            "query_texts": [query],
+            "n_results": limit
+        }
+        if chat_id:
+            kwargs["where"] = {"chat_id": chat_id}
+            
+        results = collection.query(**kwargs)
         
         out = []
         if results and "documents" in results and results["documents"]:
@@ -92,3 +98,13 @@ def clear_archival(project_name: str):
     except Exception as e:
         if "does not exist" not in str(e).lower() and "not found" not in str(e).lower():
             print(f"Error clearing archival memory: {e}")
+
+def clear_archival_chat(project_name: str, chat_id: str):
+    """
+    Exclui mensagens do ChromaDB de um chat específico.
+    """
+    try:
+        collection = get_collection(project_name)
+        collection.delete(where={"chat_id": chat_id})
+    except Exception as e:
+        pass

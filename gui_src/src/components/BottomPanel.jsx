@@ -182,11 +182,11 @@ export default function BottomPanel({
                     else if (log.type === 'tool_result') { colorStyle = { color: '#89d4a5' }; label = 'RESULT'; }
 
                     return (
-                      <div key={i} style={{ ...colorStyle, display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '3px' }}>
-                        <span style={{ color: '#5a5a5a' }}>[{log.timestamp}]</span>
-                        <span style={{ fontWeight: 'bold' }}>[{label}]</span>
-                        {log.agent && <span style={{ color: '#9cdcfe', fontWeight: 'bold' }}>[{log.agent}]</span>}
-                        <span style={{ whiteSpace: 'pre-wrap', flex: 1 }}>{log.message}</span>
+                      <div key={i} style={{ ...colorStyle, marginBottom: '3px', wordBreak: 'break-word' }}>
+                        <span style={{ color: '#5a5a5a', marginRight: '6px' }}>[{log.timestamp}]</span>
+                        <span style={{ fontWeight: 'bold', marginRight: '6px' }}>[{label}]</span>
+                        {log.agent && <span style={{ color: '#9cdcfe', fontWeight: 'bold', marginRight: '6px' }}>[{log.agent}]</span>}
+                        <span style={{ whiteSpace: 'pre-wrap' }}>{log.message}</span>
                       </div>
                     );
                   })
