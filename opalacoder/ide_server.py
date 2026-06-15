@@ -572,7 +572,12 @@ class AsyncHTTPServer:
                 elif system == "Darwin":
                     subprocess.Popen(["open", project_path])
                 else:
-                    subprocess.Popen(["xdg-open", project_path])
+                    # Check if it's WSL (Windows Subsystem for Linux)
+                    release = platform.uname().release.lower()
+                    if "microsoft" in release or "wsl" in release:
+                        subprocess.Popen(["explorer.exe", "."], cwd=project_path)
+                    else:
+                        subprocess.Popen(["xdg-open", project_path])
                 self.send_response(writer, 200, b'{"success":true}', "application/json")
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
