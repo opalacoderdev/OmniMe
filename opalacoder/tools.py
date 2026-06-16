@@ -293,7 +293,6 @@ def write_file(path: str, content: str) -> str:
         content = _decode_escape_sequences(content)
         with open(resolved, "w", encoding="utf-8") as f:
             f.write(content)
-        print(f"[DEBUG write_file] Written {len(content)} chars to resolved path: {resolved}", flush=True)
         try:
             from .code_index import CODE_INDEX
             CODE_INDEX.rebuild_file(resolved)
@@ -339,6 +338,34 @@ def run_command(command: str) -> str:
         raise ValueError("Error: Command timed out after 120 seconds.")
     except Exception as e:
         raise ValueError(f"Error running command: {e}")
+
+@as_tool(name="run_background_command", description="Start a long-running background command or server (e.g., `npm run dev`) directly in the user's MAIN IDE terminal. This runs asynchronously and returns immediately, allowing the agent to continue working while the server runs. NEVER use this for commands where you need to see the output to proceed.")
+async def run_background_command(command: str) -> str:
+    import json
+    import urllib.request
+    
+    AGENT_PROGRESS.update("background_cmd", f"$ {_preview(command)}")
+    cwd = get_project_path()
+
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:3000/api/terminal/input",
+            data=json.dumps({
+                "action": "input",
+                "text": f"{command}\r",
+                "term_id": "main",
+                "projectPath": cwd
+            }).encode('utf-8'),
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        with urllib.request.urlopen(req, timeout=2.0) as response:
+            if response.status == 200:
+                return f"SUCCESS: The command '{command}' has been sent to the main background terminal and is now running."
+            else:
+                return f"FAILED to start background command: HTTP {response.status}"
+    except Exception as e:
+        return f"FAILED to send command to background terminal: {str(e)}"
 
 
 @as_tool(name="run_python_script", description="Execute a Python script securely. It automatically uses the correct Python interpreter for the environment. Provide the script path and any optional arguments.")

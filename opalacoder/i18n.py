@@ -127,6 +127,8 @@ _STRINGS = {
         "workflow_escalating": "Primary model failed — escalating to {model}",
         "workflow_edit_not_found": "edit_file: old_str not found in {path}",
         "workflow_edit_ambiguous": "edit_file: old_str matches {n} locations in {path} — be more specific",
+        "empty_response_retry_info": "The model generated an empty response. Forcing an automatic correction attempt...",
+        "empty_response_nudge": "Look, you have successfully completed the tasks/tools. Now, please tell the user what you did and summarize your changes.",
     },
     "pt": {
         "active_session": "Sessão Ativa: {name}",
@@ -252,6 +254,8 @@ _STRINGS = {
         "workflow_escalating": "Modelo primário falhou — escalando para {model}",
         "workflow_edit_not_found": "edit_file: old_str não encontrado em {path}",
         "workflow_edit_ambiguous": "edit_file: old_str encontrado em {n} locais em {path} — seja mais específico",
+        "empty_response_retry_info": "O modelo gerou uma resposta vazia. Forçando uma tentativa de correção automática...",
+        "empty_response_nudge": "Olha, você já concluiu a execução das ferramentas com sucesso. Agora, por favor, explique ao usuário o que você fez e resuma as alterações realizadas.",
     }
 }
 

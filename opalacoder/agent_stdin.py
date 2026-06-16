@@ -656,8 +656,9 @@ async def handle_run(data: dict):
             response = resp_obj.response.strip() if resp_obj.response else ""
             
             if not response:
-                print_event("info", {"message": "O modelo gerou uma resposta vazia. Forçando uma tentativa de correção automática..."})
-                retry_prompt = "CRITICAL: You just finished your turn with an empty text response and no tool calls. This is an invalid format. Did you forget to output your final text or call a tool? Please provide a valid response."
+                from opalacoder.i18n import _
+                print_event("info", {"message": _("empty_response_retry_info")})
+                retry_prompt = _("empty_response_nudge")
                 with apply_meta_params(agent, _meta_overrides):
                     resp_obj = await agent.run(AgentInput(prompt=retry_prompt))
                 response = resp_obj.response.strip() if resp_obj.response else ""

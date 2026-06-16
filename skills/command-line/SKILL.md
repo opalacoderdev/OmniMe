@@ -16,6 +16,7 @@ This skill provides the sub-agent with tools to manipulate files and directories
         read_content_pos,
         write_content_pos,
         run_command,
+        run_background_command,
         run_interactive_command,
         search_conversation_history,
         exec
@@ -81,7 +82,13 @@ run_interactive_command("npm create vite@latest app -- --template react")
 run_interactive_command("npm init")
 ```
 
-8. get_project_overview: use get_project_overview for directly access project tree of files. Try with a minimum depth of 5.
+8. run_background_command: use this to start long-running servers or background processes in the main IDE terminal. It returns immediately and does not block.
+```
+run_background_command("npm run dev")
+run_background_command("python manage.py runserver")
+```
+
+9. get_project_overview: use get_project_overview for directly access project tree of files. Try with a minimum depth of 5.
 Example:
 ```
 get_project_overview(5)
