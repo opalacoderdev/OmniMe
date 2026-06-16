@@ -151,8 +151,23 @@ class TerminalSession:
                 
             if self.process:
                 try:
-                    self.process.terminate()
+                    import signal
+                    pgid = os.getpgid(self.process.pid)
+                    os.killpg(pgid, signal.SIGTERM)
+                except Exception:
+                    try:
+                        self.process.terminate()
+                    except:
+                        pass
+                try:
                     self.process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    # Força a finalização caso não responda ao SIGTERM
+                    try:
+                        pgid = os.getpgid(self.process.pid)
+                        os.killpg(pgid, signal.SIGKILL)
+                    except:
+                        pass
                 except Exception:
                     pass
                 self.process = None

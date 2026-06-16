@@ -237,6 +237,21 @@ class AsyncHTTPServer:
         self.server = await asyncio.start_server(self.handle_request, self.host, self.port)
         print(f"[IDE Backend] Python Async server running on http://{self.host}:{self.port}")
 
+    def stop(self):
+        # Fecha o terminal principal
+        if self.active_terminal:
+            try:
+                self.active_terminal.close()
+            except:
+                pass
+        # Fecha todos os terminais temporários
+        for term_id, term in list(self.temp_terminals.items()):
+            try:
+                term.close()
+            except:
+                pass
+        self.temp_terminals.clear()
+
     async def handle_request(self, reader, writer):
         import os, sys, subprocess, platform
         try:
@@ -1668,6 +1683,7 @@ class AsyncHTTPServer:
 
             cmd = [sys.executable, "-m", "pip", "install", "sentence-transformers"]
             
+            proc = None
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
@@ -1694,6 +1710,12 @@ class AsyncHTTPServer:
             except Exception as e:
                 send_chunk(json.dumps({"status": "error", "output": f"\nError starting installation: {e}\n"}) + "\n")
             finally:
+                if proc and proc.returncode is None:
+                    try:
+                        proc.terminate()
+                        await proc.wait()
+                    except:
+                        pass
                 writer.write(b"0\r\n\r\n")
                 await writer.drain()
                 writer.close()
@@ -1969,4 +1991,8 @@ def start_gui_server(host="127.0.0.1", port=3000):
             pass
 
     print("\nStopping OpalaCoder IDE Server...")
+    try:
+        server.stop()
+    except Exception as e:
+        print(f"Error stopping server: {e}")
     os._exit(0)
