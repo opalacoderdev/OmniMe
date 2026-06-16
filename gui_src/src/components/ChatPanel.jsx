@@ -240,7 +240,14 @@ export default function ChatPanel({
               project_name: activeProject?.name,
             }),
           });
-          if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+          if (!res.ok) {
+            let serverMsg = `Upload failed: ${res.status}`;
+            try {
+              const errBody = await res.json();
+              if (errBody?.error) serverMsg = errBody.error;
+            } catch (_) {}
+            throw new Error(serverMsg);
+          }
           const descriptor = await res.json();
           // keep original data URL for image preview in the UI
           descriptor._previewUrl = file.type?.startsWith('image/') ? dataUrl : null;
@@ -266,6 +273,11 @@ export default function ChatPanel({
         results.push(desc);
       } catch (err) {
         console.error('Attachment upload failed:', err);
+        // Show the error in chat so the user knows why the attachment was not added
+        setMessages(prev => [...(prev || []), {
+          role: 'system',
+          content: `⚠️ Attachment "${f.name}" could not be uploaded: ${err.message}`,
+        }]);
       }
     }
     setPendingAttachments(prev => [...(prev || []), ...results]);

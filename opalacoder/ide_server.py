@@ -1172,6 +1172,14 @@ class AsyncHTTPServer:
                             max_chars = 200_000
                 descriptor = build_attachment_descriptor(filename, data_b64, mime, max_chars=max_chars)
                 self.send_response(writer, 200, json.dumps(descriptor).encode(), "application/json")
+            except ImportError as imp_err:
+                missing = str(imp_err).replace("No module named ", "").strip("'\"")
+                pkg_hint = "Pillow pymupdf4llm"
+                msg = (
+                    f"Missing dependency '{missing}' required for attachment processing. "
+                    f"Please install it: pip install {pkg_hint}"
+                )
+                self.send_response(writer, 503, json.dumps({"error": msg}).encode(), "application/json")
             except Exception as exc:
                 import traceback
                 self.send_response(writer, 500, json.dumps({"error": str(exc), "trace": traceback.format_exc()}).encode(), "application/json")
