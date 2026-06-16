@@ -72,7 +72,7 @@
 
 8. Histórico na entrada do chat. ✅
 
-## FROM CURRENT = 0.2.4 TO NEXT = 0.2.5 (RELEASE FINAL DESSA ETAPA)
+## FROM CURRENT = 0.2.4 TO NEXT = 0.3.0 (RELEASE FINAL DESSA ETAPA)
 
 1. Revisar a Internacionalização. ✅ 
 
