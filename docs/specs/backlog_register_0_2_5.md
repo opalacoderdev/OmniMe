@@ -186,10 +186,12 @@
 
 11. On project creation, set project name as the last folder name. ✅
 
-12. Renderização de latex no chat.
+12. Renderização de latex no chat. ✅
 
-13. Mandar mensagens ao chat enquanto agente executa (mensagens assincronas no chat).
+13. Send messages on chat while the agent is running (async messages on chat). 
 
 14. PDF, media and websites on chat. Maybe with tools to summarize and take notes.
+
+15. Export chat messages (pdf e markdown). 
 
 DONE!

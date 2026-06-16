@@ -55,6 +55,7 @@ export default function App() {
   // ── Chat / agent ──────────────────────────────────────────────────────────
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
+  const [pendingAttachments, setPendingAttachments] = useState([]);
   const [isAgentRunning, setIsAgentRunning] = useState(false);
   const [isInlineRunning, setIsInlineRunning] = useState(false);
 
@@ -1158,10 +1159,14 @@ export default function App() {
 
   const handleSendMessage = async (e) => {
     if (e) e.preventDefault();
-    if (!chatInput.trim() || !activeProject || isAgentRunning) return;
+    if ((!chatInput.trim() && pendingAttachments.length === 0) || !activeProject || isAgentRunning) return;
     const userText = chatInput;
+    const attachmentsSnapshot = [...pendingAttachments];
     setChatInput('');
-    setChatMessages(prev => [...prev, { role: 'user', content: userText }]);
+    setPendingAttachments([]);
+    // Show attachment previews alongside the user message in the chat history
+    const userMsg = { role: 'user', content: userText || '📎 Attachment', _attachments: attachmentsSnapshot };
+    setChatMessages(prev => [...prev, userMsg]);
     setIsAgentRunning(true);
     setProblems([]);
     setAchievementsMemory('');
@@ -1197,7 +1202,14 @@ export default function App() {
     try {
       const res = await fetch('/api/opalacoder/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: 'run', agent: 'chat_orchestrator', prompt: userText, project_name: activeProject.name, project_path: activeProject.project_path, model: activeProject.model, current_file: selectedFile || '', editor_content: fileContent || '', selected_text: selectedText || '', chat_id: activeChatId }),
+        body: JSON.stringify({
+          command: 'run', agent: 'chat_orchestrator', prompt: userText,
+          project_name: activeProject.name, project_path: activeProject.project_path,
+          model: activeProject.model, current_file: selectedFile || '',
+          editor_content: fileContent || '', selected_text: selectedText || '',
+          chat_id: activeChatId,
+          attachments: attachmentsSnapshot,
+        }),
       });
       if (!res.body) { addLog('error', 'ReadableStream não suportado pelo backend.'); setIsAgentRunning(false); return; }
       const reader = res.body.getReader();
@@ -1659,6 +1671,8 @@ export default function App() {
             chats={chats}
             setChats={setChats}
             setChatMessages={setChatMessages}
+            pendingAttachments={pendingAttachments}
+            setPendingAttachments={setPendingAttachments}
           />
         )}
       </div>

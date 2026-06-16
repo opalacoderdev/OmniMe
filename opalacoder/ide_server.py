@@ -55,13 +55,19 @@ _MODEL_PARAMS_SCHEMA = {
     "think": {"type": bool},
     "stream": {"type": bool},
     "reasoning_effort": {"type": str, "choices": ["none", "low", "medium", "high", "xhigh"]},
-    
+    # Vision / attachment settings
+    "force_vision": {"type": bool},
+    "pdf_truncate": {"type": bool},
+    "pdf_truncate_pct": {"type": int, "min": 1, "max": 100},
+    # Agent / MemGPT settings
     "max_heartbeats": {"type": int, "min": 1},
     "max_context_tokens": {"type": int, "min": 1},
     "eviction_threshold": {"type": float, "min": 0.0, "max": 1.0},
     "memory_pressure_threshold": {"type": float, "min": 0.0, "max": 1.0},
     "max_iterations": {"type": int, "min": 1},
     "max_tool_calls": {"type": int, "min": 1},
+    "loop_detection": {"type": bool},
+    "loop_detection_limit": {"type": int, "min": 1},
     "response_mode": {"type": str, "choices": ["last", "all"]},
     "debug": {"type": bool},
 }
@@ -1140,7 +1146,38 @@ class AsyncHTTPServer:
             results = store.search_chat_content(project_name, q)
             self.send_response(writer, 200, json.dumps({"results": results}).encode(), "application/json")
 
+        # 6c. Upload attachment (image or PDF) for chat
+        elif path == '/api/chat/upload' and method == 'POST':
+            filename = data.get("filename", "attachment")
+            data_b64 = data.get("data_b64", "")
+            mime = data.get("mime", "application/octet-stream")
+            if not data_b64:
+                self.send_response(writer, 400, b'{"error":"data_b64 is required"}', "application/json")
+                return
+            try:
+                from opalacoder.attachments import build_attachment_descriptor
+                project_name = data.get("project_name")
+                # Resolve optional PDF truncation settings from project
+                max_chars = None
+                if project_name and mime == "application/pdf":
+                    from opalacoder.config import DEFAULT_DB_PATH
+                    from opalacoder.project import ProjectStore
+                    _store = ProjectStore(db_path=DEFAULT_DB_PATH)
+                    if _store.exists(project_name):
+                        _proj = _store.load(project_name)
+                        _mp = getattr(_proj, "model_params", {}) or {}
+                        if _mp.get("pdf_truncate", True):
+                            # max_chars is applied later in agent_stdin with context info;
+                            # here we apply a hard cap of 200 000 chars to protect memory.
+                            max_chars = 200_000
+                descriptor = build_attachment_descriptor(filename, data_b64, mime, max_chars=max_chars)
+                self.send_response(writer, 200, json.dumps(descriptor).encode(), "application/json")
+            except Exception as exc:
+                import traceback
+                self.send_response(writer, 500, json.dumps({"error": str(exc), "trace": traceback.format_exc()}).encode(), "application/json")
+
         elif path == '/api/chat/create' and method == 'POST':
+
             from opalacoder.config import DEFAULT_DB_PATH
             from opalacoder.project import ProjectStore
             import uuid

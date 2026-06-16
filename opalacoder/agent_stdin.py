@@ -458,6 +458,7 @@ async def handle_run(data: dict):
     prompt, _meta_overrides = parse_meta_params(raw_prompt)
     messages_history = data.get("messages", [])
     requested_tools = data.get("tools")
+    raw_attachments = data.get("attachments", [])  # [{type, data, mime, name}]
     
     # Setup project context if provided
     if "project_path" in data or "project_name" in data:
@@ -651,8 +652,52 @@ async def handle_run(data: dict):
 
     try:
         try:
+            # --- Attachment processing: vision gate + smart PDF truncation ---
+            import litellm as _litellm
+            _model_name = (current_project.model if current_project else None) or ""
+
+            _mp = getattr(current_project, "model_params", {}) or {}
+            # litellm.supports_vision() only knows models in its static registry;
+            # local Ollama vision models (e.g. llava, moondream2) are NOT listed there.
+            # Setting force_vision=true in model_params lets the user override this.
+            _litellm_vision = _litellm.supports_vision(_model_name)
+            model_supports_vision = _litellm_vision or bool(_mp.get("force_vision", False))
+
+            pdf_truncate_enabled = _mp.get("pdf_truncate", True)
+            pdf_truncate_pct = int(_mp.get("pdf_truncate_pct", 50))
+            num_ctx = int(_mp.get("num_ctx", 8192))
+
+            # Rough token estimate: history JSON length / 4 chars-per-token
+            _hist = getattr(current_project, "history", []) or []
+            history_tokens = len(json.dumps(_hist)) // 4
+            free_tokens = max(0, num_ctx - history_tokens)
+            free_chars = free_tokens * 4  # back to chars
+
+            final_attachments = []
+            for att in raw_attachments:
+                att_type = att.get("type", "")
+                if att_type == "image" and not model_supports_vision:
+                    prompt += (
+                        f"\n\n[Note: The user attached image '{att.get('name', 'image')}' "
+                        f"but the active model does not support vision. The image was not analysed.]"
+                    )
+                elif att_type == "pdf_text" and pdf_truncate_enabled:
+                    pdf_data = att.get("data", "")
+                    pdf_chars = len(pdf_data)
+                    allowed_chars = int(free_chars * pdf_truncate_pct / 100)
+                    if pdf_chars > allowed_chars and allowed_chars > 0:
+                        truncated = pdf_data[:allowed_chars]
+                        truncated += (
+                            f"\n\n[PDF truncated: {pdf_chars:,} chars total, "
+                            f"{allowed_chars:,} shown ({pdf_truncate_pct}% of free context)]"
+                        )
+                        att = {**att, "data": truncated}
+                    final_attachments.append(att)
+                else:
+                    final_attachments.append(att)
+
             with apply_meta_params(agent, _meta_overrides):
-                resp_obj = await agent.run(AgentInput(prompt=prompt))
+                resp_obj = await agent.run(AgentInput(prompt=prompt, attachments=final_attachments))
             response = resp_obj.response.strip() if resp_obj.response else ""
             
             if not response:

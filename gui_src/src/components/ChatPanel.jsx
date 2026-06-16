@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useLayoutEffect } from 'react';
-import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings, Plus, Trash2, Search } from 'lucide-react';
+import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings, Plus, Trash2, Search, Paperclip, FileText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatMessageContent } from '../utils/formatMessage';
 import { readClipboard } from '../utils/clipboard.js';
@@ -28,10 +28,15 @@ export default function ChatPanel({
   chats,
   setChats,
   setChatMessages,
+  pendingAttachments,
+  setPendingAttachments,
 }) {
   const { t } = useTranslation();
   const historyRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
   const { menu, onContextMenu, handleCopy, handleSelectAll, close: closeMenu } = useTextContextMenu();
 
   useLayoutEffect(() => {
@@ -158,16 +163,18 @@ export default function ChatPanel({
 
   const handleFormSubmit = (e) => {
     if (e) e.preventDefault();
-    if (!chatInput.trim() || !activeProject || isAgentRunning) return;
+    if ((!chatInput.trim() && (!pendingAttachments || pendingAttachments.length === 0)) || !activeProject || isAgentRunning) return;
     const text = chatInput.trim();
-    setInputHistory(prev => {
-      if (prev[prev.length - 1] === text) return prev;
-      const newHist = [...prev, text].slice(-100);
-      try {
-        localStorage.setItem('chatInputHistory', JSON.stringify(newHist));
-      } catch (_) {}
-      return newHist;
-    });
+    if (text) {
+      setInputHistory(prev => {
+        if (prev[prev.length - 1] === text) return prev;
+        const newHist = [...prev, text].slice(-100);
+        try {
+          localStorage.setItem('chatInputHistory', JSON.stringify(newHist));
+        } catch (_) {}
+        return newHist;
+      });
+    }
     setHistoryIndex(-1);
     setTempInput('');
     handleSendMessage(e);
@@ -215,7 +222,73 @@ export default function ChatPanel({
 
   const hasMcp = webSearchConfig?.provider === 'mcp' && !!(webSearchConfig?.mcp_url);
 
-  // Chat Management Functions
+  // ---- Attachment helpers ----
+  const uploadFile = async (file) => {
+    const reader = new FileReader();
+    return new Promise((resolve, reject) => {
+      reader.onload = async (ev) => {
+        const dataUrl = ev.target.result;
+        const base64 = dataUrl.split(',')[1];
+        try {
+          const res = await fetch('/api/chat/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: file.name,
+              data_b64: base64,
+              mime: file.type || 'application/octet-stream',
+              project_name: activeProject?.name,
+            }),
+          });
+          if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+          const descriptor = await res.json();
+          // keep original data URL for image preview in the UI
+          descriptor._previewUrl = file.type?.startsWith('image/') ? dataUrl : null;
+          resolve(descriptor);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const processFiles = async (files) => {
+    if (!files || files.length === 0) return;
+    setUploadingFiles(true);
+    const results = [];
+    for (const f of Array.from(files)) {
+      const mime = f.type || '';
+      if (!mime.startsWith('image/') && mime !== 'application/pdf') continue;
+      try {
+        const desc = await uploadFile(f);
+        results.push(desc);
+      } catch (err) {
+        console.error('Attachment upload failed:', err);
+      }
+    }
+    setPendingAttachments(prev => [...(prev || []), ...results]);
+    setUploadingFiles(false);
+  };
+
+  const removeAttachment = (idx) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleFileInputChange = (e) => {
+    processFiles(e.target.files);
+    e.target.value = '';
+  };
+
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragOver(true); };
+  const handleDragLeave = () => setIsDragOver(false);
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    processFiles(e.dataTransfer.files);
+  };
+
   const handleCreateChatClick = () => {
     if (!activeProject) return;
     setNewChatName(`Chat ${chats.length + 1}`);
@@ -656,6 +729,7 @@ export default function ChatPanel({
       <div className="vscode-chat-history" ref={historyRef} onContextMenu={onContextMenu}>
         {chatMessages.map((msg, i) => {
           const isUser = msg.role === 'user';
+          const atts = msg._attachments || [];
           return (
             <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <span
@@ -663,6 +737,23 @@ export default function ChatPanel({
               >
                 {isUser ? t('chatPanel.you') : t('chatPanel.opalacoder')}
               </span>
+              {/* Attachment previews */}
+              {atts.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', margin: '2px 0' }}>
+                  {atts.map((att, ai) => (
+                    <div key={ai} style={{
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      background: '#2d2d2d', borderRadius: '4px', padding: '3px 7px',
+                      fontSize: '11px', color: '#aaa',
+                    }}>
+                      {att._previewUrl
+                        ? <img src={att._previewUrl} alt={att.name} style={{ height: '40px', borderRadius: '3px', objectFit: 'cover' }} />
+                        : <FileText size={14} style={{ color: '#4ec9b0' }} />}
+                      <span>{att.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="vscode-chat-msg-content">
                 {formatMessageContent(msg.content)}
               </div>
@@ -686,8 +777,72 @@ export default function ChatPanel({
       </div>
 
       {/* Input form */}
-      <form onSubmit={handleFormSubmit} className="vscode-chat-form">
+      <form
+        onSubmit={handleFormSubmit}
+        className="vscode-chat-form"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={isDragOver ? { outline: '2px dashed #4ec9b0', outlineOffset: '-2px' } : {}}
+      >
+        {/* Pending attachment preview strip */}
+        {pendingAttachments && pendingAttachments.length > 0 && (
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: '6px',
+            padding: '6px 10px', borderBottom: '1px solid #2d2d2d',
+          }}>
+            {pendingAttachments.map((att, idx) => (
+              <div key={idx} style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                background: '#2a2a2a', border: '1px solid #3d3d3d',
+                borderRadius: '4px', padding: '3px 6px', fontSize: '11px', color: '#ccc',
+              }}>
+                {att._previewUrl
+                  ? <img src={att._previewUrl} alt={att.name} style={{ height: '32px', borderRadius: '2px', objectFit: 'cover' }} />
+                  : <FileText size={13} style={{ color: '#4ec9b0' }} />}
+                <span style={{ maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{att.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(idx)}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#888', padding: '0 2px', lineHeight: 1 }}
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Upload status */}
+        {uploadingFiles && (
+          <div style={{ padding: '4px 10px', fontSize: '11px', color: '#888' }}>
+            {t('chatPanel.uploadingFiles', 'Processing attachment...')}
+          </div>
+        )}
         <div className="vscode-chat-input-row">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,application/pdf"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleFileInputChange}
+            id="chat-file-input"
+          />
+          {/* Paperclip button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!activeProject || isAgentRunning}
+            title={t('chatPanel.attachFile', 'Attach image or PDF')}
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: (pendingAttachments && pendingAttachments.length > 0) ? '#4ec9b0' : '#666',
+              padding: '4px', display: 'flex', alignItems: 'center',
+            }}
+          >
+            <Paperclip size={15} />
+          </button>
           <textarea
             ref={inputRef}
             rows={1}
@@ -715,7 +870,7 @@ export default function ChatPanel({
           ) : (
             <button
               type="submit"
-              disabled={!activeProject || !chatInput.trim()}
+              disabled={!activeProject || (!chatInput.trim() && (!pendingAttachments || pendingAttachments.length === 0))}
               className="vscode-button"
               style={{ padding: '6px' }}
             >

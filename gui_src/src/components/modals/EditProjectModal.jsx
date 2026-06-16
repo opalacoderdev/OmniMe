@@ -215,6 +215,29 @@ export default function EditProjectModal({
                   Compartilhar Memória Core entre os Chats
                 </label>
               </div>
+
+              {/* Force Vision — applies uniformly to both Orchestrator and Worker models */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                <input
+                  id="force-vision-edit"
+                  type="checkbox"
+                  checked={!!editingProject.model_params?.force_vision}
+                  onChange={e => {
+                    const v = e.target.checked;
+                    setEditingProject(p => ({
+                      ...p,
+                      model_params: { ...p.model_params, force_vision: v },
+                      worker_model_params: { ...p.worker_model_params, force_vision: v },
+                    }));
+                  }}
+                  style={{ cursor: 'pointer' }}
+                />
+                <label htmlFor="force-vision-edit"
+                       style={{ fontSize: '12px', color: '#ccc', cursor: 'pointer', userSelect: 'none' }}
+                       title="Enable for local Ollama vision models (llava, moondream2, etc.) that litellm does not detect automatically">
+                  Forçar suporte a visão (imagens) — necessário para modelos Ollama locais
+                </label>
+              </div>
             </>
           )}
 
@@ -359,6 +382,7 @@ export default function EditProjectModal({
                             <span style={{ fontSize: '12px', color: '#cccccc' }}>{t('editProjectModal.enabled')}</span>
                           </label>
                         </div>
+
                       </div>
                     </div>
 
