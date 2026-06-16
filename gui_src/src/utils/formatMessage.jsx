@@ -1,61 +1,138 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
-// Renders chat message content, converting simple markdown syntax to styled HTML elements.
-// All colors use CSS custom properties so they adapt to dark/light themes.
-export function formatMessageContent(content) {
-  if (!content) return null;
-  const lines = content.split('\n');
-  return lines.map((line, idx) => {
-    const trimmed = line.trim();
+// ── Custom component map ────────────────────────────────────────────────────
+// Maps HTML element names produced by react-markdown to custom React
+// components, so that the IDE theme and existing CSS classes are preserved.
 
-    // Headings: ### Title
-    if (trimmed.startsWith('### ')) {
-      const title = trimmed.replace('### ', '');
+const components = {
+  // Headings
+  h1: ({ children }) => (
+    <h1 style={{ margin: '14px 0 6px 0', fontWeight: 'bold', color: 'var(--vscode-text-light, #ffffff)', fontSize: '16px' }}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children }) => (
+    <h2 style={{ margin: '12px 0 6px 0', fontWeight: 'bold', color: 'var(--vscode-text-light, #ffffff)', fontSize: '15px' }}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h4 style={{ margin: '14px 0 6px 0', fontWeight: 'bold', color: 'var(--vscode-text-light, #ffffff)', fontSize: '13px' }}>
+      {children}
+    </h4>
+  ),
+
+  // Paragraphs
+  p: ({ children }) => (
+    <p className="chat-text-primary" style={{ margin: '4px 0', fontSize: '13px', lineHeight: '1.5' }}>
+      {children}
+    </p>
+  ),
+
+  // Inline code
+  code: ({ inline, className, children }) => {
+    if (inline) {
       return (
-        <h4 key={idx} style={{ margin: '14px 0 6px 0', fontWeight: 'bold', color: 'var(--vscode-text-light, #ffffff)', fontSize: '13px' }}>
-          {title}
-        </h4>
+        <code
+          className="chat-inline-code"
+          style={{ padding: '2px 4px', borderRadius: '3px', fontFamily: 'monospace', fontSize: '11px' }}
+        >
+          {children}
+        </code>
       );
     }
-
-    // Emoji bullet lists: 🔹 **`cmd`** — desc  or  ⭐ **`cmd`** — desc
-    if (trimmed.startsWith('🔹 ') || trimmed.startsWith('⭐ ')) {
-      const icon = trimmed.substring(0, 2);
-      const rest = trimmed.substring(2);
-
-      const parts = rest.split('—');
-      if (parts.length >= 2) {
-        const cmdPart = parts[0].replace(/\*\*`|`\*\*/g, '').trim();
-        const descPart = parts.slice(1).join('—').trim();
-        return (
-          <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', margin: '4px 0', paddingLeft: '4px' }}>
-            <span style={{ fontSize: '12px', flexShrink: 0 }}>{icon}</span>
-            <span style={{ fontSize: '13px', lineHeight: '1.4' }}>
-              <code className="chat-inline-code" style={{ padding: '2px 4px', borderRadius: '3px', fontFamily: 'monospace', fontSize: '11px', marginRight: '6px' }}>
-                {cmdPart}
-              </code>
-              <span className="chat-text-secondary">{descPart}</span>
-            </span>
-          </div>
-        );
-      }
-    }
-
-    // Footnote notes: _(note)_
-    if (trimmed.startsWith('_(') && trimmed.endsWith(')_')) {
-      const note = trimmed.substring(2, trimmed.length - 2);
-      return (
-        <p key={idx} style={{ margin: '8px 0', fontStyle: 'italic', color: 'var(--chat-muted, #8a8a8a)', fontSize: '11px' }}>
-          {note}
-        </p>
-      );
-    }
-
-    // Regular line (preserving line breaks)
+    // Block code
+    const lang = (className || '').replace('language-', '');
     return (
-      <div key={idx} className="chat-text-primary" style={{ minHeight: '1.2em', fontSize: '13px', margin: '2px 0' }}>
-        {line}
+      <div style={{ margin: '8px 0', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color, #3c3c3c)' }}>
+        {lang && (
+          <div style={{ background: 'var(--titlebar-bg, #1a1a1a)', padding: '2px 10px', fontSize: '10px', color: '#888', borderBottom: '1px solid var(--border-color, #3c3c3c)' }}>
+            {lang}
+          </div>
+        )}
+        <pre style={{ margin: 0, padding: '10px', background: 'var(--editor-bg, #1e1e1e)', overflowX: 'auto', fontSize: '12px', lineHeight: '1.5', fontFamily: 'monospace' }}>
+          <code>{children}</code>
+        </pre>
       </div>
     );
-  });
+  },
+
+  // Pre (wrap for block code)
+  pre: ({ children }) => <>{children}</>,
+
+  // Lists
+  ul: ({ children }) => (
+    <ul style={{ margin: '4px 0', paddingLeft: '20px', fontSize: '13px', lineHeight: '1.5' }}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children }) => (
+    <ol style={{ margin: '4px 0', paddingLeft: '20px', fontSize: '13px', lineHeight: '1.5' }}>
+      {children}
+    </ol>
+  ),
+  li: ({ children }) => (
+    <li className="chat-text-primary" style={{ margin: '2px 0' }}>
+      {children}
+    </li>
+  ),
+
+  // Bold / italic
+  strong: ({ children }) => (
+    <strong style={{ fontWeight: 'bold', color: 'var(--vscode-text-light, #ffffff)' }}>
+      {children}
+    </strong>
+  ),
+  em: ({ children }) => (
+    <em style={{ fontStyle: 'italic', color: 'var(--chat-muted, #8a8a8a)' }}>
+      {children}
+    </em>
+  ),
+
+  // Horizontal rule
+  hr: () => (
+    <hr style={{ border: 'none', borderTop: '1px solid var(--border-color, #3c3c3c)', margin: '12px 0' }} />
+  ),
+
+  // Blockquote
+  blockquote: ({ children }) => (
+    <blockquote style={{
+      margin: '8px 0',
+      paddingLeft: '10px',
+      borderLeft: '3px solid var(--vscode-accent, #007acc)',
+      color: 'var(--chat-muted, #8a8a8a)',
+      fontSize: '13px',
+    }}>
+      {children}
+    </blockquote>
+  ),
+
+  // Links
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--vscode-accent, #007acc)', textDecoration: 'underline' }}>
+      {children}
+    </a>
+  ),
+};
+
+const REMARK_PLUGINS = [remarkMath];
+const REHYPE_PLUGINS = [rehypeKatex];
+
+// ── Public API ──────────────────────────────────────────────────────────────
+// Drop-in replacement for the old formatMessageContent(content) function.
+// Returns a React element that renders Markdown + LaTeX (KaTeX).
+export function formatMessageContent(content) {
+  if (!content) return null;
+  return (
+    <ReactMarkdown
+      remarkPlugins={REMARK_PLUGINS}
+      rehypePlugins={REHYPE_PLUGINS}
+      components={components}
+    >
+      {content}
+    </ReactMarkdown>
+  );
 }

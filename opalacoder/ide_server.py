@@ -1024,8 +1024,47 @@ class AsyncHTTPServer:
                 self.send_response(writer, 400, b'{"error":"project_name is required"}', "application/json")
                 return
             if store.exists(project_name):
+                proj = store.load(project_name)
+                
+                # Ensure resources are released before deleting directory to avoid file locks
+                if proj and proj.project_path:
+                    try:
+                        # 1. Close main terminal
+                        if self.active_terminal and getattr(self.active_terminal, 'project_path', None) == proj.project_path:
+                            try:
+                                self.active_terminal.close()
+                            except:
+                                pass
+                            self.active_terminal = None
+                            
+                        # 2. Close temp terminals
+                        for tid, term in list(self.temp_terminals.items()):
+                            if getattr(term, 'project_path', None) == proj.project_path:
+                                try:
+                                    term.close()
+                                except:
+                                    pass
+                                del self.temp_terminals[tid]
+                                
+                        # 3. Close SQLite databases
+                        from opalacoder.code_index import CODE_INDEX
+                        if getattr(CODE_INDEX, '_root', None) == proj.project_path:
+                            try:
+                                CODE_INDEX.close()
+                            except:
+                                pass
+                                
+                        from opalacoder.vector_index import get_vector_index
+                        v_idx = get_vector_index()
+                        if v_idx and str(getattr(v_idx, '_root', '')) == proj.project_path:
+                            try:
+                                v_idx.close()
+                            except:
+                                pass
+                    except Exception as e:
+                        print(f"Error releasing resources before deletion: {e}")
+
                 if delete_dir:
-                    proj = store.load(project_name)
                     if proj and proj.project_path and os.path.exists(proj.project_path):
                         try:
                             import stat

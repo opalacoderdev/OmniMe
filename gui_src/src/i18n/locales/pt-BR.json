@@ -127,7 +127,7 @@
   "newProjectModal": {
     "title": "REGISTRAR NOVO PROJETO",
     "projectName": "Nome do Projeto *",
-    "projectPath": "Caminho Absoluto *",
+    "projectPath": "Localização do projeto *",
     "description": "Descrição",
     "apiKey": "Chave de API (Opcional)",
     "apiBase": "URL Base da API (Opcional)",
@@ -242,7 +242,7 @@
     "installNow": "Instalar Agora"
   },
   "app": {
-    "greeting": "Olá! Estou pronto para auxiliar no projeto **{{projectName}}**.",
+    "greeting": "Olá! Estou pronto para te auxiliar no projeto **{{projectName}}**.",
     "projectSelected": "Projeto selecionado: {{name}}",
     "failedToLoadProjects": "Falha ao carregar projetos: {{error}}",
     "failedToListFiles": "Falha ao listar arquivos: {{error}}",

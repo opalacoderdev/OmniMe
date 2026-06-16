@@ -467,6 +467,14 @@ class CodeIndex:
             raise RuntimeError("CodeIndex: call set_project() before using the index.")
         return self._conn
 
+    def close(self) -> None:
+        """Close the SQLite connection to release file locks."""
+        if self._conn:
+            self._conn.close()
+            self._conn = None
+        self._root = ""
+        self._db_path = ""
+
     # ------------------------------------------------------------------
     # Build / incremental update
     # ------------------------------------------------------------------

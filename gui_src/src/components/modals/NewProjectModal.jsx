@@ -29,6 +29,8 @@ export default function NewProjectModal({
   const { hardware: workerHardware, modelStatus: workerModelStatus } = useModelValidation(newProjWorkerModel);
 
   const [activeTab, setActiveTab] = useState('geral');
+  const isWindows = navigator.userAgent.toLowerCase().includes('windows');
+  const dynamicPathHint = isWindows ? 'Ex: C:\\Projetos' : 'Ex: /home/user/projetos';
 
   const getBorderColor = (status) => {
     if (status === 'green') return '#4ade80';
@@ -105,7 +107,7 @@ export default function NewProjectModal({
                     type="text"
                     value={newProjPath}
                     onChange={(e) => setNewProjPath(e.target.value)}
-                    placeholder={t('newProjectModal.projectPathPlaceholder')}
+                    placeholder={dynamicPathHint}
                     required
                     style={{ flex: 1 }}
                   />

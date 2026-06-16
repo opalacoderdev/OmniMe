@@ -227,9 +227,8 @@ export default function App() {
       if (prevProjectNameRef.current !== activeProject.name) {
         prevProjectNameRef.current = activeProject.name;
         
-        // Load initial greeting
-        const greeting = activeProject.project_name || activeProject.name;
-        setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+        // Show a blank state while we load — avoid flash of stale greeting
+        setChatMessages([]);
 
         // Fetch chats
         fetch(`/api/chat/list?project_name=${encodeURIComponent(activeProject.name)}&t=${Date.now()}`)
@@ -238,27 +237,45 @@ export default function App() {
             const loadedChats = data.chats || [];
             setChats(loadedChats);
             
-            // Set active chat id, default to main
-            const currentChatId = activeProject.current_chat_id || 'main';
+            // Set active chat id: use the one stored in the project or fall back to the first chat
+            const currentChatId = activeProject.current_chat_id
+              || (loadedChats.length > 0 ? loadedChats[0].id : 'main');
             setActiveChatId(currentChatId);
 
             // Now fetch history for this chat
             fetch(`/api/chat/history?project_name=${encodeURIComponent(activeProject.name)}&chat_id=${encodeURIComponent(currentChatId)}&t=${Date.now()}`)
               .then(res => res.json())
               .then(histData => {
-                 if (histData.history && histData.history.length > 0) {
-                   setChatMessages(histData.history);
-                 }
+                if (histData.history && histData.history.length > 0) {
+                  // Restore previous conversation
+                  setChatMessages(histData.history);
+                } else {
+                  // First time opening this project/chat → show greeting
+                  const greeting = activeProject.project_name || activeProject.name;
+                  setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+                }
               })
-              .catch(err => console.error("Failed to fetch chat history:", err));
+              .catch(err => {
+                console.error("Failed to fetch chat history:", err);
+                const greeting = activeProject.project_name || activeProject.name;
+                setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+              });
           })
-          .catch(err => console.error("Failed to fetch chat list:", err));
+          .catch(err => {
+            console.error("Failed to fetch chat list:", err);
+            const greeting = activeProject.project_name || activeProject.name;
+            setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+          });
 
         setOpenFiles([]);
         setSelectedFile(null);
         setFileContent('');
         setFileContents({});
         setOriginalFileContents({});
+        setGitChanges([]);
+        setTerminalLogs([]);
+        setAchievementsMemory('');
+        setCommitMessage('');
       }
     } else {
       setFiles([]);
@@ -268,6 +285,13 @@ export default function App() {
       setFileContents({});
       setOriginalFileContents({});
       setProblems([]);
+      setChats([]);
+      setChatMessages([]);
+      setActiveChatId('main');
+      setGitChanges([]);
+      setTerminalLogs([]);
+      setAchievementsMemory('');
+      setCommitMessage('');
       prevProjectNameRef.current = null;
     }
   }, [activeProject]);
@@ -750,10 +774,16 @@ export default function App() {
     e.preventDefault();
     if (!newProjName || !newProjPath) return;
     setNewProjError('');
+    
+    const sep = navigator.userAgent.toLowerCase().includes('windows') ? '\\' : '/';
+    let basePath = newProjPath;
+    if (basePath.endsWith(sep)) basePath = basePath.slice(0, -1);
+    const finalProjectPath = `${basePath}${sep}${newProjName}`;
+
     try {
       const res = await fetch('/api/opalacoder/create-project', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_name: newProjName, project_path: newProjPath, description: newProjDesc, model: newProjModel, worker_model: newProjWorkerModel, mode: newProjMode, api_key: newProjApiKey, api_base: newProjApiBase, worker_api_key: newProjWorkerApiKey, worker_api_base: newProjWorkerApiBase, model_params: Object.keys(newProjModelParams).length ? newProjModelParams : undefined, worker_model_params: Object.keys(newProjWorkerModelParams).length ? newProjWorkerModelParams : undefined }),
+        body: JSON.stringify({ project_name: newProjName, project_path: finalProjectPath, description: newProjDesc, model: newProjModel, worker_model: newProjWorkerModel, mode: newProjMode, api_key: newProjApiKey, api_base: newProjApiBase, worker_api_key: newProjWorkerApiKey, worker_api_base: newProjWorkerApiBase, model_params: Object.keys(newProjModelParams).length ? newProjModelParams : undefined, worker_model_params: Object.keys(newProjWorkerModelParams).length ? newProjWorkerModelParams : undefined }),
       });
       if (res.ok) {
         addLog('info', `Projeto '${newProjName}' registrado.`);

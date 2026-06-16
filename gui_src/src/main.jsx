@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import './index.css';
 import './i18n/index.js';
+import 'katex/dist/katex.min.css';
+
 
 // Clipboard setup for pywebview/GTK.
 //
