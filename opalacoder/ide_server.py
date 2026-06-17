@@ -2138,6 +2138,23 @@ def start_gui_server(host="127.0.0.1", port=3000):
                         self.webview.setContextMenuPolicy(_Qt.ContextMenuPolicy.NoContextMenu)
                     self.webview.page().loadFinished.connect(_disable_context_menu)
                     print('[patch] loadFinished connected')
+                    
+                    # Handle window.print() triggered from JavaScript
+                    try:
+                        def _handle_print():
+                            try:
+                                from PyQt6.QtWidgets import QFileDialog
+                                file_path, _ = QFileDialog.getSaveFileName(self.webview, "Salvar PDF", "", "PDF Files (*.pdf)")
+                                if file_path:
+                                    if not file_path.lower().endswith('.pdf'):
+                                        file_path += '.pdf'
+                                    self.webview.page().printToPdf(file_path)
+                            except ImportError as e:
+                                print('[patch] PyQt6.QtWidgets not found, cannot print:', e)
+                        self.webview.page().printRequested.connect(_handle_print)
+                        print('[patch] printRequested connected')
+                    except Exception as pe:
+                        print('[patch] Failed to bind printRequested:', pe)
 
                 _wv_qt2.BrowserView.__init__ = _patched_init
                 print('[patch] BrowserView.__init__ patched successfully')

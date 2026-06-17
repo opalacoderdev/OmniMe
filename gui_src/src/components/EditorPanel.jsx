@@ -44,9 +44,6 @@ export default function EditorPanel({
   const handlePrintPDF = () => {
     document.body.classList.add('printing-editor');
     window.print();
-    setTimeout(() => {
-      document.body.classList.remove('printing-editor');
-    }, 1000);
   };
 
   // Ref so the Monaco command closure always calls the latest callback,

@@ -412,6 +412,7 @@ export default function ChatPanel({
   };
 
   const handlePrintPDF = () => {
+    document.body.classList.remove('printing-editor');
     window.print();
   };
 
