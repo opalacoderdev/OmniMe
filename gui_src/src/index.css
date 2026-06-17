@@ -977,6 +977,33 @@ select {
     display: none !important;
   }
 
+  /* Force high contrast text colors for all elements */
+  .vscode-chat-history *, 
+  .markdown-preview-container * {
+    color: black !important;
+    text-shadow: none !important;
+  }
+  
+  /* Fix code block backgrounds and borders for print */
+  .vscode-chat-history pre, 
+  .markdown-preview-container pre,
+  .vscode-chat-history code, 
+  .markdown-preview-container code,
+  .vscode-chat-history .chat-inline-code,
+  .markdown-preview-container .chat-inline-code,
+  .vscode-chat-history div[style*="background"],
+  .markdown-preview-container div[style*="background"] {
+    background: #f8f8f8 !important;
+    color: #222 !important;
+    border-color: #ccc !important;
+  }
+
+  /* Fix links */
+  .vscode-chat-history a, 
+  .markdown-preview-container a {
+    color: #0056b3 !important;
+  }
+
   .thinking-indicator {
     display: none !important;
   }
