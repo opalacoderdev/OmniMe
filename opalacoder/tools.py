@@ -325,15 +325,13 @@ def run_command(command: str) -> str:
             out = out[:1000] + "\n... [TRUNCATED] ...\n" + out[-500:]
         if len(err) > 2000:
             err = err[:1000] + "\n... [TRUNCATED] ...\n" + err[-500:]
-        output = ""
-        if out:
-            output += f"STDOUT:\n{out}\n"
-        if err:
-            output += f"STDERR:\n{err}\n"
-        if res.returncode != 0:
-            raise ValueError(f"ERROR: Command failed (exit code {res.returncode}).\n{output}Do NOT report success. Fix the error or use a different tool.")
-            
-        return output if output else "Command executed successfully (no output)."
+        import json
+        result = {
+            "stdout": out,
+            "stderr": err,
+            "exit_code": res.returncode
+        }
+        return json.dumps(result, indent=2)
     except subprocess.TimeoutExpired:
         raise ValueError("Error: Command timed out after 120 seconds.")
     except Exception as e:
@@ -395,15 +393,13 @@ def run_python_script(script_path: str, args: str = "") -> str:
             out = out[:1000] + "\n... [TRUNCATED] ...\n" + out[-500:]
         if len(err) > 2000:
             err = err[:1000] + "\n... [TRUNCATED] ...\n" + err[-500:]
-        output = ""
-        if out:
-            output += f"STDOUT:\n{out}\n"
-        if err:
-            output += f"STDERR:\n{err}\n"
-        if res.returncode != 0:
-            raise ValueError(f"ERROR: Command failed (exit code {res.returncode}).\n{output}Do NOT report success. Fix the error or use a different tool.")
-            
-        return output if output else "Command executed successfully (no output)."
+        import json
+        result = {
+            "stdout": out,
+            "stderr": err,
+            "exit_code": res.returncode
+        }
+        return json.dumps(result, indent=2)
     except subprocess.TimeoutExpired:
         raise ValueError("Error: Command timed out after 120 seconds.")
     except Exception as e:

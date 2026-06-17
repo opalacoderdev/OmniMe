@@ -86,7 +86,7 @@ export default function BottomPanel({
         {/* Tab header */}
         <div className="vscode-bottom-tabs">
           <div className="vscode-bottom-tab-list">
-            {['output', 'problems', 'achievements', 'terminal'].map((tab) => (
+            {['output', 'problems', 'thinking', 'terminal'].map((tab) => (
               <span
                 key={tab}
                 className={`vscode-bottom-tab ${activeBottomTab === tab ? 'active' : ''}`}
@@ -104,13 +104,13 @@ export default function BottomPanel({
                   </>
                 )}
                 {tab === 'terminal' && t('bottomPanel.terminalTab')}
-                {tab === 'achievements' && 'Achievements'}
+                {tab === 'thinking' && 'Agent Thinking'}
               </span>
             ))}
           </div>
 
           <div className="flex items-center" style={{ gap: '8px' }}>
-            {(activeBottomTab === 'output' || activeBottomTab === 'problems' || activeBottomTab === 'achievements') && (
+            {(activeBottomTab === 'output' || activeBottomTab === 'problems' || activeBottomTab === 'thinking') && (
               <button
                 onClick={
                   activeBottomTab === 'output'
@@ -160,35 +160,65 @@ export default function BottomPanel({
             {activeBottomTab === 'output' && (
               <div 
                 className="vscode-logs" 
-                style={{ height: '100%', overflowY: 'auto' }}
+                style={{ height: '100%', overflowY: 'auto', padding: '8px' }}
                 ref={logsContainerRef}
                 onScroll={handleScroll}
               >
-                {terminalLogs.length === 0 ? (
+                {terminalLogs.filter(log => !['thought', 'reflection', 'stream_chunk'].includes(log.type)).length === 0 ? (
                   <div style={{ color: '#808080', fontStyle: 'italic' }}>
                     {t('bottomPanel.noLogs')}
                   </div>
                 ) : (
-                  terminalLogs.map((log, i) => {
-                    let colorStyle = { color: '#cccccc' };
-                    let label = 'SYSTEM';
+                  terminalLogs
+                    .filter(log => !['thought', 'reflection', 'stream_chunk'].includes(log.type))
+                    .map((log, i) => {
+                      let colorStyle = { color: '#cccccc' };
+                      let label = 'SYSTEM';
+                      let bgColor = 'transparent';
+                      let borderColor = 'transparent';
 
-                    if (log.type === 'error') { colorStyle = { color: '#f48771', fontWeight: 'bold' }; label = 'ERROR'; }
-                    else if (log.type === 'info') { colorStyle = { color: '#75beff' }; label = 'INFO'; }
-                    else if (log.type === 'thought') { colorStyle = { color: '#da70d6', fontStyle: 'italic' }; label = 'THINKING'; }
-                    else if (log.type === 'reflection') { colorStyle = { color: '#4ec9b0', fontStyle: 'italic' }; label = 'REFLECTION'; }
-                    else if (log.type === 'stream_chunk') { colorStyle = { color: '#da70d6', fontStyle: 'italic' }; label = 'STREAM'; }
-                    else if (log.type === 'tool_call') { colorStyle = { color: '#d7ba7d' }; label = 'TOOL'; }
-                    else if (log.type === 'tool_result') { colorStyle = { color: '#89d4a5' }; label = 'RESULT'; }
+                      if (log.type === 'error') { 
+                        colorStyle = { color: '#f48771', fontWeight: 'bold' }; 
+                        label = 'ERROR'; 
+                        bgColor = 'rgba(244, 135, 113, 0.08)';
+                        borderColor = '#f48771';
+                      }
+                      else if (log.type === 'info') { 
+                        colorStyle = { color: '#75beff' }; 
+                        label = 'INFO'; 
+                      }
+                      else if (log.type === 'tool_call') { 
+                        colorStyle = { color: '#d7ba7d' }; 
+                        label = 'TOOL'; 
+                        bgColor = 'rgba(215, 186, 125, 0.08)';
+                        borderColor = '#d7ba7d';
+                      }
+                      else if (log.type === 'tool_result') { 
+                        colorStyle = { color: '#89d4a5' }; 
+                        label = 'RESULT'; 
+                        bgColor = 'rgba(137, 212, 165, 0.08)';
+                        borderColor = '#89d4a5';
+                      }
 
-                    return (
-                      <div key={i} style={{ ...colorStyle, marginBottom: '3px', wordBreak: 'break-word' }}>
-                        <span style={{ color: '#5a5a5a', marginRight: '6px' }}>[{log.timestamp}]</span>
-                        <span style={{ fontWeight: 'bold', marginRight: '6px' }}>[{label}]</span>
-                        {log.agent && <span style={{ color: '#9cdcfe', fontWeight: 'bold', marginRight: '6px' }}>[{log.agent}]</span>}
-                        <span style={{ whiteSpace: 'pre-wrap' }}>{log.message}</span>
-                      </div>
-                    );
+                      return (
+                        <div key={i} style={{ 
+                          padding: '6px 8px',
+                          marginBottom: '6px', 
+                          wordBreak: 'break-word',
+                          backgroundColor: bgColor,
+                          borderLeft: `3px solid ${borderColor}`,
+                          borderRadius: '2px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', fontSize: '11px', opacity: 0.8 }}>
+                            <span style={{ color: '#888', marginRight: '6px' }}>[{log.timestamp}]</span>
+                            <span style={{ fontWeight: 'bold', marginRight: '6px', color: colorStyle.color }}>[{label}]</span>
+                            {log.agent && <span style={{ color: '#9cdcfe', fontWeight: 'bold' }}>@{log.agent}</span>}
+                          </div>
+                          <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'Consolas, monospace', fontSize: '12px', color: '#e0e0e0' }}>
+                            {log.message}
+                          </div>
+                        </div>
+                      );
                   })
                 )}
                 <div ref={logEndRef} />
@@ -218,18 +248,41 @@ export default function BottomPanel({
               </div>
             )}
 
-            {/* Achievements tab */}
-            {activeBottomTab === 'achievements' && (
-              <div className="vscode-logs" style={{ padding: '12px', overflowY: 'auto', height: '100%', color: '#cccccc', fontFamily: 'Consolas, monospace', fontSize: '13px' }}>
-                {!achievementsMemory ? (
+            {/* Thinking tab */}
+            {activeBottomTab === 'thinking' && (
+              <div 
+                className="vscode-logs" 
+                style={{ height: '100%', overflowY: 'auto', padding: '8px' }}
+                ref={logsContainerRef}
+                onScroll={handleScroll}
+              >
+                {terminalLogs.filter(log => ['thought', 'reflection', 'stream_chunk'].includes(log.type)).length === 0 ? (
                   <div style={{ color: '#808080', fontStyle: 'italic' }}>
-                    No achievements recorded in this turn yet.
+                    No agent thinking recorded in this turn yet.
                   </div>
                 ) : (
-                  <pre style={{ whiteSpace: 'pre-wrap', margin: 0, color: '#4ec9b0', fontFamily: 'inherit' }}>
-                    {achievementsMemory}
-                  </pre>
+                  terminalLogs
+                    .filter(log => ['thought', 'reflection', 'stream_chunk'].includes(log.type))
+                    .map((log, i) => {
+                      let colorStyle = { color: '#da70d6' };
+                      let label = 'THINKING';
+
+                      if (log.type === 'reflection') { colorStyle = { color: '#4ec9b0' }; label = 'REFLECTION'; }
+                      else if (log.type === 'stream_chunk') { colorStyle = { color: '#da70d6' }; label = 'STREAM'; }
+
+                      return (
+                        <div key={i} style={{ padding: '4px 8px', marginBottom: '6px', wordBreak: 'break-word' }}>
+                          <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>
+                             [{log.timestamp}] - <span style={{ color: colorStyle.color, fontStyle: 'italic' }}>{label}</span> {log.agent && `(@${log.agent})`}
+                          </div>
+                          <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'Consolas, monospace', fontSize: '12px', color: '#cccccc', opacity: 0.9 }}>
+                            {log.message}
+                          </div>
+                        </div>
+                      );
+                  })
                 )}
+                <div ref={logEndRef} />
               </div>
             )}
 
