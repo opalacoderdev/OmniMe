@@ -293,7 +293,7 @@ export default function EditorPanel({
       {/* Monaco editor */}
       <div className="vscode-editor-container">
         {isPreviewMode ? (
-          <div style={{ padding: '20px', overflowY: 'auto', height: '100%', boxSizing: 'border-box' }} className="markdown-preview-container">
+          <div style={{ padding: '20px', overflowY: 'auto', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, boxSizing: 'border-box' }} className="markdown-preview-container">
             {formatMessageContent(fileContent)}
           </div>
         ) : isDiffMode ? (
