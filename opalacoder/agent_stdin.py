@@ -708,8 +708,8 @@ async def handle_run(data: dict):
                     resp_obj = await agent.run(AgentInput(prompt=retry_prompt))
                 response = resp_obj.response.strip() if resp_obj.response else ""
             
-            # Save to store if using chat_orchestrator
-            if agent_type == "chat_orchestrator" and current_store and current_project:
+            # Save to store if using orchestrator or chat_orchestrator
+            if agent_type in ("orchestrator", "chat_orchestrator") and current_store and current_project:
                 current_store.append_message(current_project, "user", prompt)
                 if tools_mod.TURN_ACHIEVEMENTS:
                     current_store.append_message(current_project, "system", f"Achievements logged during this turn:\n{tools_mod.TURN_ACHIEVEMENTS}")

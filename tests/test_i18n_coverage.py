@@ -66,9 +66,9 @@ def test_refactored_key_exists_in_pt(key):
 PARAM_KEYS = [
     ("command_hint_suggestion", {"cmd": "clear"}),
     ("routing_complex_task", {"model": "gemini/x"}),
-    ("api_key_missing_fallback", {"model": "ollama/gemma4:latest"}),
+    ("api_key_missing_fallback", {"model": "ollama/test-model"}),
     ("alt_model_error", {"model": "gemini/x", "err": "timeout"}),
-    ("fallback_to_model", {"model": "ollama/gemma4:latest"}),
+    ("fallback_to_model", {"model": "ollama/test-model"}),
     ("unknown_command", {"cmd": "/foo"}),
     ("session_renamed", {"name": "myproject"}),
 ]

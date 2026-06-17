@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useLayoutEffect } from 'react';
-import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings, Plus, Trash2, Search, Paperclip, FileText } from 'lucide-react';
+import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings, Plus, Trash2, Search, Paperclip, FileText, ZoomIn, ZoomOut, Download, Printer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatMessageContent } from '../utils/formatMessage';
 import { readClipboard } from '../utils/clipboard.js';
@@ -85,6 +85,7 @@ export default function ChatPanel({
   const [mcpToolDraft, setMcpToolDraft] = useState('web_search');
   const [mcpApiKeyDraft, setMcpApiKeyDraft] = useState('');
   const [useMcpDraft, setUseMcpDraft] = useState(false);
+  const [chatZoom, setChatZoom] = useState(1);
   const [mcpTestStatus, setMcpTestStatus] = useState(''); // '', 'testing', 'ok', 'error:<msg>'
 
   // Custom prompt state for new chat
@@ -394,6 +395,26 @@ export default function ChatPanel({
     }
   };
 
+  const handleExportMarkdown = () => {
+    if (!chatMessages || chatMessages.length === 0) return;
+    let md = `# Chat Export - ${activeProject?.name || 'OpalaCoder'}\n\n`;
+    chatMessages.forEach(msg => {
+      const role = msg.role === 'user' ? 'User' : 'OpalaCoder';
+      md += `### ${role}\n\n${msg.content}\n\n---\n\n`;
+    });
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chat_export_${new Date().toISOString().split('T')[0]}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintPDF = () => {
+    window.print();
+  };
+
   return (
     <aside className="vscode-chat" style={{ width: `${chatWidth}px` }}>
       <TextContextMenu
@@ -410,15 +431,43 @@ export default function ChatPanel({
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
+            onClick={() => setChatZoom(z => Math.max(0.5, z - 0.1))}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)' }}
+            title={t('chatPanel.zoomOut', 'Diminuir Zoom')}
+          >
+            <ZoomOut size={14} />
+          </button>
+          <button
+            onClick={() => setChatZoom(z => Math.min(2.5, z + 0.1))}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)' }}
+            title={t('chatPanel.zoomIn', 'Aumentar Zoom')}
+          >
+            <ZoomIn size={14} />
+          </button>
+          <button
+            onClick={handleExportMarkdown}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)' }}
+            title={t('chatPanel.exportMarkdown', 'Exportar como Markdown')}
+          >
+            <Download size={14} />
+          </button>
+          <button
+            onClick={handlePrintPDF}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)' }}
+            title={t('chatPanel.exportPDF', 'Exportar como PDF / Imprimir')}
+          >
+            <Printer size={14} />
+          </button>
+          <button
             onClick={onClearChat}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)' }}
             title={t('chatPanel.clearChat')}
           >
             <Eraser size={14} />
           </button>
           <button
             onClick={() => setIsChatVisible(false)}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)' }}
           >
             <X size={14} />
           </button>
@@ -426,7 +475,7 @@ export default function ChatPanel({
       </div>
       
       {/* Chat Selector Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 10px', borderBottom: '1px solid var(--border-color, #333)', background: 'var(--sidebar-bg, #1e1e1e)', minHeight: '28px', gap: '6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 10px', borderBottom: '1px solid var(--vscode-border)', background: 'var(--vscode-sidebar-bg)', minHeight: '28px', gap: '6px' }}>
         <select 
           className="vscode-settings-input" 
           value={activeChatId} 
@@ -438,7 +487,7 @@ export default function ChatPanel({
           ))}
         </select>
         <div style={{ display: 'flex', gap: '4px' }}>
-          <button onClick={() => setShowSearchModal(true)} title={t('chat.searchChats', 'Search Chats')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0', display: 'flex', alignItems: 'center', padding: '2px' }}>
+          <button onClick={() => setShowSearchModal(true)} title={t('chat.searchChats', 'Search Chats')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)', display: 'flex', alignItems: 'center', padding: '2px' }}>
             <Search size={14} />
           </button>
           <button onClick={handleCreateChatClick} title="Novo Chat" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#4ec9b0', display: 'flex', alignItems: 'center', padding: '2px' }}>
@@ -453,13 +502,13 @@ export default function ChatPanel({
       </div>
 
       {chatToDelete && (
-        <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color, #333)', background: 'var(--sidebar-bg, #1e1e1e)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ padding: '8px', borderBottom: '1px solid var(--vscode-border)', background: 'var(--vscode-sidebar-bg)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <span style={{ fontSize: '11px', color: '#ccc' }}>Deletar este chat e todo o seu histórico?</span>
           <div style={{ display: 'flex', gap: '6px' }}>
             <button onClick={confirmDeleteChat} className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px', background: '#f87171', color: '#fff', border: 'none' }}>
               Deletar
             </button>
-            <button onClick={() => setChatToDelete(null)} className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px', background: 'transparent', color: '#ccc', border: '1px solid #555' }}>
+            <button onClick={() => setChatToDelete(null)} className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px', background: 'transparent', color: 'var(--vscode-text-fg)', border: '1px solid var(--vscode-border)' }}>
               Cancelar
             </button>
           </div>
@@ -475,7 +524,7 @@ export default function ChatPanel({
       )}
 
       {showNewChatPrompt && (
-        <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color, #333)', background: 'var(--sidebar-bg, #1e1e1e)' }}>
+        <div style={{ padding: '8px', borderBottom: '1px solid var(--vscode-border)', background: 'var(--vscode-sidebar-bg)' }}>
           <form onSubmit={submitNewChat} style={{ display: 'flex', gap: '6px' }}>
             <input 
               autoFocus
@@ -488,7 +537,7 @@ export default function ChatPanel({
             <button type="submit" className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px' }}>
               Criar
             </button>
-            <button type="button" onClick={() => setShowNewChatPrompt(false)} className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px', background: 'transparent', color: '#ccc', border: '1px solid #555' }}>
+            <button type="button" onClick={() => setShowNewChatPrompt(false)} className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px', background: 'transparent', color: 'var(--vscode-text-fg)', border: '1px solid var(--vscode-border)' }}>
               Cancelar
             </button>
           </form>
@@ -518,15 +567,15 @@ export default function ChatPanel({
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '4px 10px',
-          borderBottom: '1px solid var(--border-color, #333)',
-          background: 'var(--sidebar-bg, #1e1e1e)',
+          borderBottom: '1px solid var(--vscode-border)',
+          background: 'var(--vscode-sidebar-bg)',
           minHeight: '28px',
           gap: '6px',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Globe size={12} style={{ color: searchEnabled ? '#4ec9b0' : '#666' }} />
-          <span style={{ fontSize: '11px', color: searchEnabled ? '#ccc' : '#666', userSelect: 'none' }}>
+          <Globe size={12} style={{ color: searchEnabled ? '#4ec9b0' : '#888' }} />
+          <span style={{ fontSize: '11px', color: searchEnabled ? 'var(--vscode-text-fg)' : '#888', userSelect: 'none' }}>
             {t('chatPanel.webSearch')}
             {hasMcp && searchEnabled && (
               <span style={{ marginLeft: '4px', fontSize: '10px', color: '#888' }}>{t('chatPanel.mcpIndicator')}</span>
@@ -542,7 +591,7 @@ export default function ChatPanel({
               background: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              color: showMcpPanel ? '#4ec9b0' : '#555',
+              color: showMcpPanel ? '#4ec9b0' : '#888',
               padding: '1px',
               display: 'flex',
               alignItems: 'center',
@@ -569,7 +618,7 @@ export default function ChatPanel({
                 width: '28px',
                 height: '14px',
                 borderRadius: '7px',
-                background: searchEnabled ? '#4ec9b0' : '#444',
+                background: searchEnabled ? '#4ec9b0' : '#a0a0a0',
                 position: 'relative',
                 transition: 'background 0.2s',
               }}
@@ -596,8 +645,8 @@ export default function ChatPanel({
         <div
           style={{
             padding: '8px 10px',
-            borderBottom: '1px solid var(--border-color, #333)',
-            background: 'var(--sidebar-bg, #1a1a1a)',
+            borderBottom: '1px solid var(--vscode-border)',
+            background: 'var(--vscode-sidebar-bg)',
             display: 'flex',
             flexDirection: 'column',
             gap: '6px',
@@ -624,14 +673,10 @@ export default function ChatPanel({
             disabled={!useMcpDraft}
             onChange={e => { setMcpUrlDraft(e.target.value); setMcpTestStatus(''); }}
             placeholder={t('chatPanel.mcpUrlPlaceholder')}
+            className="vscode-settings-input"
             style={{
               fontSize: '11px',
               padding: '3px 6px',
-              background: useMcpDraft ? '#2d2d2d' : '#222',
-              border: '1px solid #444',
-              borderRadius: '3px',
-              color: useMcpDraft ? '#ccc' : '#666',
-              outline: 'none',
             }}
           />
 
@@ -643,14 +688,10 @@ export default function ChatPanel({
             disabled={!useMcpDraft}
             onChange={e => { setMcpToolDraft(e.target.value); setMcpTestStatus(''); }}
             placeholder={t('chatPanel.mcpToolPlaceholder')}
+            className="vscode-settings-input"
             style={{
               fontSize: '11px',
               padding: '3px 6px',
-              background: useMcpDraft ? '#2d2d2d' : '#222',
-              border: '1px solid #444',
-              borderRadius: '3px',
-              color: useMcpDraft ? '#ccc' : '#666',
-              outline: 'none',
             }}
           />
 
@@ -662,14 +703,10 @@ export default function ChatPanel({
             disabled={!useMcpDraft}
             onChange={e => { setMcpApiKeyDraft(e.target.value); setMcpTestStatus(''); }}
             placeholder={t('chatPanel.mcpApiKeyPlaceholder')}
+            className="vscode-settings-input"
             style={{
               fontSize: '11px',
               padding: '3px 6px',
-              background: useMcpDraft ? '#2d2d2d' : '#222',
-              border: '1px solid #444',
-              borderRadius: '3px',
-              color: useMcpDraft ? '#ccc' : '#666',
-              outline: 'none',
             }}
           />
 
@@ -678,14 +715,13 @@ export default function ChatPanel({
               id="mcp-test-btn"
               onClick={handleTestMcp}
               disabled={!useMcpDraft || !mcpUrlDraft.trim() || mcpTestStatus === 'testing'}
+              className="vscode-button"
               style={{
                 fontSize: '10px',
                 padding: '3px 8px',
-                background: '#2d2d2d',
-                border: '1px solid #555',
-                borderRadius: '3px',
-                color: (useMcpDraft && mcpUrlDraft.trim()) ? '#ccc' : '#555',
-                cursor: (useMcpDraft && mcpUrlDraft.trim()) ? 'pointer' : 'not-allowed',
+                background: 'transparent',
+                border: '1px solid var(--vscode-border)',
+                color: 'var(--vscode-text-fg)',
               }}
             >
               {mcpTestStatus === 'testing' ? '...' : t('chatPanel.test')}
@@ -693,27 +729,23 @@ export default function ChatPanel({
             <button
               id="mcp-save-btn"
               onClick={handleSaveMcp}
+              className="vscode-button"
               style={{
                 fontSize: '10px',
                 padding: '3px 8px',
-                background: '#0e639c',
-                border: 'none',
-                borderRadius: '3px',
-                color: '#fff',
-                cursor: 'pointer',
               }}
             >
               {t('chatPanel.save')}
             </button>
             <button
               onClick={() => { setShowMcpPanel(false); setMcpTestStatus(''); }}
+              className="vscode-button"
               style={{
                 fontSize: '10px',
                 padding: '3px 6px',
                 background: 'transparent',
                 border: 'none',
-                color: '#888',
-                cursor: 'pointer',
+                color: 'var(--vscode-text-fg)',
               }}
             >
               {t('chatPanel.cancel')}
@@ -738,7 +770,7 @@ export default function ChatPanel({
       )}
 
       {/* Message history */}
-      <div className="vscode-chat-history" ref={historyRef} onContextMenu={onContextMenu}>
+      <div className="vscode-chat-history" ref={historyRef} onContextMenu={onContextMenu} style={{ zoom: chatZoom }}>
         {chatMessages.map((msg, i) => {
           const isUser = msg.role === 'user';
           const atts = msg._attachments || [];

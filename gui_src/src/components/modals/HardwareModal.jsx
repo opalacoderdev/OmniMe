@@ -88,48 +88,51 @@ export default function HardwareModal({ onClose }) {
       background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)',
       animation: 'fadeIn 0.2s ease',
     }}>
-      <div style={{
-        background: '#1e1e2e', border: '1px solid #3c3c5c', borderRadius: '12px',
+      <div className="vscode-modal" style={{
+        borderRadius: '12px',
         width: '450px', padding: '24px', boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
-        display: 'flex', flexDirection: 'column', gap: '16px', color: '#e0e0f0'
+        display: 'flex', flexDirection: 'column', gap: '16px'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>💻</span> Configuração de Hardware
           </h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#a0a0c0', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--vscode-text-fg)', cursor: 'pointer', fontSize: '18px' }}>✕</button>
         </div>
 
         {errorMsg && <div style={{ background: 'rgba(255,0,0,0.1)', color: '#ff6b6b', padding: '10px', borderRadius: '6px', fontSize: '13px' }}>{errorMsg}</div>}
         {successMsg && <div style={{ background: 'rgba(0,255,0,0.1)', color: '#4ade80', padding: '10px', borderRadius: '6px', fontSize: '13px' }}>{successMsg}</div>}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: '#a0a0c0' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: 'var(--vscode-text-fg)' }}>
             Memória RAM do Sistema (GB)
             <input 
               type="number" step="0.1" 
               value={hardware.ram_gb} 
               onChange={e => setHardware({...hardware, ram_gb: e.target.value})}
-              style={{ background: '#252537', border: '1px solid #3c3c5c', color: '#fff', padding: '8px', borderRadius: '6px' }}
+              className="vscode-settings-input"
+              style={{ padding: '8px', borderRadius: '6px' }}
             />
           </label>
 
-          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: '#a0a0c0' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: 'var(--vscode-text-fg)' }}>
             Memória VRAM da GPU (GB)
             <input 
               type="number" step="0.1" 
               value={hardware.vram_gb} 
               onChange={e => setHardware({...hardware, vram_gb: e.target.value})}
-              style={{ background: '#252537', border: '1px solid #3c3c5c', color: '#fff', padding: '8px', borderRadius: '6px' }}
+              className="vscode-settings-input"
+              style={{ padding: '8px', borderRadius: '6px' }}
             />
           </label>
 
-          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: '#a0a0c0' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: 'var(--vscode-text-fg)' }}>
             Tipo de GPU
             <select 
               value={hardware.gpu_type}
               onChange={e => setHardware({...hardware, gpu_type: e.target.value})}
-              style={{ background: '#252537', border: '1px solid #3c3c5c', color: '#fff', padding: '8px', borderRadius: '6px' }}
+              className="vscode-settings-input"
+              style={{ padding: '8px', borderRadius: '6px' }}
             >
               <option value="unknown">Desconhecida / Outra</option>
               <option value="nvidia">NVIDIA</option>
@@ -140,15 +143,16 @@ export default function HardwareModal({ onClose }) {
           </label>
         </div>
 
-        <div style={{ background: '#252537', border: '1px solid #3c3c5c', borderRadius: '8px', padding: '12px', fontSize: '12px', lineHeight: '1.5' }}>
-          <strong style={{ color: '#fff' }}>Recomendação:</strong> {recommendation}
+        <div style={{ background: 'var(--vscode-input-bg)', border: '1px solid var(--vscode-border)', borderRadius: '8px', padding: '12px', fontSize: '12px', lineHeight: '1.5', color: 'var(--vscode-text-fg)' }}>
+          <strong style={{ color: 'var(--vscode-text-fg)' }}>Recomendação:</strong> {recommendation}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
           <button 
             onClick={handleDetect} 
             disabled={loading}
-            style={{ padding: '8px 16px', background: '#3c3c5c', border: 'none', color: '#fff', borderRadius: '6px', cursor: loading ? 'not-allowed' : 'pointer' }}
+            className="vscode-button"
+            style={{ padding: '8px 16px', borderRadius: '6px', cursor: loading ? 'not-allowed' : 'pointer', background: 'transparent', color: 'var(--vscode-text-fg)', border: '1px solid var(--vscode-border)' }}
           >
             {loading ? 'Processando...' : 'Inferir Hardware Automático'}
           </button>
@@ -156,7 +160,8 @@ export default function HardwareModal({ onClose }) {
           <button 
             onClick={handleSave} 
             disabled={loading}
-            style={{ padding: '8px 16px', background: '#007acc', border: 'none', color: '#fff', borderRadius: '6px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+            className="vscode-button"
+            style={{ padding: '8px 16px', borderRadius: '6px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
           >
             Salvar
           </button>

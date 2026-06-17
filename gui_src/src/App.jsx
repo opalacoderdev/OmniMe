@@ -99,6 +99,7 @@ export default function App() {
 
   // ── Modals ─────────────────────────────────────────────────────────────────
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [isImportProject, setIsImportProject] = useState(false);
   const [newProjName, setNewProjName] = useState('');
   const [newProjPath, setNewProjPath] = useState('');
   const [newProjDesc, setNewProjDesc] = useState('');
@@ -1523,7 +1524,8 @@ export default function App() {
                 projects={projects}
                 activeProject={activeProject}
                 handleSelectProject={handleSelectProject}
-                onNewProject={() => { setShowNewProjectModal(true); setModelConfigMsg(''); setNewProjModelParams({}); }}
+                onNewProject={() => { setIsImportProject(false); setShowNewProjectModal(true); setModelConfigMsg(''); setNewProjModelParams({}); }}
+                onImportProject={() => { setIsImportProject(true); setShowNewProjectModal(true); setModelConfigMsg(''); setNewProjModelParams({}); }}
                 files={files}
                 selectedFile={selectedFile}
                 selectedNodes={selectedNodes}
@@ -1691,6 +1693,7 @@ export default function App() {
 
       {showNewProjectModal && (
         <NewProjectModal
+          isImport={isImportProject}
           onClose={() => setShowNewProjectModal(false)}
           onSubmit={handleCreateProject}
           newProjName={newProjName} setNewProjName={setNewProjName}

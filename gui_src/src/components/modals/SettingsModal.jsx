@@ -228,30 +228,12 @@ export default function SettingsModal({
                 </div>
               </div>
 
-              {/* Optional dependencies */}
-              <div className="flex flex-col" style={{ gap: '6px', borderTop: '1px solid var(--vscode-border)', paddingTop: '12px', marginTop: '6px' }}>
-                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.optionalDeps')}</label>
-                <span style={{ fontSize: '11px', color: '#888888', lineHeight: '1.4' }}>
-                  {t('settingsModal.optionalDepsHint')}
-                </span>
-                <button type="button" className="vscode-button" disabled={isInstallingDeps} onClick={onInstallDeps} style={{ width: '100%', marginTop: '6px' }}>
-                  {isInstallingDeps ? t('settingsModal.installingDeps') : t('settingsModal.installDeps')}
-                </button>
-                {installDepsStatus && (
-                  <span style={{ fontSize: '11px', fontWeight: 'bold', color: installDepsStatus.includes('Erro') || installDepsStatus.includes('Falha') || installDepsStatus.includes('Error') || installDepsStatus.includes('Fail') ? '#f48771' : '#73c991', marginTop: '4px' }}>
-                    {t('settingsModal.installStatus', { status: installDepsStatus })}
-                  </span>
-                )}
-                {installDepsLog && (
-                  <textarea readOnly value={installDepsLog} style={{ width: '100%', height: '80px', marginTop: '8px', fontSize: '10px', fontFamily: 'monospace', background: '#151515', color: '#89d4a5', border: '1px solid var(--vscode-border)', padding: '6px', resize: 'none' }} />
-                )}
-              </div>
             </>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: 'var(--vscode-text-fg)' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.version')}</span>
-                <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--vscode-text-fg)' }}>0.2.3.4 ALFA</span>
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--vscode-text-fg)' }}>0.2.5 Preview</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.author')}</span>

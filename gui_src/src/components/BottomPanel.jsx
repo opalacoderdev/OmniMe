@@ -202,7 +202,7 @@ export default function BottomPanel({
                   <div style={{ color: '#808080', fontStyle: 'italic', padding: '8px' }}>{t('bottomPanel.noProblems')}</div>
                 ) : (
                   problems.map((prob) => (
-                    <div key={prob.id} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', borderBottom: '1px solid #2d2d2d', padding: '6px 0' }}>
+                    <div key={prob.id} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', borderBottom: '1px solid var(--vscode-border)', padding: '6px 0' }}>
                       <AlertCircle size={14} className="text-[#f48771]" style={{ flexShrink: 0, marginTop: '2px' }} />
                       <div>
                         <div style={{ fontWeight: 'bold', color: '#f48771', marginBottom: '2px' }}>
@@ -235,7 +235,7 @@ export default function BottomPanel({
 
 
             {/* Terminal tab */}
-            <div style={{ display: activeBottomTab === 'terminal' ? 'block' : 'none', height: '100%', background: '#1e1e1e', overflow: 'hidden' }}>
+            <div style={{ display: activeBottomTab === 'terminal' ? 'block' : 'none', height: '100%', background: 'var(--vscode-terminal-bg)', overflow: 'hidden' }}>
               {!activeProject ? (
                 <div style={{ color: '#808080', fontStyle: 'italic', padding: '16px' }}>
                   {t('bottomPanel.setProjectForTerminal')}

@@ -117,7 +117,7 @@ export default function EditProjectModal({
         </div>
 
         {/* Tab Navigation */}
-        <div style={{ display: 'flex', borderBottom: '1px solid #3c3c3c', marginBottom: '16px', padding: '0 16px' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--vscode-border)', marginBottom: '16px', padding: '0 16px' }}>
           {tabs.map(tab => (
             <button
               key={tab.id}
@@ -127,7 +127,7 @@ export default function EditProjectModal({
                 background: 'none',
                 border: 'none',
                 padding: '8px 16px',
-                color: activeTab === tab.id ? '#ffffff' : '#808080',
+                color: activeTab === tab.id ? 'var(--vscode-text-fg)' : '#808080',
                 borderBottom: activeTab === tab.id ? '2px solid #007acc' : '2px solid transparent',
                 cursor: 'pointer',
                 fontSize: '13px',
@@ -211,7 +211,7 @@ export default function EditProjectModal({
                   onChange={e => setEditingProject(p => ({ ...p, use_shared_memory: e.target.checked }))}
                   style={{ cursor: 'pointer' }}
                 />
-                <label htmlFor="use-shared-memory-edit" style={{ fontSize: '12px', color: '#ccc', cursor: 'pointer', userSelect: 'none' }}>
+                <label htmlFor="use-shared-memory-edit" style={{ fontSize: '12px', color: 'var(--vscode-text-fg)', cursor: 'pointer', userSelect: 'none' }}>
                   Compartilhar Memória Core entre os Chats
                 </label>
               </div>
@@ -233,7 +233,7 @@ export default function EditProjectModal({
                   style={{ cursor: 'pointer' }}
                 />
                 <label htmlFor="force-vision-edit"
-                       style={{ fontSize: '12px', color: '#ccc', cursor: 'pointer', userSelect: 'none' }}
+                       style={{ fontSize: '12px', color: 'var(--vscode-text-fg)', cursor: 'pointer', userSelect: 'none' }}
                        title="Enable for local Ollama vision models (llava, moondream2, etc.) that litellm does not detect automatically">
                   Forçar suporte a visão (imagens) — necessário para modelos Ollama locais
                 </label>
@@ -245,11 +245,11 @@ export default function EditProjectModal({
           {activeTab === 'orquestrador' && (
             <>
               {/* Load refined config */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }} onClick={() => onLoadModelConfig(false)}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" className="vscode-button" style={{ background: 'transparent', color: 'var(--vscode-text-fg)', border: '1px solid var(--vscode-border)', fontSize: '12px' }} onClick={() => onLoadModelConfig(false)}>
                   {t('editProjectModal.loadRefinedConfig')}
                 </button>
-                <button type="button" className="vscode-button" style={{ background: '#3c3c3c', fontSize: '12px' }} onClick={() => onOpenDirPicker('export-modelconfig', editingProject.project_path || '~')}>
+                <button type="button" className="vscode-button" style={{ background: 'transparent', color: 'var(--vscode-text-fg)', border: '1px solid var(--vscode-border)', fontSize: '12px' }} onClick={() => onOpenDirPicker('export-modelconfig', editingProject.project_path || '~')}>
                   Exportar Modelconfig
                 </button>
                 {modelConfigMsg && (
@@ -308,7 +308,7 @@ export default function EditProjectModal({
                 </button>
 
                 {showAdvancedParams && (
-                  <div style={{ border: '1px solid #3c3c3c', borderRadius: '4px', padding: '12px', marginTop: '8px', backgroundColor: '#252526', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ border: '1px solid var(--vscode-border)', borderRadius: '4px', padding: '12px', marginTop: '8px', backgroundColor: 'var(--vscode-input-bg)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
                     {/* LiteLLM params */}
                     <div>
@@ -495,7 +495,7 @@ export default function EditProjectModal({
                 </button>
 
                 {showAdvancedParams && (
-                  <div style={{ border: '1px solid #3c3c3c', borderRadius: '4px', padding: '12px', marginTop: '8px', backgroundColor: '#252526', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ border: '1px solid var(--vscode-border)', borderRadius: '4px', padding: '12px', marginTop: '8px', backgroundColor: 'var(--vscode-input-bg)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
                     {/* LiteLLM params */}
                     <div>
@@ -556,7 +556,7 @@ export default function EditProjectModal({
                             <input type="checkbox"
                               checked={!!editingProject.worker_model_params?.think}
                               onChange={e => setEditingProject(p => ({ ...p, worker_model_params: { ...p.worker_model_params, think: e.target.checked } }))} />
-                            <span style={{ fontSize: '12px', color: '#cccccc' }}>{t('editProjectModal.enabled')}</span>
+                            <span style={{ fontSize: '12px', color: 'var(--vscode-text-fg)' }}>{t('editProjectModal.enabled')}</span>
                           </label>
                         </div>
 
@@ -566,7 +566,7 @@ export default function EditProjectModal({
                             <input type="checkbox"
                               checked={!!editingProject.worker_model_params?.stream}
                               onChange={e => setEditingProject(p => ({ ...p, worker_model_params: { ...p.worker_model_params, stream: e.target.checked } }))} />
-                            <span style={{ fontSize: '12px', color: '#cccccc' }}>{t('editProjectModal.enabled')}</span>
+                            <span style={{ fontSize: '12px', color: 'var(--vscode-text-fg)' }}>{t('editProjectModal.enabled')}</span>
                           </label>
                         </div>
                       </div>
@@ -574,7 +574,7 @@ export default function EditProjectModal({
 
                     {/* Agent params */}
                     <div>
-                      <div style={{ color: '#9cdcfe', fontSize: '11px', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      <div style={{ color: '#007acc', fontSize: '11px', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         {t('editProjectModal.agentParams')}
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -594,7 +594,7 @@ export default function EditProjectModal({
                             <input type="checkbox"
                               checked={editingProject.worker_model_params?.loop_detection ?? true}
                               onChange={e => setEditingProject(p => ({ ...p, worker_model_params: { ...p.worker_model_params, loop_detection: e.target.checked } }))} />
-                            <span style={{ fontSize: '12px', color: '#cccccc' }}>Habilitado</span>
+                            <span style={{ fontSize: '12px', color: 'var(--vscode-text-fg)' }}>Habilitado</span>
                           </label>
                         </div>
 
@@ -604,7 +604,7 @@ export default function EditProjectModal({
                             <input type="checkbox"
                               checked={!!editingProject.worker_model_params?.debug}
                               onChange={e => setEditingProject(p => ({ ...p, worker_model_params: { ...p.worker_model_params, debug: e.target.checked } }))} />
-                            <span style={{ fontSize: '12px', color: '#cccccc' }}>{t('editProjectModal.enabled')}</span>
+                            <span style={{ fontSize: '12px', color: 'var(--vscode-text-fg)' }}>{t('editProjectModal.enabled')}</span>
                           </label>
                         </div>
                       </div>
@@ -622,8 +622,8 @@ export default function EditProjectModal({
           )}
 
           {/* Actions */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '12px', borderTop: '1px solid #3c3c3c', marginTop: '4px' }}>
-            <button type="button" onClick={onClose} className="vscode-button" style={{ backgroundColor: '#3c3c3c', color: '#ffffff' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '12px', borderTop: '1px solid var(--vscode-border)', marginTop: '4px' }}>
+            <button type="button" onClick={onClose} className="vscode-button" style={{ background: 'transparent', color: 'var(--vscode-text-fg)', border: '1px solid var(--vscode-border)' }}>
               {t('editProjectModal.cancel')}
             </button>
             <button type="submit" className="vscode-button">

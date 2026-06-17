@@ -19,7 +19,7 @@ function DiffViewer({ diff }) {
     <div style={{ padding: '8px', fontSize: '11px', color: '#808080', fontStyle: 'italic' }}>{t('gitSidebar.noDiff')}</div>
   );
   return (
-    <div style={{ fontFamily: 'monospace', fontSize: '11px', overflowX: 'auto', background: '#1e1e1e', borderRadius: '4px', padding: '6px' }}>
+    <div style={{ fontFamily: 'monospace', fontSize: '11px', overflowX: 'auto', background: 'var(--vscode-input-bg)', borderRadius: '4px', padding: '6px', border: '1px solid var(--vscode-border)' }}>
       {diff.split('\n').map((line, i) => {
         let bg = 'transparent';
         let color = '#cccccc';
@@ -223,7 +223,8 @@ export default function GitSidebar({
           onChange={(e) => {
             setUseShadowGit(e.target.value === "shadow");
           }}
-          style={{ width: '100%', padding: '4px', background: '#2d2d2d', color: '#cccccc', border: '1px solid #3c3c3c', borderRadius: '3px', fontSize: '11px' }}
+          className="vscode-settings-input"
+          style={{ width: '100%', padding: '4px', borderRadius: '3px', fontSize: '11px' }}
         >
           <option value="user">👤 Meu Repositório (Git)</option>
           <option value="shadow">🤖 Histórico do Agente (Shadow)</option>

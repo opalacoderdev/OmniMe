@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opalacoder"
-version = "0.2.4.19"
+version = "0.2.5beta"
 description = "Autonomous coding agent with interactive planning and modular execution"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -34,6 +34,8 @@ dependencies = [
     "ddgs>=6.0",
     "Pillow>=10.0.0",
     "pymupdf4llm>=0.0.17",
+    "duckduckgo-search>=6.4.0",
+    "pytest-asyncio>=0.23.0",
 ]
 
 [project.optional-dependencies]

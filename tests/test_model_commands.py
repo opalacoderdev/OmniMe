@@ -14,7 +14,7 @@ from opalacoder.memgpt_runtime import resolve_skill_model
 def _state(tmp_path):
     db = os.path.join(str(tmp_path), "s.db")
     store = ProjectStore(db_path=db)
-    p = store.create(name="t", mode="auto", model="ollama/gemma4:latest",
+    p = store.create(name="t", mode="auto", model="ollama/test-model",
                      project_name="t", project_path=str(tmp_path))
     return REPLState(p, store), store
 

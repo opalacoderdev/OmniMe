@@ -86,19 +86,19 @@ export default function SearchChatsModal({
                 key={res.id + '-' + i} 
                 onClick={() => handleSelect(res.id)}
                 style={{
-                  background: '#2d2d2d',
+                  background: 'var(--vscode-input-bg)',
                   padding: '10px',
                   borderRadius: '4px',
                   cursor: 'pointer',
-                  border: '1px solid transparent'
+                  border: '1px solid var(--vscode-border)'
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.border = '1px solid #007acc'}
-                onMouseLeave={(e) => e.currentTarget.style.border = '1px solid transparent'}
+                onMouseLeave={(e) => e.currentTarget.style.border = '1px solid var(--vscode-border)'}
               >
-                <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#d4d4d4', marginBottom: '4px' }}>
+                <div style={{ fontWeight: 'bold', fontSize: '13px', color: 'var(--vscode-text-fg)', marginBottom: '4px' }}>
                   {res.name}
                 </div>
-                <div style={{ fontSize: '11px', color: '#a0a0a0', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '60px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
+                <div style={{ fontSize: '11px', color: '#888', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '60px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
                   {res.snippet}
                 </div>
               </div>

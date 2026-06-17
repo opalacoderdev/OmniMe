@@ -614,6 +614,16 @@ class AsyncHTTPServer:
                 parent = os.path.dirname(req_path)
                 if parent != req_path:
                     entries.append({"name": "..", "path": parent})
+                else:
+                    # At filesystem root. If Windows, list available drives so user can switch.
+                    import sys
+                    if sys.platform == 'win32':
+                        import string
+                        for d in string.ascii_uppercase:
+                            drive = f"{d}:\\"
+                            if drive != req_path and os.path.exists(drive):
+                                entries.append({"name": f".. (Unidade {d}:)", "path": drive})
+
                 for name in sorted(os.listdir(req_path)):
                     if name.startswith('.'):
                         continue

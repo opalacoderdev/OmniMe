@@ -25,14 +25,37 @@ export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, f
     // Reset the prompt-drawn flag whenever the terminal is (re)created.
     promptDrawnRef.current = false;
 
+    const isLight = document.body.classList.contains('light-theme');
+    const termTheme = isLight ? {
+      background: '#ffffff',
+      foreground: '#333333',
+      cursor: '#333333',
+      black: '#000000',
+      red: '#cd3131',
+      green: '#00bc00',
+      yellow: '#949800',
+      blue: '#0451a5',
+      magenta: '#bc05bc',
+      cyan: '#0598bc',
+      white: '#555555',
+      brightBlack: '#666666',
+      brightRed: '#cd3131',
+      brightGreen: '#14ce14',
+      brightYellow: '#b5ba00',
+      brightBlue: '#0451a5',
+      brightMagenta: '#bc05bc',
+      brightCyan: '#0598bc',
+      brightWhite: '#a5a5a5'
+    } : {
+      background: '#1e1e1e',
+      foreground: '#cccccc',
+    };
+
     const term = new XTerm({
       cursorBlink: true,
       fontSize: 13,
       fontFamily: 'Consolas, "Courier New", monospace',
-      theme: {
-        background: '#1e1e1e',
-        foreground: '#cccccc',
-      },
+      theme: termTheme,
     });
 
     const fitAddon = new FitAddon();

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Settings, Trash2, RefreshCw, ExternalLink } from 'lucide-react';
+import { Plus, Settings, Trash2, RefreshCw, ExternalLink, FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import FileNode from './FileNode';
 
@@ -9,6 +9,7 @@ export default function ExplorerSidebar({
   activeProject,
   handleSelectProject,
   onNewProject,
+  onImportProject,
   files,
   selectedFile,
   selectedNodes,
@@ -36,10 +37,17 @@ export default function ExplorerSidebar({
         <span className="vscode-sidebar-title">{t('explorerSidebar.header')}</span>
         <button
           onClick={onNewProject}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#c5c5c5' }}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)' }}
           title={t('explorerSidebar.newProject')}
         >
           <Plus size={14} />
+        </button>
+        <button
+          onClick={onImportProject}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)', marginLeft: '6px' }}
+          title={t('explorerSidebar.importProject', 'Import Project')}
+        >
+          <FolderOpen size={14} />
         </button>
       </div>
 
