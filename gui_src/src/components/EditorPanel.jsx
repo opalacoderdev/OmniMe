@@ -62,6 +62,12 @@ export default function EditorPanel({
     localEditorRef.current = actualEditor;
 
     if (isDiff) {
+      const originalDispose = editor.dispose;
+      editor.dispose = function() {
+        try { editor.setModel(null); } catch (e) {}
+        originalDispose.apply(this, arguments);
+      };
+
       actualEditor.onDidChangeModelContent(() => {
         setFileContent(actualEditor.getValue());
       });
@@ -303,6 +309,8 @@ export default function EditorPanel({
             theme={theme === 'light' ? 'light' : 'vs-dark'}
             original={originalFileContents ? (originalFileContents[selectedFile] || '') : ''}
             modified={fileContent}
+            originalModelPath={`original-${selectedFile}`}
+            modifiedModelPath={`modified-${selectedFile}`}
             onMount={handleMount}
             options={{
               minimap: { enabled: true },
