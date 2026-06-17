@@ -337,12 +337,6 @@ export default function App() {
         } else {
           setIsTerminalCollapsed(true);
         }
-      } else if (isCtrl && (e.key === '+' || e.key === '=' || e.code === 'Equal' || e.code === 'NumpadAdd')) {
-        e.preventDefault();
-        setEditorFontSize(prev => { const v = Math.min(30, prev + 1); safeSetLocalStorage('editorFontSize', v); return v; });
-      } else if (isCtrl && (e.key === '-' || e.code === 'Minus' || e.code === 'NumpadSubtract')) {
-        e.preventDefault();
-        setEditorFontSize(prev => { const v = Math.max(10, prev - 1); safeSetLocalStorage('editorFontSize', v); return v; });
       }
     };
     window.addEventListener('keydown', handleKeyDown);

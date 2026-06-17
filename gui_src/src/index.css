@@ -936,29 +936,48 @@ select {
 }
 
 @media print {
-  body * {
-    visibility: hidden;
-  }
-  .vscode-chat-history, .vscode-chat-history * {
-    visibility: visible;
-  }
-  .vscode-chat-history {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: auto;
+  html, body, #root, .vscode-app, .vscode-main, .vscode-editor-panel, .vscode-editor-container, .vscode-chat, .vscode-chat-history, .markdown-preview-container {
+    height: auto !important;
     overflow: visible !important;
+    position: static !important;
     background: white !important;
     color: black !important;
   }
-  .vscode-chat-msg-content {
+
+  /* Hide UI elements not meant for printing */
+  .vscode-activitybar, 
+  .vscode-sidebar, 
+  .vscode-tabs, 
+  .vscode-bottom-panel, 
+  .vscode-chat-header, 
+  .vscode-chat-toolbar,
+  #web-search-toggle,
+  .vscode-settings-input,
+  .vscode-statusbar {
+    display: none !important;
+  }
+
+  /* Chat printing (default behavior) */
+  body:not(.printing-editor) .vscode-editor-panel {
+    display: none !important;
+  }
+  body:not(.printing-editor) .vscode-chat {
+    width: 100% !important;
+    border: none !important;
+  }
+  body:not(.printing-editor) .vscode-chat-msg-content {
     color: black !important;
   }
-  .vscode-chat-msg-header {
+  body:not(.printing-editor) .vscode-chat-msg-header {
     color: #333 !important;
   }
+
+  /* Editor preview printing */
+  body.printing-editor .vscode-chat {
+    display: none !important;
+  }
+
   .thinking-indicator {
-    display: none;
+    display: none !important;
   }
 }

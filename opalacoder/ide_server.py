@@ -2170,6 +2170,7 @@ def start_gui_server(host="127.0.0.1", port=3000):
             height=height,
             resizable=True,
             text_select=True,
+            zoomable=True,
         )
 
         print(f"[OpalaCoder] Launching desktop window -> {url}")

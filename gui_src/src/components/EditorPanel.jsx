@@ -1,9 +1,10 @@
 import { useRef, useEffect, useState } from 'react';
 import Editor, { DiffEditor } from '@monaco-editor/react';
-import { Files, RefreshCw, Check, X, Maximize2, Minimize2, GitCompare } from 'lucide-react';
+import { Files, RefreshCw, Check, X, Maximize2, Minimize2, GitCompare, Eye, EyeOff, Printer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getLanguage } from '../utils/language';
 import InlinePromptOverlay from './InlinePromptOverlay';
+import { formatMessageContent } from '../utils/formatMessage';
 
 // Center panel: file tabs + Monaco editor (or empty state when no file is open).
 export default function EditorPanel({
@@ -34,6 +35,19 @@ export default function EditorPanel({
 }) {
   const { t } = useTranslation();
   const [isDiffMode, setIsDiffMode] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+
+  useEffect(() => {
+    setIsPreviewMode(false);
+  }, [selectedFile]);
+
+  const handlePrintPDF = () => {
+    document.body.classList.add('printing-editor');
+    window.print();
+    setTimeout(() => {
+      document.body.classList.remove('printing-editor');
+    }, 1000);
+  };
 
   // Ref so the Monaco command closure always calls the latest callback,
   // even after React re-renders update isTerminalCollapsed state.
@@ -245,6 +259,29 @@ export default function EditorPanel({
             <GitCompare size={12} style={{ color: isDiffMode ? '#4daafc' : 'inherit' }} />
           </button>
 
+          {selectedFile && selectedFile.toLowerCase().endsWith('.md') && (
+            <>
+              {isPreviewMode && (
+                <button
+                  onClick={handlePrintPDF}
+                  className="vscode-bottom-panel-clear-btn"
+                  style={{ padding: '6px' }}
+                  title="Imprimir / Exportar PDF"
+                >
+                  <Printer size={12} />
+                </button>
+              )}
+              <button
+                onClick={() => setIsPreviewMode(!isPreviewMode)}
+                className="vscode-bottom-panel-clear-btn"
+                style={{ padding: '6px' }}
+                title={isPreviewMode ? "Editar Markdown" : "Visualizar Renderizado"}
+              >
+                {isPreviewMode ? <EyeOff size={12} style={{ color: '#4daafc' }} /> : <Eye size={12} />}
+              </button>
+            </>
+          )}
+
           <button
             onClick={onToggleMaximize}
             className="vscode-bottom-panel-clear-btn"
@@ -258,7 +295,11 @@ export default function EditorPanel({
 
       {/* Monaco editor */}
       <div className="vscode-editor-container">
-        {isDiffMode ? (
+        {isPreviewMode ? (
+          <div style={{ padding: '20px', overflowY: 'auto', height: '100%', boxSizing: 'border-box' }} className="markdown-preview-container">
+            {formatMessageContent(fileContent)}
+          </div>
+        ) : isDiffMode ? (
           <DiffEditor
             height="100%"
             language={getLanguage(selectedFile)}
