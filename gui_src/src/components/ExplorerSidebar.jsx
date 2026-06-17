@@ -10,6 +10,8 @@ export default function ExplorerSidebar({
   handleSelectProject,
   onNewProject,
   onImportProject,
+  importError,
+  onClearImportError,
   files,
   selectedFile,
   selectedNodes,
@@ -50,6 +52,14 @@ export default function ExplorerSidebar({
           <FolderOpen size={14} />
         </button>
       </div>
+
+      {/* Import error message */}
+      {importError && (
+        <div style={{ padding: '6px 10px', fontSize: '11px', color: '#f48771', background: 'var(--vscode-sidebar-bg)', borderBottom: '1px solid var(--vscode-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+          <span>⚠️ {importError}</span>
+          <button onClick={() => onClearImportError && onClearImportError()} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f48771', padding: '0', lineHeight: 1, flexShrink: 0 }}>✕</button>
+        </div>
+      )}
 
       {/* Projects list */}
       <div className="vscode-sidebar-section">

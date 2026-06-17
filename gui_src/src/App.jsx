@@ -99,7 +99,7 @@ export default function App() {
 
   // ── Modals ─────────────────────────────────────────────────────────────────
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
-  const [isImportProject, setIsImportProject] = useState(false);
+  const [importError, setImportError] = useState('');
   const [newProjName, setNewProjName] = useState('');
   const [newProjPath, setNewProjPath] = useState('');
   const [newProjDesc, setNewProjDesc] = useState('');
@@ -952,11 +952,32 @@ export default function App() {
     }
   };
 
-  const confirmDirPicker = () => {
+  const confirmDirPicker = async () => {
     if (!dirPicker) return;
     if (dirPicker.target === 'new') setNewProjPath(dirPicker.current);
     else if (dirPicker.target === 'export-modelconfig') {
       exportModelConfig(dirPicker.current);
+    }
+    else if (dirPicker.target === 'import') {
+      // Call import-project API
+      try {
+        const res = await fetch('/api/opalacoder/import-project', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_path: dirPicker.current })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          addLog('info', `Projeto importado: ${data.project_name}`);
+          setImportError('');
+          fetchProjects();
+        } else {
+          setImportError(data.error || 'Erro ao importar projeto.');
+          addLog('error', `Erro ao importar: ${data.error}`);
+        }
+      } catch (err) {
+        setImportError(`Erro: ${err.message}`);
+        addLog('error', `Erro ao importar: ${err.message}`);
+      }
     }
     else setEditingProject(p => ({ ...p, project_path: dirPicker.current }));
     setDirPicker(null);
@@ -1524,8 +1545,10 @@ export default function App() {
                 projects={projects}
                 activeProject={activeProject}
                 handleSelectProject={handleSelectProject}
-                onNewProject={() => { setIsImportProject(false); setShowNewProjectModal(true); setModelConfigMsg(''); setNewProjModelParams({}); }}
-                onImportProject={() => { setIsImportProject(true); setShowNewProjectModal(true); setModelConfigMsg(''); setNewProjModelParams({}); }}
+                onNewProject={() => { setShowNewProjectModal(true); setModelConfigMsg(''); setNewProjModelParams({}); }}
+                onImportProject={() => { setImportError(''); openDirPicker('import', '~'); }}
+                importError={importError}
+                onClearImportError={() => setImportError('')}
                 files={files}
                 selectedFile={selectedFile}
                 selectedNodes={selectedNodes}
@@ -1693,7 +1716,6 @@ export default function App() {
 
       {showNewProjectModal && (
         <NewProjectModal
-          isImport={isImportProject}
           onClose={() => setShowNewProjectModal(false)}
           onSubmit={handleCreateProject}
           newProjName={newProjName} setNewProjName={setNewProjName}

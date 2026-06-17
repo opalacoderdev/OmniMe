@@ -23,7 +23,6 @@ export default function NewProjectModal({
   modelConfigMsg,
   onLoadModelConfig,
   onOpenDirPicker,
-  isImport,
 }) {
   const { t } = useTranslation();
   const { hardware, modelStatus } = useModelValidation(newProjModel);
@@ -54,9 +53,7 @@ export default function NewProjectModal({
     <div className="vscode-modal-overlay">
       <div className="vscode-modal">
         <div className="vscode-sidebar-header" style={{ padding: '10px 16px', borderBottom: 'none' }}>
-          <span className="vscode-sidebar-title" style={{ color: 'var(--vscode-text-fg)' }}>
-            {isImport ? t('newProjectModal.importTitle', 'Importar Projeto') : t('newProjectModal.title')}
-          </span>
+          <span className="vscode-sidebar-title" style={{ color: 'var(--vscode-text-fg)' }}>{t('newProjectModal.title')}</span>
           <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0' }}>
             <X size={14} />
           </button>
@@ -317,9 +314,7 @@ export default function NewProjectModal({
             <button type="button" onClick={onClose} className="vscode-button" style={{ background: 'transparent', color: 'var(--vscode-text-fg)', border: '1px solid var(--vscode-border)' }}>
               {t('newProjectModal.cancel')}
             </button>
-            <button type="submit" className="vscode-button">
-              {isImport ? t('newProjectModal.importBtn', 'Importar') : t('newProjectModal.register')}
-            </button>
+            <button type="submit" className="vscode-button">{t('newProjectModal.register')}</button>
           </div>
         </form>
       </div>

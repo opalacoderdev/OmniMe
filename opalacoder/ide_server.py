@@ -1028,6 +1028,132 @@ class AsyncHTTPServer:
             }
             self.send_response(writer, 200, json.dumps(res_data).encode('utf-8'), "application/json")
 
+        # 5b. Import existing project
+        elif path == '/api/opalacoder/import-project' and method == 'POST':
+            from opalacoder.config import DEFAULT_DB_PATH, DEFAULT_MODEL
+            from opalacoder.project import ProjectStore
+            store = ProjectStore(db_path=DEFAULT_DB_PATH)
+
+            project_path = data.get("project_path", "")
+            if not project_path:
+                self.send_response(writer, 400, b'{"error":"project_path is required"}', "application/json")
+                return
+
+            abs_path = os.path.abspath(os.path.expanduser(project_path))
+            if not os.path.isdir(abs_path):
+                self.send_response(writer, 400, json.dumps({"error": f"Directory does not exist: {project_path}"}).encode('utf-8'), "application/json")
+                return
+
+            # Validate: must have .opalacoder/ directory to be a valid project
+            opalacoder_dir = os.path.join(abs_path, ".opalacoder")
+            if not os.path.isdir(opalacoder_dir):
+                self.send_response(writer, 400, json.dumps({
+                    "error": "This directory is not a valid OpalaCoder project. A valid project must contain a .opalacoder/ directory."
+                }).encode('utf-8'), "application/json")
+                return
+
+            # Check if project is already registered (by path)
+            existing_projects = store.list_projects()
+            for ep in existing_projects:
+                ep_path = os.path.abspath(os.path.expanduser(ep.get("project_path", "")))
+                if ep_path == abs_path:
+                    self.send_response(writer, 400, json.dumps({
+                        "error": f"This project is already registered as '{ep.get('project_name', ep.get('name', ''))}'."
+                    }).encode('utf-8'), "application/json")
+                    return
+
+            # Derive project name from directory name
+            project_name = os.path.basename(abs_path) or "Imported Project"
+
+            # Try to read model and API info from .env
+            api_key = ""
+            api_base = ""
+            worker_api_key = ""
+            worker_api_base = ""
+            env_path = os.path.join(abs_path, ".env")
+            if os.path.isfile(env_path):
+                try:
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line.startswith("OPENAI_API_KEY="):
+                                api_key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                            elif line.startswith("OPENAI_API_BASE="):
+                                api_base = line.split("=", 1)[1].strip().strip('"').strip("'")
+                            elif line.startswith("WORKER_API_KEY="):
+                                worker_api_key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                            elif line.startswith("WORKER_API_BASE="):
+                                worker_api_base = line.split("=", 1)[1].strip().strip('"').strip("'")
+                except Exception:
+                    pass
+
+            # Try to detect model from modelconfig files
+            model = DEFAULT_MODEL
+            modelsconfig_dir = os.path.join(opalacoder_dir, "modelsconfig")
+            if os.path.isdir(modelsconfig_dir):
+                try:
+                    import yaml
+                    for provider_dir in os.listdir(modelsconfig_dir):
+                        provider_path = os.path.join(modelsconfig_dir, provider_dir)
+                        if os.path.isdir(provider_path):
+                            for cfg_file in os.listdir(provider_path):
+                                if cfg_file.endswith('.yaml'):
+                                    model_name = cfg_file[:-5]  # Remove .yaml extension
+                                    model = f"{provider_dir}/{model_name}"
+                                    break
+                            if model != DEFAULT_MODEL:
+                                break
+                except Exception:
+                    pass
+
+            # Read skills from skills.yaml
+            skills = ["opalacoder"]
+            try:
+                from opalacoder.skills import read_skills_yaml
+                found_skills = read_skills_yaml(abs_path)
+                if found_skills:
+                    skills = found_skills
+                    if "opalacoder" not in skills:
+                        skills = ["opalacoder"] + skills
+            except Exception:
+                pass
+
+            db_key = project_name.replace(" ", "_").lower()
+            original_db_key = db_key
+            counter = 1
+            while store.exists(db_key):
+                db_key = f"{original_db_key}_{counter}"
+                counter += 1
+
+            try:
+                project = store.create(
+                    name=db_key,
+                    mode="auto",
+                    model=model,
+                    project_name=project_name,
+                    project_path=abs_path,
+                    skills=skills,
+                    description="",
+                    api_key=api_key or None,
+                    api_base=api_base or None,
+                    worker_api_key=worker_api_key or None,
+                    worker_api_base=worker_api_base or None,
+                    apply_modelconfig=False,
+                )
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+                return
+
+            res_data = {
+                "project_name": project.project_name,
+                "project_path": project.project_path,
+                "skills": project.skills,
+                "model": project.model,
+            }
+            self.send_response(writer, 200, json.dumps(res_data).encode('utf-8'), "application/json")
+
         # 6. Delete Project
         elif path == '/api/opalacoder/delete' and method == 'POST':
             from opalacoder.config import DEFAULT_DB_PATH
