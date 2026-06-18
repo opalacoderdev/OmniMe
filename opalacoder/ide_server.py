@@ -2028,6 +2028,7 @@ class AsyncHTTPServer:
             self.send_response(writer, 404, b'{"error":"Not Found"}', "application/json")
 
 def start_gui_server(host="127.0.0.1", port=3000):
+    import os
     from opalacoder.config import DEFAULT_LANG
     from opalacoder.i18n import set_lang
     from opalacoder.ui_settings import load_ui_settings
@@ -2174,7 +2175,6 @@ def start_gui_server(host="127.0.0.1", port=3000):
             pass
 
         # Determine screen dimensions dynamically if possible
-        import os
         os.environ["QT_LOGGING_RULES"] = "*.debug=false;qt.qpa.*=false"
         width = 1000
         height = 650
