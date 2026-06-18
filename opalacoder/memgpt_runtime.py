@@ -200,11 +200,11 @@ def build_run_skill_tool(
             from .tools import set_project_context as _spc
             _spc(_project_ref, _store_ref)
             
-        import json
-        print(json.dumps({
-            "event": "info",
-            "data": {"message": f"Iniciando sub-agente '{skill_name}' em background..."}
-        }), flush=True)
+        # import json
+        # print(json.dumps({
+        #     "event": "info",
+        #     "data": {"message": f"Iniciando sub-agente '{skill_name}' em background..."}
+        # }), flush=True)
         
         skill_dir = find_skill_dir(skill_name, project_path)
         if skill_dir is None:
@@ -350,7 +350,7 @@ def build_run_skill_tool(
             max_tool_calls=worker_agent_params.get("max_tool_calls", 40),
             loop_detection=worker_agent_params.get("loop_detection", True),
             loop_detection_limit=worker_agent_params.get("loop_detection_limit", 3),
-            tool_role_workaround=worker_agent_params.get("tool_role_workaround", "assistant" if model.startswith("ollama") else None),
+            tool_role_workaround=worker_agent_params.get("tool_role_workaround", "user" if model.startswith("ollama") else None),
             termination_tools=["send_message"],
         )
 
@@ -450,11 +450,11 @@ def build_run_skill_tool(
             "result": worker_summary
         })
 
-        import json
-        print(json.dumps({
-            "event": "info",
-            "data": {"message": f"Worker '{skill_name}' finalizado. Relatório:\n{worker_summary}"}
-        }), flush=True)
+        # import json
+        # print(json.dumps({
+        #     "event": "info",
+        #     "data": {"message": f"Worker '{skill_name}' finalizado. Relatório:\n{worker_summary}"}
+        # }), flush=True)
 
         return f"[skill '{skill_name}' finished] Worker's summary/report:\n(Tools used by worker: {tool_calls})\n{worker_summary}"
 
@@ -604,14 +604,13 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         debug=_agent_params.get("debug", False),
         use_shared_router=_agent_params.get("use_shared_router", True),
         response_mode=_agent_params.get("response_mode", get_agent_response_mode("memgpt")),
-        tool_role_workaround=_agent_params.get("tool_role_workaround", "assistant" if model.startswith("ollama") else None),
+        tool_role_workaround=_agent_params.get("tool_role_workaround", "user" if model.startswith("ollama") else None),
     )
 
     #print("BEGIN MEMGPT SYSTEM PROMPT >>>>>>>>>>>>>>")
     #print(system_prompt)
     #print("END MEMGPT SYSTEM PROMPT <<<<<<<<<<<< ")
     
-
     # Seed the working context from persisted history so the conversation restores
     # across restarts (the old chat_agent did this; the MemGPT starts empty).
     _VALID_ROLES = {"user", "assistant", "system", "tool"}

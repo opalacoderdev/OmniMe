@@ -238,6 +238,53 @@ export default function EditProjectModal({
                   Forçar suporte a visão (imagens) — necessário para modelos Ollama locais
                 </label>
               </div>
+
+              {/* Internal Monologue / Tool Role Workaround */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                <input
+                  id="internal-monologue-edit"
+                  type="checkbox"
+                  checked={(editingProject.model_params?.tool_role_workaround ?? 'user') !== ''}
+                  onChange={e => {
+                    const checked = e.target.checked;
+                    const val = checked ? 'user' : ''; 
+                    setEditingProject(p => ({
+                      ...p,
+                      model_params: { ...p.model_params, tool_role_workaround: val },
+                      worker_model_params: { ...p.worker_model_params, tool_role_workaround: val },
+                    }));
+                  }}
+                  style={{ cursor: 'pointer' }}
+                />
+                <label htmlFor="internal-monologue-edit"
+                       style={{ fontSize: '12px', color: 'var(--vscode-text-fg)', cursor: 'pointer', userSelect: 'none' }}>
+                  Habilitar Internal Monologue (Ollama Tool Fix)
+                </label>
+              </div>
+
+              {/* Monologue as Assistant */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', marginLeft: '24px' }}>
+                <input
+                  id="monologue-as-assistant-edit"
+                  type="checkbox"
+                  checked={editingProject.model_params?.tool_role_workaround === 'assistant'}
+                  disabled={(editingProject.model_params?.tool_role_workaround ?? 'user') === ''}
+                  onChange={e => {
+                    const checked = e.target.checked;
+                    const val = checked ? 'assistant' : 'user';
+                    setEditingProject(p => ({
+                      ...p,
+                      model_params: { ...p.model_params, tool_role_workaround: val },
+                      worker_model_params: { ...p.worker_model_params, tool_role_workaround: val },
+                    }));
+                  }}
+                  style={{ cursor: 'pointer' }}
+                />
+                <label htmlFor="monologue-as-assistant-edit"
+                       style={{ fontSize: '12px', color: 'var(--vscode-text-fg)', cursor: 'pointer', userSelect: 'none', opacity: (editingProject.model_params?.tool_role_workaround ?? 'user') !== '' ? 1 : 0.5 }}>
+                  Monologue as Assistant (usar "assistant" em vez de "user")
+                </label>
+              </div>
             </>
           )}
 
@@ -418,16 +465,7 @@ export default function EditProjectModal({
                           </label>
                         </div>
 
-                        <div className="flex flex-col" style={{ gap: '4px', justifyContent: 'flex-end' }}>
-                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Ollama Tool Fix</label>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
-                            <input type="checkbox"
-                              checked={(editingProject.model_params?.tool_role_workaround ?? 'assistant') === 'assistant'}
-                              onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, tool_role_workaround: e.target.checked ? 'assistant' : '' } }))} />
-                            <span style={{ fontSize: '12px', color: '#cccccc' }}>Internal Monologue</span>
-                          </label>
-                        </div>
-                        
+
                         <div className="flex flex-col" style={{ gap: '4px' }}>
                           <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Response Mode (MemGPT)</label>
                           <select
@@ -605,16 +643,6 @@ export default function EditProjectModal({
                               checked={editingProject.worker_model_params?.loop_detection ?? true}
                               onChange={e => setEditingProject(p => ({ ...p, worker_model_params: { ...p.worker_model_params, loop_detection: e.target.checked } }))} />
                             <span style={{ fontSize: '12px', color: 'var(--vscode-text-fg)' }}>Habilitado</span>
-                          </label>
-                        </div>
-
-                        <div className="flex flex-col" style={{ gap: '4px', justifyContent: 'flex-end' }}>
-                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Ollama Tool Fix</label>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
-                            <input type="checkbox"
-                              checked={(editingProject.worker_model_params?.tool_role_workaround ?? 'assistant') === 'assistant'}
-                              onChange={e => setEditingProject(p => ({ ...p, worker_model_params: { ...p.worker_model_params, tool_role_workaround: e.target.checked ? 'assistant' : '' } }))} />
-                            <span style={{ fontSize: '12px', color: 'var(--vscode-text-fg)' }}>Internal Monologue</span>
                           </label>
                         </div>
 
