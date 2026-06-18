@@ -7,7 +7,7 @@ name = "opalacoder"
 version = "0.2.5beta3"
 description = "Autonomous coding agent with interactive planning and modular execution"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
     { name = "Gilzamir Gomes", email = "dev@opalacoder.com" }
