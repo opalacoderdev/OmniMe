@@ -417,6 +417,16 @@ export default function EditProjectModal({
                             <span style={{ fontSize: '12px', color: '#cccccc' }}>Habilitado</span>
                           </label>
                         </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px', justifyContent: 'flex-end' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Ollama Tool Fix</label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                            <input type="checkbox"
+                              checked={(editingProject.model_params?.tool_role_workaround ?? 'assistant') === 'assistant'}
+                              onChange={e => setEditingProject(p => ({ ...p, model_params: { ...p.model_params, tool_role_workaround: e.target.checked ? 'assistant' : '' } }))} />
+                            <span style={{ fontSize: '12px', color: '#cccccc' }}>Internal Monologue</span>
+                          </label>
+                        </div>
                         
                         <div className="flex flex-col" style={{ gap: '4px' }}>
                           <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Response Mode (MemGPT)</label>
@@ -595,6 +605,16 @@ export default function EditProjectModal({
                               checked={editingProject.worker_model_params?.loop_detection ?? true}
                               onChange={e => setEditingProject(p => ({ ...p, worker_model_params: { ...p.worker_model_params, loop_detection: e.target.checked } }))} />
                             <span style={{ fontSize: '12px', color: 'var(--vscode-text-fg)' }}>Habilitado</span>
+                          </label>
+                        </div>
+
+                        <div className="flex flex-col" style={{ gap: '4px', justifyContent: 'flex-end' }}>
+                          <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Ollama Tool Fix</label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                            <input type="checkbox"
+                              checked={(editingProject.worker_model_params?.tool_role_workaround ?? 'assistant') === 'assistant'}
+                              onChange={e => setEditingProject(p => ({ ...p, worker_model_params: { ...p.worker_model_params, tool_role_workaround: e.target.checked ? 'assistant' : '' } }))} />
+                            <span style={{ fontSize: '12px', color: 'var(--vscode-text-fg)' }}>Internal Monologue</span>
                           </label>
                         </div>
 

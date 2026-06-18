@@ -69,7 +69,7 @@ def _run_shadow_git(command: str, project_path: str | None = None) -> subprocess
     if project_path is None:
         project_path = get_project_path()
     shadow_dir = os.path.join(project_path, ".opalacoder", ".shadowgit")
-    full_cmd = f"git --git-dir={shadow_dir} --work-tree={project_path} {command}"
+    full_cmd = f'git --git-dir="{shadow_dir}" --work-tree="{project_path}" {command}'
     return subprocess.run(
         full_cmd,
         shell=True,
@@ -93,7 +93,7 @@ def _init_shadow_git(project_path: str):
 
     if not os.path.exists(shadow_dir):
         # Init repo
-        cmd = f"git --git-dir={shadow_dir} --work-tree={project_path} init"
+        cmd = f'git --git-dir="{shadow_dir}" --work-tree="{project_path}" init'
         subprocess.run(cmd, shell=True, capture_output=True, cwd=project_path)
         
         # Configure excludes file
@@ -101,7 +101,7 @@ def _init_shadow_git(project_path: str):
             with open(gitignore_path, "w", encoding="utf-8") as f:
                 f.write(".env\nnode_modules/\n__pycache__/\n.venv/\n")
                 
-        cmd_exclude = f"git --git-dir={shadow_dir} --work-tree={project_path} config core.excludesFile {gitignore_path}"
+        cmd_exclude = f'git --git-dir="{shadow_dir}" --work-tree="{project_path}" config core.excludesFile "{gitignore_path}"'
         subprocess.run(cmd_exclude, shell=True, capture_output=True, cwd=project_path)
         
         # Initial commit
@@ -136,7 +136,7 @@ def git_commit(message: str) -> str:
     res = _run_shadow_git(f'commit -m "{message}"')
     if res.returncode == 0:
         return f"Successfully committed: {message}"
-    return f"Failed to commit or nothing to commit. Stderr: {res.stderr}"
+    return f"Failed to commit or nothing to commit. Output: {res.stderr or res.stdout}"
 
 
 # ─── Concrete Strategies ──────────────────────────────────────────────────────
@@ -162,7 +162,11 @@ class AutoGitStrategy(VersionControlStrategy):
         res = _run_shadow_git(f"commit -m '{message}'", self.project_path)
         if res.returncode == 0:
             return True, "Committed."
-        return False, res.stderr
+        err_out = res.stderr or res.stdout
+        if "nothing to commit" in err_out.lower():
+            from .i18n import _
+            return False, _("commit_nothing")
+        return False, err_out
 
     def undo_last(self) -> tuple[bool, str]:
         res = _run_shadow_git("rev-parse HEAD~1", self.project_path)
@@ -176,7 +180,7 @@ class AutoGitStrategy(VersionControlStrategy):
         res = _run_shadow_git("log --oneline", self.project_path)
         if res.returncode == 0:
             return True, res.stdout
-        return False, res.stderr
+        return False, res.stderr or res.stdout
 
     def restore_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
         res = _run_shadow_git(f"reset --hard {checkpoint_id}", self.project_path)
@@ -214,7 +218,11 @@ class HybridGitStrategy(VersionControlStrategy):
         res = _run_shadow_git(f"commit -m '{message}'", self.project_path)
         if res.returncode == 0:
             return True, "Committed."
-        return False, res.stderr
+        err_out = res.stderr or res.stdout
+        if "nothing to commit" in err_out.lower():
+            from .i18n import _
+            return False, _("commit_nothing")
+        return False, err_out
 
     def undo_last(self) -> tuple[bool, str]:
         res = _run_shadow_git("rev-parse HEAD~1", self.project_path)
@@ -228,7 +236,7 @@ class HybridGitStrategy(VersionControlStrategy):
         res = _run_shadow_git("log --oneline", self.project_path)
         if res.returncode == 0:
             return True, res.stdout
-        return False, res.stderr
+        return False, res.stderr or res.stdout
 
     def restore_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
         res = _run_shadow_git(f"reset --hard {checkpoint_id}", self.project_path)
@@ -265,7 +273,11 @@ class AgentDrivenGitStrategy(VersionControlStrategy):
         res = _run_shadow_git(f"commit -m '{message}'", self.project_path)
         if res.returncode == 0:
             return True, "Committed."
-        return False, res.stderr
+        err_out = res.stderr or res.stdout
+        if "nothing to commit" in err_out.lower():
+            from .i18n import _
+            return False, _("commit_nothing")
+        return False, err_out
 
     def undo_last(self) -> tuple[bool, str]:
         res = _run_shadow_git("rev-parse HEAD~1", self.project_path)
@@ -279,7 +291,7 @@ class AgentDrivenGitStrategy(VersionControlStrategy):
         res = _run_shadow_git("log --oneline", self.project_path)
         if res.returncode == 0:
             return True, res.stdout
-        return False, res.stderr
+        return False, res.stderr or res.stdout
 
     def restore_checkpoint(self, checkpoint_id: str) -> tuple[bool, str]:
         res = _run_shadow_git(f"reset --hard {checkpoint_id}", self.project_path)

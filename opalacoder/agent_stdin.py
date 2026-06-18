@@ -186,6 +186,7 @@ def wrap_tool(original_tool):
                 break
                 
         is_error = False
+        res_val = "Execution cancelled or failed unexpectedly."
         try:
             import opalacoder.agent_stdin
             proj = getattr(opalacoder.agent_stdin, "current_project", None)
@@ -696,6 +697,11 @@ async def handle_run(data: dict):
                 else:
                     final_attachments.append(att)
 
+            # Save user message to store immediately so it's not lost if the agent crashes
+            if agent_type in ("orchestrator", "chat_orchestrator") and current_store and current_project:
+                current_store.append_message(current_project, "user", prompt)
+                current_store.save(current_project)
+
             with apply_meta_params(agent, _meta_overrides):
                 resp_obj = await agent.run(AgentInput(prompt=prompt, attachments=final_attachments))
             response = resp_obj.response.strip() if resp_obj.response else ""
@@ -708,9 +714,8 @@ async def handle_run(data: dict):
                     resp_obj = await agent.run(AgentInput(prompt=retry_prompt))
                 response = resp_obj.response.strip() if resp_obj.response else ""
             
-            # Save to store if using orchestrator or chat_orchestrator
+            # Save assistant response and achievements
             if agent_type in ("orchestrator", "chat_orchestrator") and current_store and current_project:
-                current_store.append_message(current_project, "user", prompt)
                 if tools_mod.TURN_ACHIEVEMENTS:
                     current_store.append_message(current_project, "system", f"Achievements logged during this turn:\n{tools_mod.TURN_ACHIEVEMENTS}")
                 if response:

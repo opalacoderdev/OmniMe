@@ -304,7 +304,11 @@ def write_file(path: str, content: str) -> str:
         raise ValueError(f"Error writing {_preview(resolved)}: {e}")
 
 
-@as_tool(name="run_command", description="Execute a non-interactive shell command (e.g. dir, mkdir, grep, npm install). Runs inside the project directory. Returns stdout/stderr. NEVER run servers or infinite processes. NEVER use echo/printf/cat to write file content — use write_file instead. NOTE: Host OS is Windows (cmd.exe), so use 'dir' instead of 'ls', etc.")
+import platform
+_os_info = f"{platform.system()} ({platform.release()})"
+_run_cmd_desc = f"Execute a non-interactive shell command (e.g. ls, dir, mkdir, grep, npm install). Runs inside the project directory. Returns stdout/stderr. NEVER run servers or infinite processes. NEVER use echo/printf/cat to write file content — use write_file instead. NOTE: Host OS is {_os_info}. Use the appropriate shell commands."
+
+@as_tool(name="run_command", description=_run_cmd_desc)
 def run_command(command: str) -> str:
     AGENT_PROGRESS.update("run_command", f"$ {_preview(command)}")
     cwd = get_project_path()
@@ -331,7 +335,7 @@ def run_command(command: str) -> str:
             "stderr": err,
             "exit_code": res.returncode
         }
-        return json.dumps(result, indent=2)
+        return json.dumps({"result": json.dumps(result, indent=2)})
     except subprocess.TimeoutExpired:
         raise ValueError("Error: Command timed out after 120 seconds.")
     except Exception as e:
@@ -399,7 +403,7 @@ def run_python_script(script_path: str, args: str = "") -> str:
             "stderr": err,
             "exit_code": res.returncode
         }
-        return json.dumps(result, indent=2)
+        return json.dumps({"result": json.dumps(result, indent=2)})
     except subprocess.TimeoutExpired:
         raise ValueError("Error: Command timed out after 120 seconds.")
     except Exception as e:

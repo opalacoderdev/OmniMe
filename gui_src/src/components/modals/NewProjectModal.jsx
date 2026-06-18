@@ -226,6 +226,14 @@ export default function NewProjectModal({
                         <span style={{ fontSize: '11px', color: 'var(--vscode-text-fg)' }}>Enable Loop Detection</span>
                      </label>
                   </div>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                        <input type="checkbox"
+                           checked={(newProjModelParams?.tool_role_workaround ?? 'assistant') === 'assistant'}
+                           onChange={e => handleParamChange(setNewProjModelParams, 'tool_role_workaround', e.target.checked ? 'assistant' : '')} />
+                        <span style={{ fontSize: '11px', color: 'var(--vscode-text-fg)' }}>Ollama Tool Fix (Internal Monologue)</span>
+                     </label>
+                  </div>
                 </div>
               </details>
             </>
@@ -296,6 +304,14 @@ export default function NewProjectModal({
                            checked={newProjWorkerModelParams?.loop_detection ?? true}
                            onChange={e => handleParamChange(setNewProjWorkerModelParams, 'loop_detection', e.target.checked)} />
                         <span style={{ fontSize: '11px', color: '#ccc' }}>Enable Loop Detection</span>
+                     </label>
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                        <input type="checkbox"
+                           checked={(newProjWorkerModelParams?.tool_role_workaround ?? 'assistant') === 'assistant'}
+                           onChange={e => handleParamChange(setNewProjWorkerModelParams, 'tool_role_workaround', e.target.checked ? 'assistant' : '')} />
+                        <span style={{ fontSize: '11px', color: '#ccc' }}>Ollama Tool Fix (Internal Monologue)</span>
                      </label>
                   </div>
                 </div>

@@ -50,7 +50,9 @@ export default function BottomPanel({
 
   const clearTitle = activeBottomTab === 'output'
     ? t('bottomPanel.clearOutput')
-    : t('bottomPanel.clearProblems');
+    : activeBottomTab === 'thinking'
+      ? 'Clear Thinking Logs'
+      : t('bottomPanel.clearProblems');
 
   return (
     <>
@@ -112,11 +114,15 @@ export default function BottomPanel({
           <div className="flex items-center" style={{ gap: '8px' }}>
             {(activeBottomTab === 'output' || activeBottomTab === 'problems' || activeBottomTab === 'thinking') && (
               <button
-                onClick={
-                  activeBottomTab === 'output'
-                    ? () => setTerminalLogs([])
-                    : () => setProblems([])
-                }
+                onClick={() => {
+                  if (activeBottomTab === 'output') {
+                    setTerminalLogs(prev => prev.filter(log => ['thought', 'reflection', 'stream_chunk'].includes(log.type)));
+                  } else if (activeBottomTab === 'thinking') {
+                    setTerminalLogs(prev => prev.filter(log => !['thought', 'reflection', 'stream_chunk'].includes(log.type)));
+                  } else if (activeBottomTab === 'problems') {
+                    setProblems([]);
+                  }
+                }}
                 className="vscode-bottom-panel-clear-btn"
                 title={clearTitle}
               >

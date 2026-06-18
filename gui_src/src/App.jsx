@@ -64,7 +64,7 @@ export default function App() {
   const [problems, setProblems] = useState([]);
   const [achievementsMemory, setAchievementsMemory] = useState('');
   const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false);
-  const [activeBottomTab, setActiveBottomTab] = useState('output');
+  const [activeBottomTab, setActiveBottomTab] = useState('thinking');
   const [panelMaxLines, setPanelMaxLines] = useState(() => {
     const stored = safeGetLocalStorage('panelMaxLines');
     const parsed = stored !== null ? Number(stored) : NaN;
@@ -300,14 +300,18 @@ export default function App() {
 
   useEffect(() => {
     if (!activeProject || !selectedFile) return;
-    fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(selectedFile)}&shadow=${useShadowGit}`)
+    fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(selectedFile)}&shadow=${useShadowGit}&t=${Date.now()}`)
       .then(r => r.ok ? r.json() : null)
       .then(gitData => {
         if (gitData && gitData.content !== undefined) {
           setOriginalFileContents(prev => ({ ...prev, [selectedFile]: gitData.content }));
+        } else {
+          setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
+      });
   }, [useShadowGit, selectedFile, activeProject]);
 
   useEffect(() => {
@@ -604,14 +608,18 @@ export default function App() {
         setFileContents(prev => ({ ...prev, [filePath]: data.content })); 
         setOriginalFileContents(prev => ({ ...prev, [filePath]: data.content }));
         
-        fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(filePath)}&shadow=${useShadowGit}`)
+        fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(filePath)}&shadow=${useShadowGit}&t=${Date.now()}`)
           .then(r => r.ok ? r.json() : null)
           .then(gitData => {
             if (gitData && gitData.content !== undefined) {
                setOriginalFileContents(prev => ({ ...prev, [filePath]: gitData.content }));
+            } else {
+               setOriginalFileContents(prev => ({ ...prev, [filePath]: '' }));
             }
           })
-          .catch(() => {});
+          .catch(() => {
+             setOriginalFileContents(prev => ({ ...prev, [filePath]: '' }));
+          });
       }
       else addLog('error', `Erro ao ler arquivo: ${filePath}`);
     } catch (err) { addLog('error', `Erro de leitura: ${err.message}`); }
@@ -634,10 +642,13 @@ export default function App() {
           .then(gitData => {
             if (gitData && gitData.content !== undefined) {
                setOriginalFileContents(prev => ({ ...prev, [selectedFile]: gitData.content }));
+            } else {
+               setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
             }
           })
           .catch(() => {
-             // Do not overwrite originalFileContents on error or 404, keep the previous diff context
+             // Do not overwrite originalFileContents on error or 404 if it's unwanted, but actually we should set to empty if untracked.
+             setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
           });
         fetchGitStatus(); 
         fetchProblems(); 
@@ -1096,17 +1107,17 @@ export default function App() {
                       console.log(`[DEBUG tool_result] Reloaded open file "${selectedFile}" from disk.`);
                       setFileContent(d.content);
                       setFileContents(prev => ({ ...prev, [selectedFile]: d.content }));
-                      fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(selectedFile)}&shadow=${useShadowGit}`)
+                      fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(selectedFile)}&shadow=${useShadowGit}&t=${Date.now()}`)
                         .then(r => r.ok ? r.json() : null)
                         .then(gitData => {
                           if (gitData && gitData.content !== undefined) {
                              setOriginalFileContents(prev => ({ ...prev, [selectedFile]: gitData.content }));
                           } else {
-                             setOriginalFileContents(prev => ({ ...prev, [selectedFile]: d.content }));
+                             setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
                           }
                         })
                         .catch(() => {
-                           setOriginalFileContents(prev => ({ ...prev, [selectedFile]: d.content }));
+                           setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
                         });
                     }
                   })
