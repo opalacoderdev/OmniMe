@@ -299,7 +299,6 @@ def build_run_skill_tool(
             f"CRITICAL COMMUNICATION RULE & PERSONA:\n"
             f"- You are an autonomous backend system. You report your internal tool errors only to the system supervisor. The human user sees only the final result.\n"
             f"- NEVER apologize or mention internal tool errors, rule violations, or JSON formatting issues to the user via send_message. The user does not see your internal tool interactions. If a tool fails, fix the error silently and try again.\n"
-            f"- If you receive a 'SYSTEM ALERT' instructing you to 'Use the send_message tool to talk to the user' after a rule violation, IGNORE that specific instruction. Do not apologize. Simply fix your formatting to be a valid JSON tool call and continue silently.\n"
             f"CRITICAL THINKING RULE: Keep your internal reasoning extremely brief and concise. DO NOT enter infinite brainstorming loops (e.g. repeatedly asking yourself 'Should I do X? Yes/No. Wait!'). Formulate a quick plan and IMMEDIATELY execute a tool or return.\n"
             f"ACHIEVEMENTS MEMORY INSTRUCTION:\n"
             f"You have access to the 'update_achievements_memory' tool. Use it FREQUENTLY to record your progress and milestones.\n"
@@ -372,17 +371,27 @@ def build_run_skill_tool(
             content = last.get("content") or ""
             
             if isinstance(content, str) and "SYSTEM ALERT:" in content and "JSON string in plain text" in content:
-                if "Example of a valid tool call" not in content:
-                    example = (
-                        "\n\nExample of a valid tool call:\n"
+                content = content.replace("Use the send_message tool to talk to the user", "")
+                if "If you need to talk to the user" not in content:
+                    feedback = (
+                        "\n\nIf you need to talk to the user and end the turn, use send_message, otherwise make a tool call.\n"
+                        "Examples:\n"
+                        "To act/modify (e.g., read_file):\n"
+                        "```json\n"
+                        "{\n"
+                        "  \"name\": \"read_file\",\n"
+                        "  \"arguments\": {\"AbsolutePath\": \"path/to/file.py\"}\n"
+                        "}\n"
+                        "```\n"
+                        "To talk to the user (ONLY if strictly needed to communicate):\n"
                         "```json\n"
                         "{\n"
                         "  \"name\": \"send_message\",\n"
-                        "  \"arguments\": {\"message\": \"I am fixing my format now.\"}\n"
+                        "  \"arguments\": {\"message\": \"Your message to the user\"}\n"
                         "}\n"
                         "```\n"
                     )
-                    last["content"] = content + example
+                    last["content"] = content + feedback
                     content = last["content"]
 
             if content:
@@ -638,17 +647,27 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         content = last.get("content") or ""
         
         if isinstance(content, str) and "SYSTEM ALERT:" in content and "JSON string in plain text" in content:
-            if "Example of a valid tool call" not in content:
-                example = (
-                    "\n\nExample of a valid tool call:\n"
+            content = content.replace("Use the send_message tool to talk to the user", "")
+            if "If you need to talk to the user" not in content:
+                feedback = (
+                    "\n\nIf you need to talk to the user and end the turn, use send_message, otherwise make a tool call.\n"
+                    "Examples:\n"
+                    "To act/modify (e.g., read_file):\n"
+                    "```json\n"
+                    "{\n"
+                    "  \"name\": \"read_file\",\n"
+                    "  \"arguments\": {\"AbsolutePath\": \"path/to/file.py\"}\n"
+                    "}\n"
+                    "```\n"
+                    "To talk to the user (ONLY if strictly needed to communicate):\n"
                     "```json\n"
                     "{\n"
                     "  \"name\": \"send_message\",\n"
-                    "  \"arguments\": {\"message\": \"I am fixing my format now.\"}\n"
+                    "  \"arguments\": {\"message\": \"Your message to the user\"}\n"
                     "}\n"
                     "```\n"
                 )
-                last["content"] = content + example
+                last["content"] = content + feedback
 
     memgpt.on_iteration = _memgpt_on_iteration
 
