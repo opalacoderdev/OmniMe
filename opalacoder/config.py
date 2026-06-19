@@ -18,7 +18,20 @@ warnings.filterwarnings(
 )
 
 # Load global .env
-global_env = pathlib.Path.home() / ".opalacoder" / ".env"
+def get_opala_home() -> str:
+    if os.environ.get("OPALA_HOME"):
+        return os.environ["OPALA_HOME"]
+    pointer_file = pathlib.Path.home() / ".opalahome"
+    if pointer_file.exists():
+        try:
+            custom_path = pointer_file.read_text(encoding="utf-8").strip()
+            if custom_path and os.path.isdir(custom_path):
+                return custom_path
+        except Exception:
+            pass
+    return str(pathlib.Path.home() / ".opalacoder")
+
+global_env = pathlib.Path(get_opala_home()) / ".env"
 if global_env.exists():
     load_dotenv(dotenv_path=global_env)
 
@@ -85,7 +98,7 @@ def _get_agents_config() -> dict:
     cfg = {"agents": _deep_merge({}, _CORE_AGENT_DEFAULTS)}
     
     # User global
-    user_yaml = pathlib.Path.home() / ".opalacoder" / "agents.yaml"
+    user_yaml = pathlib.Path(get_opala_home()) / "agents.yaml"
     if user_yaml.exists():
         try:
             with open(user_yaml, "r", encoding="utf-8") as f:
@@ -291,7 +304,7 @@ DEFAULT_MAX_HEARTBEATS = 15
 
 # SQLite database file for session persistence
 DEFAULT_DB_PATH = os.path.join(
-    os.path.expanduser("~"), ".opalacoder", "sessions.db"
+    get_opala_home(), "sessions.db"
 )
 
 # Execution mode: "auto" | "plan" | "edit"
@@ -358,7 +371,7 @@ def setup_debug_logging():
 
     global _RUN_LOGGER
 
-    log_dir = os.path.join(os.path.expanduser("~"), ".opalacoder", "logs")
+    log_dir = os.path.join(get_opala_home(), "logs")
     os.makedirs(log_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = os.path.join(log_dir, f"run_{timestamp}.log")

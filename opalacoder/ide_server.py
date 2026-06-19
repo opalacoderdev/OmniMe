@@ -861,6 +861,36 @@ class AsyncHTTPServer:
             from opalacoder.ollama_manager import install_ollama_windows
             self.send_response(writer, 200, json.dumps(install_ollama_windows()).encode('utf-8'), "application/json")
 
+        elif path == '/api/settings/opalahome' and method == 'GET':
+            from opalacoder.config import get_opala_home
+            current_home = get_opala_home()
+            is_custom = False
+            try:
+                import pathlib
+                pointer_file = pathlib.Path.home() / ".opalahome"
+                if pointer_file.exists():
+                    is_custom = True
+            except Exception:
+                pass
+            self.send_response(writer, 200, json.dumps({"path": current_home, "is_custom": is_custom}).encode('utf-8'), "application/json")
+
+        elif path == '/api/settings/opalahome' and method == 'POST':
+            new_path = data.get("path", "").strip()
+            try:
+                import pathlib
+                pointer_file = pathlib.Path.home() / ".opalahome"
+                if new_path:
+                    # Validate path
+                    os.makedirs(new_path, exist_ok=True)
+                    pointer_file.write_text(new_path, encoding="utf-8")
+                else:
+                    # Remove custom pointer if empty
+                    if pointer_file.exists():
+                        pointer_file.unlink()
+                self.send_response(writer, 200, json.dumps({"success": True, "requiresRestart": True}).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
         elif path == '/api/models/info' and method == 'GET':
             model_name = query.get('model', [''])[0]
             if not model_name:

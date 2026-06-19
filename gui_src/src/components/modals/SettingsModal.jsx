@@ -30,11 +30,17 @@ export default function SettingsModal({
 }) {
   const { t } = useTranslation();
   const [selectedLang, setSelectedLang] = React.useState('');
+  const [opalaHome, setOpalaHome] = React.useState('');
 
   React.useEffect(() => {
     fetch('/api/settings/language')
       .then(r => r.ok ? r.json() : null)
       .then(cfg => { if (cfg?.lang !== undefined) setSelectedLang(cfg.lang); })
+      .catch(() => { });
+      
+    fetch('/api/settings/opalahome')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.path) setOpalaHome(data.path); })
       .catch(() => { });
   }, []);
 
@@ -156,6 +162,42 @@ export default function SettingsModal({
                   style={{ width: '100%' }}
                 />
                 <span style={{ fontSize: '11px', color: '#888888' }}>{t('settingsModal.panelMaxLinesHint')}</span>
+              </div>
+
+              {/* Global Data Directory */}
+              <div className="flex flex-col" style={{ gap: '6px' }}>
+                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Global Data Directory (OPALA_HOME)</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={opalaHome}
+                    onChange={(e) => setOpalaHome(e.target.value)}
+                    className="vscode-settings-input"
+                    style={{ flex: 1 }}
+                    placeholder="Leave empty for default"
+                  />
+                  <button 
+                    onClick={() => {
+                      fetch('/api/settings/opalahome', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: opalaHome })
+                      })
+                      .then(r => r.json())
+                      .then(res => {
+                        if (res.requiresRestart) {
+                          alert("Directory changed! Please restart OpalaCoder for changes to take effect.");
+                        } else if (res.error) {
+                          alert("Error: " + res.error);
+                        }
+                      });
+                    }}
+                    className="vscode-button"
+                  >
+                    Save
+                  </button>
+                </div>
+                <span style={{ fontSize: '11px', color: '#888888' }}>Requires restart. Used for sessions.db and vector DB.</span>
               </div>
 
               {/* Ephemeral Agent Settings */}

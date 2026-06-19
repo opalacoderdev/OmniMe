@@ -10,7 +10,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-_SETTINGS_PATH = Path.home() / ".opalacoder" / "ui_settings.json"
+from .config import get_opala_home
+
+_SETTINGS_PATH = Path(get_opala_home()) / "ui_settings.json"
 
 _DEFAULTS: dict[str, Any] = {
     "lang": "",  # "" means detect from OS; "en" or "pt-BR" for explicit choice
