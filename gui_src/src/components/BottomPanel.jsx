@@ -220,7 +220,7 @@ export default function BottomPanel({
                             <span style={{ fontWeight: 'bold', marginRight: '6px', color: colorStyle.color }}>[{label}]</span>
                             {log.agent && <span style={{ color: '#9cdcfe', fontWeight: 'bold' }}>@{log.agent}</span>}
                           </div>
-                          <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'Consolas, monospace', fontSize: '12px', color: '#e0e0e0' }}>
+                          <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'Consolas, monospace', fontSize: '12px', color: 'var(--vscode-text-fg)' }}>
                             {log.message}
                           </div>
                         </div>
@@ -233,7 +233,7 @@ export default function BottomPanel({
 
             {/* Problems tab */}
             {activeBottomTab === 'problems' && (
-              <div className="vscode-problems-list" style={{ padding: '8px', overflowY: 'auto', height: '100%', color: '#cccccc', fontFamily: 'Consolas, monospace', fontSize: '12px' }}>
+              <div className="vscode-problems-list" style={{ padding: '8px', overflowY: 'auto', height: '100%', color: 'var(--vscode-text-fg)', fontFamily: 'Consolas, monospace', fontSize: '12px' }}>
                 {problems.length === 0 ? (
                   <div style={{ color: '#808080', fontStyle: 'italic', padding: '8px' }}>{t('bottomPanel.noProblems')}</div>
                 ) : (
@@ -244,7 +244,7 @@ export default function BottomPanel({
                         <div style={{ fontWeight: 'bold', color: '#f48771', marginBottom: '2px' }}>
                           [{prob.timestamp}] {t('bottomPanel.errorIn', { tool: prob.tool })}
                         </div>
-                        <pre style={{ whiteSpace: 'pre-wrap', margin: 0, color: '#e0e0e0', fontSize: '12px', fontFamily: 'inherit' }}>
+                        <pre style={{ whiteSpace: 'pre-wrap', margin: 0, color: 'var(--vscode-text-fg)', fontSize: '12px', fontFamily: 'inherit' }}>
                           {prob.message}
                         </pre>
                       </div>
@@ -281,7 +281,7 @@ export default function BottomPanel({
                           <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>
                              [{log.timestamp}] - <span style={{ color: colorStyle.color, fontStyle: 'italic' }}>{label}</span> {log.agent && `(@${log.agent})`}
                           </div>
-                          <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'Consolas, monospace', fontSize: '12px', color: '#cccccc', opacity: 0.9 }}>
+                          <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'Consolas, monospace', fontSize: '12px', color: 'var(--vscode-text-fg)', opacity: 0.9 }}>
                             {log.message}
                           </div>
                         </div>

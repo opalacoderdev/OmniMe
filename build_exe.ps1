@@ -31,6 +31,13 @@ pyinstaller --name "OmniMe" `
             --add-data="skills;skills" `
             --add-data="version_info.txt;." `
             --collect-all "litellm" `
+            --collect-all "tiktoken" `
+            --collect-all "tiktoken_ext" `
+            --copy-metadata "tiktoken" `
+            --collect-all "certifi" `
+            --collect-all "httpx" `
+            --collect-all "aiohttp" `
+            --collect-all "requests" `
             --collect-all "chromadb" `
             --collect-all "duckduckgo_search" `
             --collect-all "instructor" `

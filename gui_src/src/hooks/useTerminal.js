@@ -3,12 +3,43 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 
 // Hook that initialises an xterm.js terminal and connects it to the backend SSE stream.
-export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight, isTerminalCollapsed }) {
+export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight, isTerminalCollapsed, theme }) {
   const promptDrawnRef = useRef(false);
   // Written on every render so the ResizeObserver callback (a closure created
   // once at mount) always reads the latest value without a stale-closure race.
   const isCollapsedRef = useRef(isTerminalCollapsed);
   isCollapsedRef.current = isTerminalCollapsed;
+
+  // Update terminal theme dynamically when theme changes
+  useEffect(() => {
+    if (terminalInstanceRef.current) {
+      const isLight = theme === 'light';
+      terminalInstanceRef.current.options.theme = isLight ? {
+        background: '#ffffff',
+        foreground: '#333333',
+        cursor: '#333333',
+        black: '#000000',
+        red: '#cd3131',
+        green: '#00bc00',
+        yellow: '#949800',
+        blue: '#0451a5',
+        magenta: '#bc05bc',
+        cyan: '#0598bc',
+        white: '#555555',
+        brightBlack: '#666666',
+        brightRed: '#cd3131',
+        brightGreen: '#14ce14',
+        brightYellow: '#b5ba00',
+        brightBlue: '#0451a5',
+        brightMagenta: '#bc05bc',
+        brightCyan: '#0598bc',
+        brightWhite: '#a5a5a5'
+      } : {
+        background: '#1e1e1e',
+        foreground: '#cccccc',
+      };
+    }
+  }, [theme, terminalInstanceRef]);
 
   // Initialise / tear-down terminal when the active project changes.
   useEffect(() => {

@@ -163,7 +163,7 @@ export default function App() {
   // ── Hooks ─────────────────────────────────────────────────────────────────
   const { startResizing } = useResizing({ setSidebarWidth, setChatWidth, setBottomPanelHeight, sidebarWidth, chatWidth, bottomPanelHeight });
 
-  useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight, isTerminalCollapsed });
+  useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight, isTerminalCollapsed, theme });
 
   // ── Effects ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -362,7 +362,7 @@ export default function App() {
     if (!activeProject) return;
     const interval = setInterval(() => { fetchFiles(); fetchGitStatus(); }, 10000);
     return () => clearInterval(interval);
-  }, [activeProject]);
+  }, [activeProject, useShadowGit]);
 
   useEffect(() => {
     if (activeSidebarTab === 'git' && activeProject) fetchGitStatus();
