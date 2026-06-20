@@ -24,7 +24,7 @@ def _ensure_omnime_importable() -> None:
         return
     except Exception:
         pass
-    root = os.environ.get("OPALACODER_ROOT")
+    root = os.environ.get("OMNIME_ROOT")
     if not root:
         here = os.path.abspath(__file__)
         # scripts/ -> html-css-js/ -> skills/ -> repo root

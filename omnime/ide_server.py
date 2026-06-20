@@ -865,24 +865,24 @@ class AsyncHTTPServer:
             from omnime.ollama_manager import install_ollama_windows
             self.send_response(writer, 200, json.dumps(install_ollama_windows()).encode('utf-8'), "application/json")
 
-        elif path == '/api/settings/opalahome' and method == 'GET':
-            from omnime.config import get_opala_home
-            current_home = get_opala_home()
+        elif path == '/api/settings/omnimehome' and method == 'GET':
+            from omnime.config import get_omnime_home
+            current_home = get_omnime_home()
             is_custom = False
             try:
                 import pathlib
-                pointer_file = pathlib.Path.home() / ".opalahome"
+                pointer_file = pathlib.Path.home() / ".omnimehome"
                 if pointer_file.exists():
                     is_custom = True
             except Exception:
                 pass
             self.send_response(writer, 200, json.dumps({"path": current_home, "is_custom": is_custom}).encode('utf-8'), "application/json")
 
-        elif path == '/api/settings/opalahome' and method == 'POST':
+        elif path == '/api/settings/omnimehome' and method == 'POST':
             new_path = data.get("path", "").strip()
             try:
                 import pathlib
-                pointer_file = pathlib.Path.home() / ".opalahome"
+                pointer_file = pathlib.Path.home() / ".omnimehome"
                 if new_path:
                     # Validate path
                     os.makedirs(new_path, exist_ok=True)

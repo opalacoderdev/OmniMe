@@ -2,7 +2,7 @@
   "activityBar": {
     "explorer": "Explorer",
     "sourceControl": "Source Control",
-    "opalaCodes": "Opala Chat",
+    "omnimeCodes": "OmniMe Chat",
     "settings": "Configurações"
   },
   "statusBar": {
@@ -68,7 +68,7 @@
     "inlinePromptGenerateDefault": "Gere código aqui"
   },
   "chatPanel": {
-    "header": "OPALA CHAT",
+    "header": "OMNIME CHAT",
     "clearChat": "Limpar chat (Varrer)",
     "webSearch": "Web Search",
     "mcpIndicator": "(MCP)",
@@ -88,7 +88,7 @@
     "connectionOk": "✅ Conexão OK",
     "connectionError": "❌ {{error}}",
     "you": "VOCÊ",
-    "omnime": "OPALACODER",
+    "omnime": "OMNIME",
     "setProjectFirst": "Defina um projeto...",
     "thinking": "Pensando...",
     "askOmniMe": "Pergunte ao OmniMe...",

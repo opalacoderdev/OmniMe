@@ -27,14 +27,14 @@ def _ensure_omnime_importable() -> None:
 
     The script lives at skills/implement-feature/scripts/run_workflow.py; the repo
     root (which contains the omnime package) is four levels up. We also honor
-    OPALACODER_ROOT if set, so the skill works when installed elsewhere.
+    OMNIME_ROOT if set, so the skill works when installed elsewhere.
     """
     try:
         import omnime  # noqa: F401
         return
     except Exception:
         pass
-    root = os.environ.get("OPALACODER_ROOT")
+    root = os.environ.get("OMNIME_ROOT")
     if not root:
         here = os.path.abspath(__file__)
         # scripts/ -> implement-feature/ -> skills/ -> repo root

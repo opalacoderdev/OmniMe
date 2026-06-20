@@ -209,11 +209,11 @@ def choose(prompt: str, options: list[str]) -> str:
 
 # ─── Subplan progress table ───────────────────────────────────────────────────
 
-# ─── Workflow debug output (enabled via OPALACODER_WORKFLOW_DEBUG=1) ──────────
+# ─── Workflow debug output (enabled via OMNIME_WORKFLOW_DEBUG=1) ──────────
 
 # Re-read at call time so setup_debug_logging() setting os.environ after import works.
 def _workflow_debug() -> bool:
-    return os.environ.get("OPALACODER_WORKFLOW_DEBUG", "0") == "1"
+    return os.environ.get("OMNIME_WORKFLOW_DEBUG", "0") == "1"
 
 
 def _log(text: str) -> None:

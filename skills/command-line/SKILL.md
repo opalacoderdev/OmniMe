@@ -131,7 +131,7 @@ run_python_script("<command_executor.py_path>", "--project-path <project_path> <
 ### 1. Insert Text
 
 ```
-run_python_script("<command_executor.py_path>", "--project-path <project_path> insert-text <relative_file_path> --content-file /tmp/_opala_content.txt [--line <line_number>]")
+run_python_script("<command_executor.py_path>", "--project-path <project_path> insert-text <relative_file_path> --content-file /tmp/_omnime_content.txt [--line <line_number>]")
 ```
 
 For multi-line content, write it first with `write_file` to a temp path, then use `--content-file`.

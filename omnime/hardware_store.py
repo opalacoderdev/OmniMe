@@ -1,9 +1,9 @@
 import os
 import json
 
-OPALACODER_DIR = os.path.join(os.path.expanduser("~"), ".omnime")
+OMNIME_DIR = os.path.join(os.path.expanduser("~"), ".omnime")
 
-HARDWARE_FILE = os.path.join(OPALACODER_DIR, "hardware.json")
+HARDWARE_FILE = os.path.join(OMNIME_DIR, "hardware.json")
 
 def load_hardware_info():
     if os.path.exists(HARDWARE_FILE):
@@ -15,7 +15,7 @@ def load_hardware_info():
     return None
 
 def save_hardware_info(data):
-    os.makedirs(OPALACODER_DIR, exist_ok=True)
+    os.makedirs(OMNIME_DIR, exist_ok=True)
     with open(HARDWARE_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2)
 

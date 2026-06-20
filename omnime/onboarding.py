@@ -1,8 +1,8 @@
 import os
 import json
 
-OPALACODER_DIR = os.path.join(os.path.expanduser("~"), ".omnime")
-ONBOARDING_FILE = os.path.join(OPALACODER_DIR, "onboarding.json")
+OMNIME_DIR = os.path.join(os.path.expanduser("~"), ".omnime")
+ONBOARDING_FILE = os.path.join(OMNIME_DIR, "onboarding.json")
 
 def is_onboarding_completed() -> bool:
     """Return whether the onboarding wizard has been completed."""
@@ -17,7 +17,7 @@ def is_onboarding_completed() -> bool:
 
 def complete_onboarding() -> bool:
     """Mark the onboarding wizard as completed."""
-    os.makedirs(OPALACODER_DIR, exist_ok=True)
+    os.makedirs(OMNIME_DIR, exist_ok=True)
     try:
         with open(ONBOARDING_FILE, "w", encoding="utf-8") as f:
             json.dump({"completed": True}, f, indent=4)

@@ -30,7 +30,7 @@ export default function SettingsModal({
 }) {
   const { t } = useTranslation();
   const [selectedLang, setSelectedLang] = React.useState('');
-  const [opalaHome, setOpalaHome] = React.useState('');
+  const [omnimeHome, setOmnimeHome] = React.useState('');
 
   React.useEffect(() => {
     fetch('/api/settings/language')
@@ -38,9 +38,9 @@ export default function SettingsModal({
       .then(cfg => { if (cfg?.lang !== undefined) setSelectedLang(cfg.lang); })
       .catch(() => { });
       
-    fetch('/api/settings/opalahome')
+    fetch('/api/settings/omnimehome')
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.path) setOpalaHome(data.path); })
+      .then(data => { if (data?.path) setOmnimeHome(data.path); })
       .catch(() => { });
   }, []);
 
@@ -166,22 +166,22 @@ export default function SettingsModal({
 
               {/* Global Data Directory */}
               <div className="flex flex-col" style={{ gap: '6px' }}>
-                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Global Data Directory (OPALA_HOME)</label>
+                <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>Global Data Directory (OMNIME_HOME)</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input
                     type="text"
-                    value={opalaHome}
-                    onChange={(e) => setOpalaHome(e.target.value)}
+                    value={omnimeHome}
+                    onChange={(e) => setOmnimeHome(e.target.value)}
                     className="vscode-settings-input"
                     style={{ flex: 1 }}
                     placeholder="Leave empty for default"
                   />
                   <button 
                     onClick={() => {
-                      fetch('/api/settings/opalahome', {
+                      fetch('/api/settings/omnimehome', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ path: opalaHome })
+                        body: JSON.stringify({ path: omnimeHome })
                       })
                       .then(r => r.json())
                       .then(res => {
@@ -279,7 +279,7 @@ export default function SettingsModal({
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.author')}</span>
-                <span style={{ fontSize: '13px', color: 'var(--vscode-text-fg)' }}>dev@opala.com</span>
+                <span style={{ fontSize: '13px', color: 'var(--vscode-text-fg)' }}>dev@omnime.com</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.license')}</span>

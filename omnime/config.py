@@ -18,10 +18,10 @@ warnings.filterwarnings(
 )
 
 # Load global .env
-def get_opala_home() -> str:
-    if os.environ.get("OPALA_HOME"):
-        return os.environ["OPALA_HOME"]
-    pointer_file = pathlib.Path.home() / ".opalahome"
+def get_omnime_home() -> str:
+    if os.environ.get("OMNIME_HOME"):
+        return os.environ["OMNIME_HOME"]
+    pointer_file = pathlib.Path.home() / ".omnimehome"
     if pointer_file.exists():
         try:
             custom_path = pointer_file.read_text(encoding="utf-8").strip()
@@ -31,7 +31,7 @@ def get_opala_home() -> str:
             pass
     return str(pathlib.Path.home() / ".omnime")
 
-global_env = pathlib.Path(get_opala_home()) / ".env"
+global_env = pathlib.Path(get_omnime_home()) / ".env"
 if global_env.exists():
     load_dotenv(dotenv_path=global_env)
 
@@ -98,7 +98,7 @@ def _get_agents_config() -> dict:
     cfg = {"agents": _deep_merge({}, _CORE_AGENT_DEFAULTS)}
     
     # User global
-    user_yaml = pathlib.Path(get_opala_home()) / "agents.yaml"
+    user_yaml = pathlib.Path(get_omnime_home()) / "agents.yaml"
     if user_yaml.exists():
         try:
             with open(user_yaml, "r", encoding="utf-8") as f:
@@ -127,7 +127,7 @@ def _get_agents_config() -> dict:
 # Model used for all agents (can be overridden via CLI --model)
 # Evaluated at module load to serve as CLI defaults (will read ~/.omnime/agents.yaml if present)
 _initial_cfg = _get_agents_config()
-DEFAULT_MODEL = _initial_cfg.get("default", os.getenv("OPALA_MODEL", "ollama/gemma4:12b"))
+DEFAULT_MODEL = _initial_cfg.get("default", os.getenv("OMNIME_MODEL", "ollama/gemma4:12b"))
 WORKER_MODEL = _initial_cfg.get("worker", _initial_cfg.get("alternative", "gemini/gemini-3.1-flash-lite"))
 
 def _get_llm_defaults():
@@ -304,14 +304,14 @@ DEFAULT_MAX_HEARTBEATS = 15
 
 # SQLite database file for session persistence
 DEFAULT_DB_PATH = os.path.join(
-    get_opala_home(), "sessions.db"
+    get_omnime_home(), "sessions.db"
 )
 
 # Execution mode: "auto" | "plan" | "edit"
 DEFAULT_MODE = "plan"
 
 def _get_system_lang() -> str:
-    env_lang = os.getenv("OPALA_LANG")
+    env_lang = os.getenv("OMNIME_LANG")
     if env_lang in ("en", "pt"):
         return env_lang
         
@@ -362,7 +362,7 @@ def setup_debug_logging():
     - Creates a timestamped log file: ~/.omnime/logs/run_<timestamp>.log
     - Logs every litellm call (full prompt + response) via success/failure callbacks.
     - Enables workflow step logs (oracle outputs, worker starts/results) to the same file.
-    - Sets OPALACODER_WORKFLOW_DEBUG=1 so terminal.py debug_* functions also fire.
+    - Sets OMNIME_WORKFLOW_DEBUG=1 so terminal.py debug_* functions also fire.
     - Prints the log file path so the user knows where to look.
     """
     import litellm
@@ -371,7 +371,7 @@ def setup_debug_logging():
 
     global _RUN_LOGGER
 
-    log_dir = os.path.join(get_opala_home(), "logs")
+    log_dir = os.path.join(get_omnime_home(), "logs")
     os.makedirs(log_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = os.path.join(log_dir, f"run_{timestamp}.log")
@@ -388,7 +388,7 @@ def setup_debug_logging():
     _RUN_LOGGER = logger
 
     # Enable workflow debug output in terminal.py (oracle + worker intermediate steps)
-    os.environ["OPALACODER_WORKFLOW_DEBUG"] = "1"
+    os.environ["OMNIME_WORKFLOW_DEBUG"] = "1"
 
     # litellm verbose → logs raw HTTP-level info to stderr; we capture structured data
     # ourselves via callbacks so we leave litellm's own verbose off to reduce noise.

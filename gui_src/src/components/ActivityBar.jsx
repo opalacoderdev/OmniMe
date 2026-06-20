@@ -57,7 +57,7 @@ export default function ActivityBar({
         <button
           onClick={() => setIsChatVisible(!isChatVisible)}
           className={`vscode-activitybar-btn ${isChatVisible ? 'active' : ''}`}
-          title={t('activityBar.opalaCodes')}
+          title={t('activityBar.omnimeCodes')}
         >
           <MessageSquare size={22} />
         </button>

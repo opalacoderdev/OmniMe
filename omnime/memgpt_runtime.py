@@ -400,7 +400,7 @@ def build_run_skill_tool(
         sub_agent.on_iteration = _worker_on_iteration
 
         os.environ.setdefault(
-            "OPALACODER_ROOT",
+            "OMNIME_ROOT",
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         )
         # Automatically inject recent chat history so MemGPT doesn't have to waste tokens copying it
