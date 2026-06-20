@@ -609,6 +609,10 @@ class AsyncHTTPServer:
         elif path == '/api/fs/dirs':
             req_path = data.get('path', os.path.expanduser('~'))
             req_path = os.path.abspath(os.path.expanduser(req_path or os.path.expanduser('~')))
+            
+            if not os.path.exists(req_path) or not os.path.isdir(req_path):
+                req_path = os.path.expanduser('~')
+
             try:
                 entries = []
                 # Parent directory entry (except filesystem root)
