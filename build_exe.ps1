@@ -26,6 +26,7 @@ pyinstaller --name "OmniMe" `
             --windowed `
             --icon="icon.png" `
             --add-data="omnime/gui;omnime/gui" `
+            --add-data="omnime/assetstore;omnime/assetstore" `
             --add-data="config.yaml;." `
             --add-data="skills;skills" `
             --add-data="version_info.txt;." `
