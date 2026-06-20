@@ -113,7 +113,7 @@ export default function EditorPanel({
     //    menu is open because hasTextFocus() is false; run() receives the
     //    editor directly so it works regardless of focus state).
     actualEditor.addAction({
-      id: 'opalacoder.paste',
+      id: 'omnime.paste',
       label: 'Paste',
       contextMenuGroupId: '9_cutcopypaste',
       contextMenuOrder: 3,
@@ -131,9 +131,9 @@ export default function EditorPanel({
 
     // ── Monaco context menu — Refine Selection ───────────────────────────────
     actualEditor.addAction({
-      id: 'opalacoder.refineSelection',
+      id: 'omnime.refineSelection',
       label: t('editorPanel.refineSelection'),
-      contextMenuGroupId: 'opalacoder',
+      contextMenuGroupId: 'omnime',
       contextMenuOrder: 1,
       // Only show when there is a non-empty selection
       precondition: 'editorHasSelection',
@@ -160,9 +160,9 @@ export default function EditorPanel({
 
     // ── Monaco context menu — Generate Code ──────────────────────────────────
     actualEditor.addAction({
-      id: 'opalacoder.generateCode',
+      id: 'omnime.generateCode',
       label: t('editorPanel.generateCode'),
-      contextMenuGroupId: 'opalacoder',
+      contextMenuGroupId: 'omnime',
       contextMenuOrder: 2,
       run: (ed) => {
         const model = ed.getModel();

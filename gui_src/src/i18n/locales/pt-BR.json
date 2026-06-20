@@ -8,7 +8,7 @@
   "statusBar": {
     "workspace": "Workspace: {{name}}",
     "noWorkspace": "Sem Workspace",
-    "agentRunning": "OpalaCoder Ativo..."
+    "agentRunning": "OmniMe Ativo..."
   },
   "explorerSidebar": {
     "header": "EXPLORER: PROJETOS",
@@ -56,11 +56,11 @@
     "save": "Salvar (Ctrl+S)",
     "restoreEditor": "Restaurar Editor",
     "maximizeEditor": "Maximizar Editor",
-    "refineSelection": "Refinar Seleção (OpalaCoder)",
-    "fixSelection": "Corrigir Seleção (OpalaCoder)",
-    "generateCode": "Gerar Código (OpalaCoder)",
+    "refineSelection": "Refinar Seleção (OmniMe)",
+    "fixSelection": "Corrigir Seleção (OmniMe)",
+    "generateCode": "Gerar Código (OmniMe)",
     "inlinePromptTitle": "Edição Inline",
-    "inlinePromptPlaceholder": "Pergunte ao OpalaCoder...",
+    "inlinePromptPlaceholder": "Pergunte ao OmniMe...",
     "inlinePromptSend": "Enviar",
     "inlinePromptCancel": "Cancelar",
     "inlinePromptRefineDefault": "Refine o código selecionado",
@@ -88,10 +88,10 @@
     "connectionOk": "✅ Conexão OK",
     "connectionError": "❌ {{error}}",
     "you": "VOCÊ",
-    "opalacoder": "OPALACODER",
+    "omnime": "OPALACODER",
     "setProjectFirst": "Defina um projeto...",
     "thinking": "Pensando...",
-    "askOpalaCoder": "Pergunte ao OpalaCoder...",
+    "askOmniMe": "Pergunte ao OmniMe...",
     "interruptAgent": "Interromper agente"
   },
   "bottomPanel": {
@@ -264,13 +264,13 @@
     "fileRenameError": "Erro ao renomear: {{error}}"
   },
   "onboarding": {
-    "welcome": "Bem-vindo ao OpalaCoder! 🚀",
+    "welcome": "Bem-vindo ao OmniMe! 🚀",
     "analyzingMessage": "Estamos analisando o seu hardware para recomendar a melhor arquitetura de Inteligência Artificial para você.",
     "viewRecommendation": "Ver Recomendação",
     "analyzingMachine": "Analisando máquina...",
     "hardwareDetected": "Hardware Detectado: {{vram}}GB VRAM | {{ram}}GB RAM",
     "localTitle": "Excelente! 100% Local e Privado",
-    "localMessage": "Detectamos que você possui hardware potente. A melhor forma de usar o OpalaCoder é instalando o Ollama para rodar modelos localmente, sem custos e com total privacidade do seu código.",
+    "localMessage": "Detectamos que você possui hardware potente. A melhor forma de usar o OmniMe é instalando o Ollama para rodar modelos localmente, sem custos e com total privacidade do seu código.",
     "cloudTitle": "Recomendação: Usar Nuvem (Cloud API)",
     "cloudMessage": "Agentes autônomos de código exigem muito raciocínio da IA. Como sua máquina possui pouca memória dedicada (VRAM), rodar modelos avançados localmente será muito lento. Recomendamos usar uma chave de API (como Gemini ou OpenAI) para uma experiência rápida e fluída.",
     "installOllamaBtn": "Instalar Ollama e Criar Projeto Piloto",
@@ -279,7 +279,7 @@
     "ollamaInstalledCompatible": "Ollama já está instalado na sua máquina (v{{version}}) e é compatível!",
     "startPilot": "Iniciar Projeto Piloto",
     "updateRequired": "Atualização Necessária",
-    "updateMessage": "Detectamos o Ollama (v{{version}}), mas o OpalaCoder requer a versão 0.30.5 ou superior para suportar ferramentas completas.",
+    "updateMessage": "Detectamos o Ollama (v{{version}}), mas o OmniMe requer a versão 0.30.5 ou superior para suportar ferramentas completas.",
     "downloadUpdateBtn": "Baixar e Atualizar Ollama",
     "ignoreStartBtn": "Ignorar e Iniciar Assim Mesmo",
     "installInstructions": "Vamos instalar o Ollama na sua máquina. Siga as instruções no instalador que vai abrir.",

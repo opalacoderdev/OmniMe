@@ -1,7 +1,7 @@
 import os
 import json
 
-OPALACODER_DIR = os.path.join(os.path.expanduser("~"), ".opalacoder")
+OPALACODER_DIR = os.path.join(os.path.expanduser("~"), ".omnime")
 
 HARDWARE_FILE = os.path.join(OPALACODER_DIR, "hardware.json")
 
@@ -22,7 +22,7 @@ def save_hardware_info(data):
 def get_or_detect_hardware():
     info = load_hardware_info()
     if not info:
-        from opalacoder.hardware_detect import get_hardware_info
+        from omnime.hardware_detect import get_hardware_info
         info = get_hardware_info()
         save_hardware_info(info)
     return info

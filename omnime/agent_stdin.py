@@ -1,4 +1,4 @@
-"""JSON-based stdin/stdout protocol for calling OpalaCoder agents."""
+"""JSON-based stdin/stdout protocol for calling OmniMe agents."""
 
 import sys
 import json
@@ -13,7 +13,7 @@ sys.stdout = sys.stderr
 event_hook = None
 
 # Pending GUI input requests: maps request-id -> asyncio.Future so that the
-# /api/opalacoder/input_response endpoint can resolve them.
+# /api/omnime/input_response endpoint can resolve them.
 _gui_input_pending: dict = {}
 
 import litellm
@@ -22,7 +22,7 @@ import litellm
 # presence_penalty. Drop unsupported params silently instead of crashing.
 litellm.drop_params = True
 
-from opalacoder.chat_meta_params import parse_meta_params, apply_meta_params
+from omnime.chat_meta_params import parse_meta_params, apply_meta_params
 
 def _friendly_llm_error(exc: Exception, project=None) -> str:
     """Convert a LiteLLM/agent exception into a user-friendly message."""
@@ -99,13 +99,13 @@ def print_event(event: str, data: dict):
             import sys
             sys.stderr.write(f"[DEBUG] Error invoking event hook: {ex}\n")
 
-from opalacoder.config import DEFAULT_MODEL, DEFAULT_DB_PATH
-from opalacoder.project import ProjectStore, ProjectData
-from opalacoder.memgpt_runtime import build_chat_orchestrator
+from omnime.config import DEFAULT_MODEL, DEFAULT_DB_PATH
+from omnime.project import ProjectStore, ProjectData
+from omnime.memgpt_runtime import build_chat_orchestrator
 from agenticblocks.blocks.llm.agent import AgentInput, LLMAgentBlock
 
 # Import all tools
-from opalacoder.tools import (
+from omnime.tools import (
     read_file as raw_read_file_base,
     write_file,
     run_command,
@@ -188,8 +188,8 @@ def wrap_tool(original_tool):
         is_error = False
         res_val = "Execution cancelled or failed unexpectedly."
         try:
-            import opalacoder.agent_stdin
-            proj = getattr(opalacoder.agent_stdin, "current_project", None)
+            import omnime.agent_stdin
+            proj = getattr(omnime.agent_stdin, "current_project", None)
             loop_enabled = True
             loop_limit = 3
             if proj and hasattr(proj, "model_params") and isinstance(proj.model_params, dict):
@@ -219,7 +219,7 @@ def wrap_tool(original_tool):
 
 
 
-from opalacoder.tools import get_available_tools
+from omnime.tools import get_available_tools
 
 # Monkey-patch get_available_tools to automatically wrap tools returned to sub-agents
 original_get_available_tools = get_available_tools
@@ -228,10 +228,10 @@ def patched_get_available_tools():
     tools = original_get_available_tools()
     return [wrap_tool(t) for t in tools]
 
-import opalacoder.tools
-import opalacoder.memgpt_runtime
-opalacoder.tools.get_available_tools = patched_get_available_tools
-opalacoder.memgpt_runtime.get_available_tools = patched_get_available_tools
+import omnime.tools
+import omnime.memgpt_runtime
+omnime.tools.get_available_tools = patched_get_available_tools
+omnime.memgpt_runtime.get_available_tools = patched_get_available_tools
 
 async def handle_load_project(data: dict):
     global current_project, current_store, current_memgpt
@@ -283,8 +283,8 @@ async def handle_slash_command(data: dict) -> dict:
     if "project_name" in data or "project_path" in data:
         await handle_load_project(data)
 
-    from opalacoder.cli_commands import REPLState, _registry
-    import opalacoder.terminal as T
+    from omnime.cli_commands import REPLState, _registry
+    import omnime.terminal as T
 
     if cmd not in _registry:
         return {"status": "done", "messages": [f"🔴 Comando desconhecido: {cmd}. Digite /help para ajuda."]}
@@ -466,7 +466,7 @@ async def handle_run(data: dict):
         await handle_load_project(data)
 
     if current_project and current_project.project_path:
-        state_dir = os.path.join(current_project.project_path, ".opalacoder")
+        state_dir = os.path.join(current_project.project_path, ".omnime")
         os.makedirs(state_dir, exist_ok=True)
         state_file = os.path.join(state_dir, "_editor_state.json")
         editor_state = {
@@ -530,7 +530,7 @@ async def handle_run(data: dict):
             agent_kwargs["max_tool_calls"] = int(model_params["max_tool_calls"])
 
         _model = model or DEFAULT_MODEL
-        from opalacoder.config import resolve_model_for_thinking
+        from omnime.config import resolve_model_for_thinking
         _model = resolve_model_for_thinking(_model, model_kwargs)
 
         agent = LLMAgentBlock(
@@ -581,12 +581,12 @@ async def handle_run(data: dict):
 
     print_event("agent_started", {"agent": agent_type, "model": agent.model})
 
-    from opalacoder.tools import TURN_ACHIEVEMENTS
-    import opalacoder.tools as tools_mod
+    from omnime.tools import TURN_ACHIEVEMENTS
+    import omnime.tools as tools_mod
     if agent_type == "chat_orchestrator":
         tools_mod.TURN_ACHIEVEMENTS = ""
 
-    import opalacoder.terminal as T
+    import omnime.terminal as T
     orig_async_confirm_hook = getattr(T, "_async_confirm_hook", None)
     orig_async_ask_hook = getattr(T, "_async_ask_hook", None)
     loop = asyncio.get_event_loop()
@@ -707,7 +707,7 @@ async def handle_run(data: dict):
             response = resp_obj.response.strip() if resp_obj.response else ""
             
             if not response:
-                from opalacoder.i18n import _
+                from omnime.i18n import _
                 print_event("info", {"message": _("empty_response_retry_info")})
                 retry_prompt = _("empty_response_nudge")
                 with apply_meta_params(agent, _meta_overrides):

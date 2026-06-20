@@ -186,7 +186,7 @@ export default function SettingsModal({
                       .then(r => r.json())
                       .then(res => {
                         if (res.requiresRestart) {
-                          alert("Directory changed! Please restart OpalaCoder for changes to take effect.");
+                          alert("Directory changed! Please restart OmniMe for changes to take effect.");
                         } else if (res.error) {
                           alert("Error: " + res.error);
                         }

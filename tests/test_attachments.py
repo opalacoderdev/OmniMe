@@ -1,4 +1,4 @@
-"""Tests for opalacoder.attachments module.
+"""Tests for omnime.attachments module.
 
 Covers:
 - PDF text extraction (pymupdf4llm)
@@ -42,7 +42,7 @@ def _tiny_png_b64() -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_compress_image_returns_valid_base64_jpeg():
-    from opalacoder.attachments import compress_image
+    from omnime.attachments import compress_image
 
     b64 = _tiny_png_b64()
     result = compress_image(b64, "image/png", max_side=50)
@@ -56,7 +56,7 @@ def test_compress_image_returns_valid_base64_jpeg():
 
 
 def test_compress_image_respects_max_side():
-    from opalacoder.attachments import compress_image
+    from omnime.attachments import compress_image
     from PIL import Image
 
     b64 = _tiny_png_b64()  # 200×300
@@ -71,7 +71,7 @@ def test_compress_image_respects_max_side():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_build_attachment_descriptor_image():
-    from opalacoder.attachments import build_attachment_descriptor
+    from omnime.attachments import build_attachment_descriptor
 
     b64 = _tiny_jpeg_b64()
     desc = build_attachment_descriptor("photo.jpg", b64, "image/jpeg")
@@ -85,7 +85,7 @@ def test_build_attachment_descriptor_image():
 
 
 def test_build_attachment_descriptor_unknown_passes_through():
-    from opalacoder.attachments import build_attachment_descriptor
+    from omnime.attachments import build_attachment_descriptor
 
     raw = base64.b64encode(b"binary data").decode()
     desc = build_attachment_descriptor("file.bin", raw, "application/octet-stream")
@@ -120,7 +120,7 @@ def test_agent_input_accepts_attachments():
 def test_vision_gate_strips_image_for_text_only_model(monkeypatch):
     """Image attachments must be removed and a note added to the prompt
     when the model reports no vision support."""
-    import opalacoder.agent_stdin as stdin_mod
+    import omnime.agent_stdin as stdin_mod
 
     # Patch litellm.supports_vision to return False
     import litellm

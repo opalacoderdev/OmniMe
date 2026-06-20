@@ -6,9 +6,9 @@ import os
 import tempfile
 
 
-from opalacoder.cli_commands import REPLState, _registry
-from opalacoder.project import ProjectStore
-from opalacoder.memgpt_runtime import resolve_skill_model
+from omnime.cli_commands import REPLState, _registry
+from omnime.project import ProjectStore
+from omnime.memgpt_runtime import resolve_skill_model
 
 
 def _state(tmp_path):
@@ -43,7 +43,7 @@ def test_worker_model_resolves_for_skill(tmp_path):
 
 
 def test_worker_model_falls_back_to_global_when_unset(tmp_path):
-    from opalacoder.config import DEFAULT_MODEL
+    from omnime.config import DEFAULT_MODEL
     state, _ = _state(tmp_path)
     # No project worker set → resolve_skill_model uses the main project model.
     resolved = resolve_skill_model({"model": "worker"}, state.project.model, "")
@@ -56,7 +56,7 @@ def test_clear_preserves_models(tmp_path):
     asyncio.run(_registry.dispatch(state, "/set-main-model", ["ollama/m1"]))
     asyncio.run(_registry.dispatch(state, "/set-worker-model", ["gemini/a1"]))
     # Patch confirm to auto-yes
-    import opalacoder.terminal as T
+    import omnime.terminal as T
     orig = T.confirm
     T.confirm = lambda *a, **k: True
     try:
@@ -76,7 +76,7 @@ def test_old_db_migrates_without_worker_model_column(tmp_path):
         "CREATE TABLE projects (name TEXT PRIMARY KEY, created_at TEXT NOT NULL, "
         "updated_at TEXT NOT NULL, mode TEXT DEFAULT 'plan', model TEXT DEFAULT '', "
         "project_name TEXT DEFAULT '', project_path TEXT DEFAULT '', "
-        "skills TEXT DEFAULT '[\"opalacoder\"]', description TEXT DEFAULT '', "
+        "skills TEXT DEFAULT '[\"omnime\"]', description TEXT DEFAULT '', "
         "request TEXT DEFAULT '', plan_text TEXT DEFAULT '', subplans TEXT DEFAULT '[]', "
         "results TEXT DEFAULT '{}');"
         "CREATE TABLE project_history (id INTEGER PRIMARY KEY, project TEXT, "
@@ -147,8 +147,8 @@ def test_commit_and_undo_commands(tmp_path):
     assert res == "continue"
     
     # Verify the file is now tracked/committed (i.e. git has no untracked files)
-    from opalacoder.vcs import get_vcs_strategy
-    from opalacoder.config import get_git_strategy
+    from omnime.vcs import get_vcs_strategy
+    from omnime.config import get_git_strategy
     vcs = get_vcs_strategy(get_git_strategy(), state.project.project_path)
     
     # We should be able to run "/undo"

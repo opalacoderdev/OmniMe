@@ -2,7 +2,7 @@
 """Level-3 script for the `implement-feature` skill.
 
 Thin CLI wrapper around the existing plan→execute→verify loop
-(`WorkflowOrchestratorStrategy` in opalacoder.workflow_orchestrator). The heavy,
+(`WorkflowOrchestratorStrategy` in omnime.workflow_orchestrator). The heavy,
 deterministic logic stays in Python and is *reused* here — this script only wires
 a project context and invokes `orchestrator.run(...)`.
 
@@ -22,15 +22,15 @@ import os
 import sys
 
 
-def _ensure_opalacoder_importable() -> None:
-    """Make the opalacoder package importable when run as a standalone script.
+def _ensure_omnime_importable() -> None:
+    """Make the omnime package importable when run as a standalone script.
 
     The script lives at skills/implement-feature/scripts/run_workflow.py; the repo
-    root (which contains the opalacoder package) is four levels up. We also honor
+    root (which contains the omnime package) is four levels up. We also honor
     OPALACODER_ROOT if set, so the skill works when installed elsewhere.
     """
     try:
-        import opalacoder  # noqa: F401
+        import omnime  # noqa: F401
         return
     except Exception:
         pass
@@ -50,7 +50,7 @@ def _resolve_model(cli_model: str | None) -> str:
     so cli_model already encodes the skill's preference when present. Values
     "default"/"worker" map to the configured models.
     """
-    from opalacoder.config import DEFAULT_MODEL, WORKER_MODEL
+    from omnime.config import DEFAULT_MODEL, WORKER_MODEL
     if not cli_model:
         return DEFAULT_MODEL
     if cli_model == "default":
@@ -66,8 +66,8 @@ def _load_session(args):
     Prefers a saved project (loaded by name) so memory/history are available;
     falls back to a minimal in-memory ProjectData rooted at --project-path.
     """
-    from opalacoder.project import ProjectStore, ProjectData
-    from opalacoder.config import DEFAULT_DB_PATH
+    from omnime.project import ProjectStore, ProjectData
+    from omnime.config import DEFAULT_DB_PATH
 
     store = ProjectStore(db_path=args.db or DEFAULT_DB_PATH)
     if args.project_name and store.exists(args.project_name):
@@ -85,12 +85,12 @@ def _load_session(args):
 
 
 async def _run(args) -> str:
-    # Import the orchestrator registry first: opalacoder.orchestrator and
-    # opalacoder.workflow_orchestrator have an order-dependent circular import
+    # Import the orchestrator registry first: omnime.orchestrator and
+    # omnime.workflow_orchestrator have an order-dependent circular import
     # (the registry module imports the strategy at the bottom as a registration
     # side-effect). Importing the registry first resolves the cycle — the same
     # order cli.py uses.
-    import opalacoder.orchestrator  # noqa: F401
+    import omnime.orchestrator  # noqa: F401
     from workflow_orchestrator import WorkflowOrchestratorStrategy
 
     model = _resolve_model(args.model)
@@ -135,12 +135,12 @@ def main(argv=None) -> int:
     if not args.request:
         parser.error("one of --request or --request-file is required")
 
-    _ensure_opalacoder_importable()
+    _ensure_omnime_importable()
     result = asyncio.run(_run(args))
     print(result if result else "(no output)")
     return 0
 
 
 if __name__ == "__main__":
-    _ensure_opalacoder_importable()
+    _ensure_omnime_importable()
     raise SystemExit(main())

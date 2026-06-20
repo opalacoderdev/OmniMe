@@ -7,7 +7,7 @@ import { useTextContextMenu } from '../hooks/useTextContextMenu.js';
 import TextContextMenu from './TextContextMenu.jsx';
 import SearchChatsModal from './modals/SearchChatsModal.jsx';
 
-// Right-side chat panel for interacting with the OpalaCoder agent.
+// Right-side chat panel for interacting with the OmniMe agent.
 export default function ChatPanel({
   chatMessages,
   chatInput,
@@ -374,8 +374,8 @@ export default function ChatPanel({
     try {
       // Actually, we could just rely on App.jsx handling it, but App.jsx doesn't refetch on activeChatId change.
       // So let's re-fetch the project or have a dedicated endpoint for chat history.
-      // Easiest is to simulate /api/opalacoder/run with a "load_chat" command, but we don't have that.
-      // Let's call a minimal endpoint or we can just send `/api/opalacoder/list-projects` again and find ours? No, list-projects doesn't load chat history.
+      // Easiest is to simulate /api/omnime/run with a "load_chat" command, but we don't have that.
+      // Let's call a minimal endpoint or we can just send `/api/omnime/list-projects` again and find ours? No, list-projects doesn't load chat history.
       // A quick hack: dispatch a slash command or do a dummy request? No, wait. App.jsx passes down `chats` but not full project data per chat.
       // Let's add `/api/chat/history` or fetch the project. 
       // Actually we can just update `activeProject` in App by calling an endpoint, but we don't have an endpoint just for fetching a project with a specific chat_id. Wait! UpdateProject doesn't return history.
@@ -397,9 +397,9 @@ export default function ChatPanel({
 
   const handleExportMarkdown = () => {
     if (!chatMessages || chatMessages.length === 0) return;
-    let md = `# Chat Export - ${activeProject?.name || 'OpalaCoder'}\n\n`;
+    let md = `# Chat Export - ${activeProject?.name || 'OmniMe'}\n\n`;
     chatMessages.forEach(msg => {
-      const role = msg.role === 'user' ? 'User' : 'OpalaCoder';
+      const role = msg.role === 'user' ? 'User' : 'OmniMe';
       md += `### ${role}\n\n${msg.content}\n\n---\n\n`;
     });
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
@@ -780,7 +780,7 @@ export default function ChatPanel({
               <span
                 className={`vscode-chat-msg-header ${isUser ? 'chat-header-user' : 'chat-header-agent'}`}
               >
-                {isUser ? t('chatPanel.you') : t('chatPanel.opalacoder')}
+                {isUser ? t('chatPanel.you') : t('chatPanel.omnime')}
               </span>
               {/* Attachment previews */}
               {atts.length > 0 && (
@@ -808,7 +808,7 @@ export default function ChatPanel({
 
         {isAgentRunning && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span className="vscode-chat-msg-header chat-header-agent">{t('chatPanel.opalacoder')}</span>
+            <span className="vscode-chat-msg-header chat-header-agent">{t('chatPanel.omnime')}</span>
             <div className="vscode-chat-msg-content">
               <div className="thinking-indicator">
                 <span className="dot" />
@@ -898,7 +898,7 @@ export default function ChatPanel({
             placeholder={
               !activeProject ? t('chatPanel.setProjectFirst') :
               isAgentRunning ? t('chatPanel.thinking') :
-              t('chatPanel.askOpalaCoder')
+              t('chatPanel.askOmniMe')
             }
             className="vscode-chat-textarea"
           />

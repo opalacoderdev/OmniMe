@@ -5,7 +5,7 @@ any language with a tree-sitter grammar (300+ languages, including future ones
 as new grammars are published). Falls back to regex patterns for languages
 whose grammar hasn't been downloaded yet.
 
-The index persists to SQLite inside the project's .opalacoder/ directory and
+The index persists to SQLite inside the project's .omnime/ directory and
 is rebuilt incrementally on file mtime changes. Every write_file / edit_file
 call triggers a single-file reindex so the index stays fresh within a cycle.
 
@@ -139,7 +139,7 @@ _CALL_KINDS = {"call", "call_expression", "method_call", "function_call",
 
 _SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv",
-    ".mypy_cache", "dist", "build", "target", ".opalacoder",
+    ".mypy_cache", "dist", "build", "target", ".omnime",
     ".next", ".nuxt", "coverage", ".tox",
 }
 
@@ -455,7 +455,7 @@ class CodeIndex:
         if root == self._root and self._conn is not None:
             return
         self._root = root
-        db_dir = os.path.join(root, ".opalacoder")
+        db_dir = os.path.join(root, ".omnime")
         os.makedirs(db_dir, exist_ok=True)
         self._db_path = os.path.join(db_dir, "code_index.sqlite")
         if self._conn:

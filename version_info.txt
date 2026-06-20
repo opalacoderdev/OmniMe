@@ -14,13 +14,13 @@ VSVersionInfo(
       [
       StringTable(
         u'040904B0',
-        [StringStruct(u'CompanyName', u'OpalaCoder'),
-        StringStruct(u'FileDescription', u'OpalaCoder IDE'),
+        [StringStruct(u'CompanyName', u'OmniMe'),
+        StringStruct(u'FileDescription', u'OmniMe'),
         StringStruct(u'FileVersion', u'0.2.5'),
-        StringStruct(u'InternalName', u'OpalaCoder'),
+        StringStruct(u'InternalName', u'OmniMe'),
         StringStruct(u'LegalCopyright', u'MIT License'),
-        StringStruct(u'OriginalFilename', u'OpalaCoder.exe'),
-        StringStruct(u'ProductName', u'OpalaCoder'),
+        StringStruct(u'OriginalFilename', u'OmniMe.exe'),
+        StringStruct(u'ProductName', u'OmniMe'),
         StringStruct(u'ProductVersion', u'0.2.5')])
       ]), 
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])

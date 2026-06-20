@@ -1,7 +1,7 @@
 {
-  "name": "opalacoder-web-ide",
+  "name": "omnime-web-ide",
   "version": "1.0.0",
-  "description": "Custom Web IDE for OpalaCoder",
+  "description": "Custom Web IDE for OmniMe",
   "main": "server.js",
   "type": "module",
   "scripts": {

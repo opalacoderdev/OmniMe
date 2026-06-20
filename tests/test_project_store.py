@@ -1,7 +1,7 @@
 """Tests for ProjectStore and ProjectData.
 
 Verifies:
-1. ProjectStore.create always includes 'opalacoder' in skills
+1. ProjectStore.create always includes 'omnime' in skills
 2. ProjectStore.load round-trips all ProjectData fields correctly
 3. ProjectStore.rename fails if target name already exists
 4. ProjectData.context_header produces the expected format
@@ -13,7 +13,7 @@ import os
 import tempfile
 import pytest
 
-from opalacoder.project import ProjectData, ProjectStore
+from omnime.project import ProjectData, ProjectStore
 
 
 @pytest.fixture
@@ -37,25 +37,25 @@ def _base_args(**overrides):
 
 
 # ---------------------------------------------------------------------------
-# 1. create always adds 'opalacoder'
+# 1. create always adds 'omnime'
 # ---------------------------------------------------------------------------
 
-def test_create_always_includes_opalacoder(store):
-    """Skills list must always contain 'opalacoder', even if not passed."""
+def test_create_always_includes_omnime(store):
+    """Skills list must always contain 'omnime', even if not passed."""
     p = store.create(**_base_args(skills=["react_vite"]))
-    assert "opalacoder" in p.skills
+    assert "omnime" in p.skills
 
 
-def test_create_without_skills_defaults_to_opalacoder(store):
-    """When skills is None, result must still have 'opalacoder'."""
+def test_create_without_skills_defaults_to_omnime(store):
+    """When skills is None, result must still have 'omnime'."""
     p = store.create(**_base_args(skills=None))
-    assert p.skills == ["opalacoder"]
+    assert p.skills == ["omnime"]
 
 
-def test_create_does_not_duplicate_opalacoder(store):
-    """If opalacoder is explicitly in the list, it must not appear twice."""
-    p = store.create(**_base_args(skills=["opalacoder", "html_css_js"]))
-    assert p.skills.count("opalacoder") == 1
+def test_create_does_not_duplicate_omnime(store):
+    """If omnime is explicitly in the list, it must not appear twice."""
+    p = store.create(**_base_args(skills=["omnime", "html_css_js"]))
+    assert p.skills.count("omnime") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +73,7 @@ def test_load_roundtrips_all_fields(store):
     assert loaded.model == "fake/model"
     assert loaded.project_name == "My Project"
     assert loaded.project_path == "/home/user/myproject"
-    assert "opalacoder" in loaded.skills
+    assert "omnime" in loaded.skills
     assert "python_subprocess" in loaded.skills
     assert loaded.description == "A test project"
 
@@ -142,15 +142,15 @@ def test_save_persists_description_change(store):
     assert reloaded.description == "Updated description"
 
 
-def test_save_always_keeps_opalacoder_in_skills(store):
-    """Even if someone accidentally removes opalacoder before save, it must be restored."""
+def test_save_always_keeps_omnime_in_skills(store):
+    """Even if someone accidentally removes omnime before save, it must be restored."""
     store.create(**_base_args())
     p = store.load("myproj")
-    p.skills = ["html_css_js"]  # opalacoder removed
+    p.skills = ["html_css_js"]  # omnime removed
     store.save(p)
 
     reloaded = store.load("myproj")
-    assert "opalacoder" in reloaded.skills
+    assert "omnime" in reloaded.skills
 
 
 # ---------------------------------------------------------------------------
@@ -200,16 +200,16 @@ def test_create_initializes_shadow_git(store, tmp_path):
         project_name="Shadow Git Test",
         project_path=str(proj_dir),
     )
-    # Check that .opalacoder/.git directory exists
-    git_dir = proj_dir / ".opalacoder" / ".git"
+    # Check that .omnime/.git directory exists
+    git_dir = proj_dir / ".omnime" / ".git"
     assert git_dir.exists()
     assert git_dir.is_dir()
 
 
 def test_set_project_context_loads_env_and_propagates_keys(tmp_path):
     import os
-    from opalacoder.tools import set_project_context
-    from opalacoder.project import ProjectData
+    from omnime.tools import set_project_context
+    from omnime.project import ProjectData
     
     proj_dir = tmp_path / "my_env_project"
     proj_dir.mkdir()

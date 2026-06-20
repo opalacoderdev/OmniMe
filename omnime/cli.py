@@ -1,4 +1,4 @@
-"""OpalaCoder CLI – entry point."""
+"""OmniMe CLI – entry point."""
 
 import asyncio
 import argparse
@@ -115,7 +115,7 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                     "Continue or complete the previous implementation that was interrupted.")
             ))
         if resp.response:
-            T.console.print(f"\n[bold green]OpalaCoder:[/bold green] {resp.response.strip()}\n")
+            T.console.print(f"\n[bold green]OmniMe:[/bold green] {resp.response.strip()}\n")
             store.append_message(state.project, "assistant", resp.response.strip())
         store.save(state.project)
 
@@ -142,7 +142,7 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
 
     while True:
         try:
-            user_input = T.ask(f"OpalaCoder ({state.display_name})")
+            user_input = T.ask(f"OmniMe ({state.display_name})")
             if not user_input:
                 continue
 
@@ -170,7 +170,7 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
                     )
                 response = resp_obj.response.strip() if resp_obj.response else ""
                 if response:
-                    T.console.print(f"\n[bold green]OpalaCoder:[/bold green] {response}\n")
+                    T.console.print(f"\n[bold green]OmniMe:[/bold green] {response}\n")
                     store.append_message(state.project, "assistant", response)
                 store.save(state.project)
 
@@ -198,10 +198,10 @@ async def repl_loop(project: ProjectData, store: ProjectStore, max_retries: int)
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="opalacoder",
-        description="OpalaCoder – project-centric coding agent",
+        prog="omnime",
+        description="OmniMe – project-centric coding agent",
     )
-    parser.add_argument("--version", action="version", version=f"OpalaCoder {__version__}")
+    parser.add_argument("--version", action="version", version=f"OmniMe {__version__}")
     parser.add_argument("--mode", choices=["auto", "plan", "edit"], default=DEFAULT_MODE)
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL})")
     parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES)
@@ -221,7 +221,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.debug:
-        from opalacoder.config import setup_debug_logging
+        from omnime.config import setup_debug_logging
         setup_debug_logging()
 
     set_lang(args.lang)

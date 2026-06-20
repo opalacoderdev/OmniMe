@@ -1,4 +1,4 @@
-# Especificações do OpalaCoder — Arquitetura Orientada a Skills
+# Especificações do OmniMe — Arquitetura Orientada a Skills
 
 > **Estado: IMPLEMENTADO.** O redesenho orientado a skills foi implementado na
 > branch `refactor/skills-oriented-architecture`. Estas specs descrevem a
@@ -32,7 +32,7 @@ Level 3 via bash**. O sub-agente fala com o usuário por ferramenta, e um
 
 | Spec | Conteúdo |
 |---|---|
-| [01-arquitetura.md](01-arquitetura.md) | Princípios, pacote `opalacoder/` (reuso/refatorar/novo), papéis e fluxo ponta a ponta. |
+| [01-arquitetura.md](01-arquitetura.md) | Princípios, pacote `omnime/` (reuso/refatorar/novo), papéis e fluxo ponta a ponta. |
 | [02-memgpt-orquestrador.md](02-memgpt-orquestrador.md) | MemGPT fixo, `run_skill`, o que é eliminado, retomada de execução. |
 | [03-skill-implement-feature.md](03-skill-implement-feature.md) | A skill que cria/corrige código: loop reusado como script Level 3, `intent`, checkpoints. |
 | [04-memoria.md](04-memoria.md) | Memória MemGPT clássica, core memory, arquival (ChromaDB), índice vetorial. |
@@ -49,14 +49,14 @@ Level 3 via bash**. O sub-agente fala com o usuário por ferramenta, e um
 | Skill = diretório com `SKILL.md`; frontmatter enxuto (`name`/`description` + `model` opcional); campos legados descartados | [06 §1](06-skills-e-plugins.md#1-formato-de-skill-padrão-anthropic--claudeai) |
 | Seleção de modelo do sub-agente via campo `model` da `SKILL.md` | [06 §1](06-skills-e-plugins.md#1-formato-de-skill-padrão-anthropic--claudeai), [02 §3](02-memgpt-orquestrador.md#3-o-que-é-eliminado-do-desenho-atual) |
 | Skills obrigatórias sempre carregadas; `skills.yaml` filtra o resto (controla orçamento de tokens) | [06 §5](06-skills-e-plugins.md#5-carregamento-de-skills-diretórios--skillsyaml) |
-| Diretórios: `skills/` do projeto + `.opalacoder/skills` + `~/.opalacoder/skills` + embutidas | [06 §5](06-skills-e-plugins.md#5-carregamento-de-skills-diretórios--skillsyaml) |
+| Diretórios: `skills/` do projeto + `.omnime/skills` + `~/.omnime/skills` + embutidas | [06 §5](06-skills-e-plugins.md#5-carregamento-de-skills-diretórios--skillsyaml) |
 | Interceptador = wrapper na tool `send_message` | [06 §4](06-skills-e-plugins.md#4-interceptador-de-diálogo) |
 | `newfeat`/`bugfix` = parâmetro `intent` único de `implement-feature` | [06 §7](06-skills-e-plugins.md#7-skills-embutidas-previstas) |
 | `command_hint` = instrução na skill `chat-orchestrator` | [02 §3](02-memgpt-orquestrador.md#3-o-que-é-eliminado-do-desenho-atual) |
 | Por padrão (sem `skills.yaml`) carregam-se **apenas** as skills obrigatórias; só `chat-orchestrator` é obrigatória | [06 §5](06-skills-e-plugins.md#5-carregamento-de-skills-diretórios--skillsyaml) |
 | Campo `model` da `SKILL.md` é **repassado ao script** (`--model`) em skills script-driven | [06 §1](06-skills-e-plugins.md#1-formato-de-skill-padrão-anthropic--claudeai), [03 §2](03-skill-implement-feature.md#2-o-motor-loop-reusado) |
 | Execução de scripts de skill entra em `SENSITIVE_OPS` (aprovação no modo `edit`) | [06 §6](06-skills-e-plugins.md#6-segurança-skills-executam-bash-sem-sandbox) |
-| Motor de memória = `MemGPTAgentBlock` do framework; **remover** `opalacoder/memgpt.py` (Gemini fora de escopo) | [04 §1](04-memoria.md#1-memória-memgpt-clássica-do-chat-orquestrador) |
+| Motor de memória = `MemGPTAgentBlock` do framework; **remover** `omnime/memgpt.py` (Gemini fora de escopo) | [04 §1](04-memoria.md#1-memória-memgpt-clássica-do-chat-orquestrador) |
 
 ## Decisões pendentes — apenas detalhes de implementação
 

@@ -7,7 +7,7 @@ import asyncio
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 
-from opalacoder.agent_stdin import (
+from omnime.agent_stdin import (
     print_event,
     wrap_tool,
     patched_get_available_tools,
@@ -19,8 +19,8 @@ def test_print_event(monkeypatch):
     # Create a dummy stream to capture real stdout
     stream = io.StringIO()
     # Temporarily monkeypatch the module's _real_stdout
-    import opalacoder.agent_stdin
-    monkeypatch.setattr(opalacoder.agent_stdin, "_real_stdout", stream)
+    import omnime.agent_stdin
+    monkeypatch.setattr(omnime.agent_stdin, "_real_stdout", stream)
 
     print_event("test_event", {"foo": "bar", "num": 123})
     
@@ -81,7 +81,7 @@ def test_patched_get_available_tools():
 @pytest.mark.asyncio
 async def test_project_handlers(tmp_path, monkeypatch):
     """Test project listing, creation, and deletion via stdin handlers."""
-    from opalacoder.agent_stdin import handle_create_project, handle_list_projects, handle_delete_project
+    from omnime.agent_stdin import handle_create_project, handle_list_projects, handle_delete_project
     
     db_file = str(tmp_path / "test_db.sqlite")
     
@@ -90,8 +90,8 @@ async def test_project_handlers(tmp_path, monkeypatch):
     def mock_print_event(event, data):
         events.append((event, data))
         
-    import opalacoder.agent_stdin
-    monkeypatch.setattr(opalacoder.agent_stdin, "print_event", mock_print_event)
+    import omnime.agent_stdin
+    monkeypatch.setattr(omnime.agent_stdin, "print_event", mock_print_event)
     
     # 1. Create project
     await handle_create_project({
@@ -134,18 +134,18 @@ async def test_project_handlers(tmp_path, monkeypatch):
 
 
 def test_skip_directories_in_collect_python_files(tmp_path):
-    """Verify that _collect_python_files skips tests, opalacoder, skills, and debug directories."""
-    from opalacoder.tools import _collect_python_files
+    """Verify that _collect_python_files skips tests, omnime, skills, and debug directories."""
+    from omnime.tools import _collect_python_files
     import os
     
     # Create structure
-    (tmp_path / "opalacoder").mkdir()
+    (tmp_path / "omnime").mkdir()
     (tmp_path / "tests").mkdir()
     (tmp_path / "skills").mkdir()
     (tmp_path / "debug").mkdir()
     
     # Write python files inside skipped directories
-    (tmp_path / "opalacoder" / "main.py").write_text("print('core')")
+    (tmp_path / "omnime" / "main.py").write_text("print('core')")
     (tmp_path / "tests" / "test_app.py").write_text("print('test')")
     (tmp_path / "skills" / "run.py").write_text("print('skill')")
     (tmp_path / "debug" / "debug.py").write_text("print('debug')")

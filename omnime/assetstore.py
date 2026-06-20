@@ -2,7 +2,7 @@
 
 Structure
 ---------
-opalacoder/assetstore/
+omnime/assetstore/
     skills/
         <ID>.zip        — full skill directory tree
         <ID>.metadata   — YAML: id, type, name, desc
@@ -12,8 +12,8 @@ opalacoder/assetstore/
 
 Installation targets (relative to project root)
 ---------
-skill       → <project>/.opalacoder/skills/<name>/
-modelconfig → <project>/.opalacoder/modelsconfig/<provider>/<model_file>.yaml
+skill       → <project>/.omnime/skills/<name>/
+modelconfig → <project>/.omnime/modelsconfig/<provider>/<model_file>.yaml
 """
 
 import os
@@ -114,7 +114,7 @@ def install_asset(meta: dict, project_path: str) -> str:
     project = Path(os.path.abspath(project_path))
 
     if asset_type == "skill":
-        dest = project / ".opalacoder" / "skills"
+        dest = project / ".omnime" / "skills"
         dest.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(dest)
@@ -126,7 +126,7 @@ def install_asset(meta: dict, project_path: str) -> str:
         if not model:
             raise ValueError(f"Asset {meta.get('id')} has no 'model' field in metadata")
         provider, filename = _model_to_path(model)
-        dest_dir = project / ".opalacoder" / "modelsconfig" / provider
+        dest_dir = project / ".omnime" / "modelsconfig" / provider
         dest_dir.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(zip_path, "r") as zf:
             yaml_files = [n for n in zf.namelist() if n.endswith('.yaml')]

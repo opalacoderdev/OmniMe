@@ -1,4 +1,4 @@
-"""Elegant terminal output utilities for OpalaCoder using Rich."""
+"""Elegant terminal output utilities for OmniMe using Rich."""
 
 from rich.console import Console
 from rich.panel import Panel

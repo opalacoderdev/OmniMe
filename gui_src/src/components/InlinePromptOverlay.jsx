@@ -281,7 +281,7 @@ export default function InlinePromptOverlay({ inlinePrompt, onSubmit, onClose, o
         {/* Hint */}
         <span style={{ fontSize: '10px', color: isRunning ? '#888' : '#444', userSelect: 'none', display: 'flex', alignItems: 'center' }}>
           {isRunning
-            ? <><span className="opc-spinner" />{`OpalaCoder is working${animatedDots}`}</>
+            ? <><span className="opc-spinner" />{`OmniMe is working${animatedDots}`}</>
             : `Enter ${t('editorPanel.inlinePromptSend').toLowerCase()} · Esc ${t('editorPanel.inlinePromptCancel').toLowerCase()}`
           }
         </span>

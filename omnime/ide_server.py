@@ -438,7 +438,7 @@ class AsyncHTTPServer:
                 
                 import subprocess as sp
                 if use_shadow:
-                    shadow_git_dir = os.path.join(project_path, ".opalacoder", ".shadowgit")
+                    shadow_git_dir = os.path.join(project_path, ".omnime", ".shadowgit")
                     git_dir_arg = f"--git-dir={shadow_git_dir}"
                     work_tree_arg = f"--work-tree={project_path}"
                     result = sp.run(
@@ -641,8 +641,8 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e), "current": req_path, "dirs": []}).encode('utf-8'), "application/json")
 
-        # 3.8. Load refined model config from .opalacoder/modelsconfig/<provider>/<model>.yaml
-        elif path == '/api/opalacoder/model-config':
+        # 3.8. Load refined model config from .omnime/modelsconfig/<provider>/<model>.yaml
+        elif path == '/api/omnime/model-config':
             project_path = data.get('projectPath') or query.get('projectPath', [None])[0]
             model_id = data.get('model') or query.get('model', [None])[0]
             if not project_path or not model_id:
@@ -661,7 +661,7 @@ class AsyncHTTPServer:
             yaml_name = model_name.replace(':', '__') + '.yaml'
             provider_dir_path = os.path.join(
                 os.path.abspath(project_path),
-                '.opalacoder', 'modelsconfig', provider_dir
+                '.omnime', 'modelsconfig', provider_dir
             )
             config_path = os.path.join(provider_dir_path, yaml_name)
 
@@ -688,7 +688,7 @@ class AsyncHTTPServer:
                     config_path = os.path.join(provider_dir_path, best_match)
                 else:
                     # Fallback to checking the global assetstore
-                    from opalacoder.assetstore import list_assets
+                    from omnime.assetstore import list_assets
                     import zipfile
                     
                     modelconfigs = list_assets(asset_type="modelconfig")
@@ -765,7 +765,7 @@ class AsyncHTTPServer:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
         # 3.9. Export modelconfig package
-        elif path == '/api/opalacoder/export-modelconfig' and method == 'POST':
+        elif path == '/api/omnime/export-modelconfig' and method == 'POST':
             project_path = data.get('projectPath')
             model_id = data.get('model')
             dest_path = data.get('destPath')
@@ -786,11 +786,11 @@ class AsyncHTTPServer:
                 import yaml as _yaml
                 import tempfile
                 import shutil
-                from opalacoder.assetstore import register_asset
+                from omnime.assetstore import register_asset
                 
                 tmp_dir = tempfile.mkdtemp()
                 try:
-                    provider_path = os.path.join(tmp_dir, ".opalacoder", "modelsconfig", provider_dir)
+                    provider_path = os.path.join(tmp_dir, ".omnime", "modelsconfig", provider_dir)
                     os.makedirs(provider_path, exist_ok=True)
                     yaml_path = os.path.join(provider_path, yaml_name)
                     
@@ -805,7 +805,7 @@ class AsyncHTTPServer:
                         "desc": f"Exported modelconfig for {model_id}"
                     }
                     
-                    source_path = os.path.join(tmp_dir, ".opalacoder")
+                    source_path = os.path.join(tmp_dir, ".omnime")
                     dest_zip_file = os.path.join(os.path.abspath(dest_path), f"{asset_id}.zip")
                     dest_meta_file = os.path.join(os.path.abspath(dest_path), f"{asset_id}.metadata")
                     
@@ -832,19 +832,19 @@ class AsyncHTTPServer:
 
         # Hardware Inference Endpoints
         elif path == '/api/hardware' and method == 'GET':
-            from opalacoder.hardware_store import get_or_detect_hardware
+            from omnime.hardware_store import get_or_detect_hardware
             info = get_or_detect_hardware()
             self.send_response(writer, 200, json.dumps(info).encode('utf-8'), "application/json")
 
         elif path == '/api/hardware/detect' and method == 'POST':
-            from opalacoder.hardware_detect import get_hardware_info
-            from opalacoder.hardware_store import save_hardware_info
+            from omnime.hardware_detect import get_hardware_info
+            from omnime.hardware_store import save_hardware_info
             info = get_hardware_info()
             save_hardware_info(info)
             self.send_response(writer, 200, json.dumps(info).encode('utf-8'), "application/json")
 
         elif path == '/api/hardware/save' and method == 'POST':
-            from opalacoder.hardware_store import save_hardware_info
+            from omnime.hardware_store import save_hardware_info
             try:
                 save_hardware_info(data)
                 self.send_response(writer, 200, b'{"success":true}', "application/json")
@@ -853,20 +853,20 @@ class AsyncHTTPServer:
 
         # Onboarding / Ollama status endpoints
         elif path == '/api/onboarding/status' and method == 'GET':
-            from opalacoder.onboarding import is_onboarding_completed
+            from omnime.onboarding import is_onboarding_completed
             self.send_response(writer, 200, json.dumps({"completed": is_onboarding_completed()}).encode('utf-8'), "application/json")
         elif path == '/api/onboarding/complete' and method == 'POST':
-            from opalacoder.onboarding import complete_onboarding
+            from omnime.onboarding import complete_onboarding
             self.send_response(writer, 200, json.dumps({"success": complete_onboarding()}).encode('utf-8'), "application/json")
         elif path == '/api/ollama/status' and method == 'GET':
-            from opalacoder.ollama_manager import check_ollama_status
+            from omnime.ollama_manager import check_ollama_status
             self.send_response(writer, 200, json.dumps(check_ollama_status()).encode('utf-8'), "application/json")
         elif path == '/api/ollama/install' and method == 'POST':
-            from opalacoder.ollama_manager import install_ollama_windows
+            from omnime.ollama_manager import install_ollama_windows
             self.send_response(writer, 200, json.dumps(install_ollama_windows()).encode('utf-8'), "application/json")
 
         elif path == '/api/settings/opalahome' and method == 'GET':
-            from opalacoder.config import get_opala_home
+            from omnime.config import get_opala_home
             current_home = get_opala_home()
             is_custom = False
             try:
@@ -933,9 +933,9 @@ class AsyncHTTPServer:
                 
             self.send_response(writer, 200, json.dumps({"found": False}).encode('utf-8'), "application/json")
 
-        elif path == '/api/opalacoder/list-projects':
-            from opalacoder.config import DEFAULT_DB_PATH
-            from opalacoder.project import ProjectStore
+        elif path == '/api/omnime/list-projects':
+            from omnime.config import DEFAULT_DB_PATH
+            from omnime.project import ProjectStore
             store = ProjectStore(db_path=DEFAULT_DB_PATH)
             projects = store.list_projects()
             for p in projects:
@@ -947,9 +947,9 @@ class AsyncHTTPServer:
             self.send_response(writer, 200, json.dumps({"projects": projects}).encode('utf-8'), "application/json")
 
         # 5. Create Project
-        elif path == '/api/opalacoder/create-project' and method == 'POST':
-            from opalacoder.config import DEFAULT_DB_PATH, DEFAULT_MODEL
-            from opalacoder.project import ProjectStore
+        elif path == '/api/omnime/create-project' and method == 'POST':
+            from omnime.config import DEFAULT_DB_PATH, DEFAULT_MODEL
+            from omnime.project import ProjectStore
             store = ProjectStore(db_path=DEFAULT_DB_PATH)
             
             project_name = data.get("project_name")
@@ -1034,28 +1034,28 @@ class AsyncHTTPServer:
                 threading.Thread(target=pull_model, daemon=True).start()
             
             if "piloto" in project_name.lower() or "pilot" in project_name.lower():
-                from opalacoder.onboarding import PILOT_SKILL_CONTENT_PT, PILOT_SKILL_CONTENT_EN
-                from opalacoder.ui_settings import load_ui_settings
-                from opalacoder.skills import write_skills_yaml
+                from omnime.onboarding import PILOT_SKILL_CONTENT_PT, PILOT_SKILL_CONTENT_EN
+                from omnime.ui_settings import load_ui_settings
+                from omnime.skills import write_skills_yaml
                 
                 cfg = load_ui_settings()
                 lang = cfg.get("lang", "pt")
                 skill_content = PILOT_SKILL_CONTENT_EN if lang.startswith("en") else PILOT_SKILL_CONTENT_PT
                 
-                skill_dir = os.path.join(abs_path, ".opalacoder", "skills", "tutorial_opalacoder")
+                skill_dir = os.path.join(abs_path, ".omnime", "skills", "tutorial_omnime")
                 os.makedirs(skill_dir, exist_ok=True)
                 with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
                     f.write(skill_content.strip() + "\n")
                 
                 # Activate the skill without overwriting command-line
-                from opalacoder.skills import read_skills_yaml
+                from omnime.skills import read_skills_yaml
                 existing_skills = read_skills_yaml(abs_path)
-                if "tutorial_opalacoder" not in existing_skills:
-                    existing_skills.append("tutorial_opalacoder")
+                if "tutorial_omnime" not in existing_skills:
+                    existing_skills.append("tutorial_omnime")
                 write_skills_yaml(abs_path, existing_skills)
                 
-                if "tutorial_opalacoder" not in project.skills:
-                    project.skills.append("tutorial_opalacoder")
+                if "tutorial_omnime" not in project.skills:
+                    project.skills.append("tutorial_omnime")
                     store.save(project)
 
             res_data = {
@@ -1066,9 +1066,9 @@ class AsyncHTTPServer:
             self.send_response(writer, 200, json.dumps(res_data).encode('utf-8'), "application/json")
 
         # 5b. Import existing project
-        elif path == '/api/opalacoder/import-project' and method == 'POST':
-            from opalacoder.config import DEFAULT_DB_PATH, DEFAULT_MODEL
-            from opalacoder.project import ProjectStore
+        elif path == '/api/omnime/import-project' and method == 'POST':
+            from omnime.config import DEFAULT_DB_PATH, DEFAULT_MODEL
+            from omnime.project import ProjectStore
             store = ProjectStore(db_path=DEFAULT_DB_PATH)
 
             project_path = data.get("project_path", "")
@@ -1081,11 +1081,11 @@ class AsyncHTTPServer:
                 self.send_response(writer, 400, json.dumps({"error": f"Directory does not exist: {project_path}"}).encode('utf-8'), "application/json")
                 return
 
-            # Validate: must have .opalacoder/ directory to be a valid project
-            opalacoder_dir = os.path.join(abs_path, ".opalacoder")
-            if not os.path.isdir(opalacoder_dir):
+            # Validate: must have .omnime/ directory to be a valid project
+            omnime_dir = os.path.join(abs_path, ".omnime")
+            if not os.path.isdir(omnime_dir):
                 self.send_response(writer, 400, json.dumps({
-                    "error": "This directory is not a valid OpalaCoder project. A valid project must contain a .opalacoder/ directory."
+                    "error": "This directory is not a valid OmniMe project. A valid project must contain a .omnime/ directory."
                 }).encode('utf-8'), "application/json")
                 return
 
@@ -1126,7 +1126,7 @@ class AsyncHTTPServer:
 
             # Try to detect model from modelconfig files
             model = DEFAULT_MODEL
-            modelsconfig_dir = os.path.join(opalacoder_dir, "modelsconfig")
+            modelsconfig_dir = os.path.join(omnime_dir, "modelsconfig")
             if os.path.isdir(modelsconfig_dir):
                 try:
                     import yaml
@@ -1144,14 +1144,14 @@ class AsyncHTTPServer:
                     pass
 
             # Read skills from skills.yaml
-            skills = ["opalacoder"]
+            skills = ["omnime"]
             try:
-                from opalacoder.skills import read_skills_yaml
+                from omnime.skills import read_skills_yaml
                 found_skills = read_skills_yaml(abs_path)
                 if found_skills:
                     skills = found_skills
-                    if "opalacoder" not in skills:
-                        skills = ["opalacoder"] + skills
+                    if "omnime" not in skills:
+                        skills = ["omnime"] + skills
             except Exception:
                 pass
 
@@ -1192,9 +1192,9 @@ class AsyncHTTPServer:
             self.send_response(writer, 200, json.dumps(res_data).encode('utf-8'), "application/json")
 
         # 6. Delete Project
-        elif path == '/api/opalacoder/delete' and method == 'POST':
-            from opalacoder.config import DEFAULT_DB_PATH
-            from opalacoder.project import ProjectStore
+        elif path == '/api/omnime/delete' and method == 'POST':
+            from omnime.config import DEFAULT_DB_PATH
+            from omnime.project import ProjectStore
             import shutil
             store = ProjectStore(db_path=DEFAULT_DB_PATH)
             project_name = data.get("project_name")
@@ -1226,14 +1226,14 @@ class AsyncHTTPServer:
                                 del self.temp_terminals[tid]
                                 
                         # 3. Close SQLite databases
-                        from opalacoder.code_index import CODE_INDEX
+                        from omnime.code_index import CODE_INDEX
                         if getattr(CODE_INDEX, '_root', None) == proj.project_path:
                             try:
                                 CODE_INDEX.close()
                             except:
                                 pass
                                 
-                        from opalacoder.vector_index import get_vector_index
+                        from omnime.vector_index import get_vector_index
                         v_idx = get_vector_index()
                         if v_idx and str(getattr(v_idx, '_root', '')) == proj.project_path:
                             try:
@@ -1262,8 +1262,8 @@ class AsyncHTTPServer:
                 self.send_response(writer, 404, json.dumps({"error": f"Project '{project_name}' not found"}).encode('utf-8'), "application/json")
 
         elif path == '/api/chat/delete' and method == 'POST':
-            from opalacoder.config import DEFAULT_DB_PATH
-            from opalacoder.project import ProjectStore
+            from omnime.config import DEFAULT_DB_PATH
+            from omnime.project import ProjectStore
             store = ProjectStore(db_path=DEFAULT_DB_PATH)
             project_name = data.get("project_name")
             chat_id = data.get("chat_id")
@@ -1274,13 +1274,13 @@ class AsyncHTTPServer:
                 self.send_response(writer, 400, b'{"error":"Cannot delete main chat"}', "application/json")
                 return
             store.delete_chat(project_name, chat_id)
-            from opalacoder.archival import clear_archival_chat
+            from omnime.archival import clear_archival_chat
             clear_archival_chat(project_name, chat_id)
             self.send_response(writer, 200, b'{"status":"ok"}', "application/json")
 
         elif path == '/api/chat/history' and method == 'GET':
-            from opalacoder.config import DEFAULT_DB_PATH
-            from opalacoder.project import ProjectStore
+            from omnime.config import DEFAULT_DB_PATH
+            from omnime.project import ProjectStore
             store = ProjectStore(db_path=DEFAULT_DB_PATH)
             project_name = query.get("project_name", [""])[0]
             chat_id = query.get("chat_id", ["main"])[0]
@@ -1294,8 +1294,8 @@ class AsyncHTTPServer:
             self.send_response(writer, 200, json.dumps({"history": project.history}).encode(), "application/json")
 
         elif path == '/api/chat/list' and method == 'GET':
-            from opalacoder.config import DEFAULT_DB_PATH
-            from opalacoder.project import ProjectStore
+            from omnime.config import DEFAULT_DB_PATH
+            from omnime.project import ProjectStore
             store = ProjectStore(db_path=DEFAULT_DB_PATH)
             project_name = query.get("project_name", [""])[0]
             if not project_name:
@@ -1308,8 +1308,8 @@ class AsyncHTTPServer:
             self.send_response(writer, 200, json.dumps({"chats": project.chats}).encode(), "application/json")
 
         elif path == '/api/chat/search' and method == 'GET':
-            from opalacoder.config import DEFAULT_DB_PATH
-            from opalacoder.project import ProjectStore
+            from omnime.config import DEFAULT_DB_PATH
+            from omnime.project import ProjectStore
             store = ProjectStore(db_path=DEFAULT_DB_PATH)
             project_name = query.get("project_name", [""])[0]
             q = query.get("q", [""])[0]
@@ -1328,13 +1328,13 @@ class AsyncHTTPServer:
                 self.send_response(writer, 400, b'{"error":"data_b64 is required"}', "application/json")
                 return
             try:
-                from opalacoder.attachments import build_attachment_descriptor
+                from omnime.attachments import build_attachment_descriptor
                 project_name = data.get("project_name")
                 # Resolve optional PDF truncation settings from project
                 max_chars = None
                 if project_name and mime == "application/pdf":
-                    from opalacoder.config import DEFAULT_DB_PATH
-                    from opalacoder.project import ProjectStore
+                    from omnime.config import DEFAULT_DB_PATH
+                    from omnime.project import ProjectStore
                     _store = ProjectStore(db_path=DEFAULT_DB_PATH)
                     if _store.exists(project_name):
                         _proj = _store.load(project_name)
@@ -1359,8 +1359,8 @@ class AsyncHTTPServer:
 
         elif path == '/api/chat/create' and method == 'POST':
 
-            from opalacoder.config import DEFAULT_DB_PATH
-            from opalacoder.project import ProjectStore
+            from omnime.config import DEFAULT_DB_PATH
+            from omnime.project import ProjectStore
             import uuid
             store = ProjectStore(db_path=DEFAULT_DB_PATH)
             project_name = data.get("project_name")
@@ -1373,9 +1373,9 @@ class AsyncHTTPServer:
             self.send_response(writer, 200, json.dumps({"id": chat_id, "name": chat_name}).encode(), "application/json")
 
         # 6b. Update Project (patch fields without resetting history)
-        elif path == '/api/opalacoder/update-project' and method == 'POST':
-            from opalacoder.config import DEFAULT_DB_PATH
-            from opalacoder.project import ProjectStore
+        elif path == '/api/omnime/update-project' and method == 'POST':
+            from omnime.config import DEFAULT_DB_PATH
+            from omnime.project import ProjectStore
             store = ProjectStore(db_path=DEFAULT_DB_PATH)
             project_name = data.get("project_name")  # internal key (db name)
             if not project_name:
@@ -1454,7 +1454,7 @@ class AsyncHTTPServer:
                 threading.Thread(target=pull_model_update, daemon=True).start()
             
             # Propagate updated project settings to in-memory state and rebuild orchestrator
-            import opalacoder.agent_stdin as agent_stdin
+            import omnime.agent_stdin as agent_stdin
             if agent_stdin.current_project and agent_stdin.current_project.name == project.name:
                 agent_stdin.current_project = project
                 from .tools import set_project_context
@@ -1479,8 +1479,8 @@ class AsyncHTTPServer:
             self.send_response(writer, 200, json.dumps(res_data).encode(), "application/json")
 
         # 6c. Slash Command
-        elif path == '/api/opalacoder/slash-command' and method == 'POST':
-            from opalacoder.agent_stdin import handle_slash_command
+        elif path == '/api/omnime/slash-command' and method == 'POST':
+            from omnime.agent_stdin import handle_slash_command
             try:
                 result = await handle_slash_command(data)
                 self.send_response(writer, 200, json.dumps(result).encode('utf-8'), "application/json")
@@ -1488,8 +1488,8 @@ class AsyncHTTPServer:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
         # 6d. Slash Command Continue (after confirm)
-        elif path == '/api/opalacoder/slash-command/continue' and method == 'POST':
-            from opalacoder.agent_stdin import handle_slash_command_continue
+        elif path == '/api/omnime/slash-command/continue' and method == 'POST':
+            from omnime.agent_stdin import handle_slash_command_continue
             try:
                 result = await handle_slash_command_continue(data)
                 self.send_response(writer, 200, json.dumps(result).encode('utf-8'), "application/json")
@@ -1498,10 +1498,10 @@ class AsyncHTTPServer:
 
         # 7a. Input Response (resolves a pending GUI confirm/ask request)
 
-        elif path == '/api/opalacoder/input_response' and method == 'POST':
+        elif path == '/api/omnime/input_response' and method == 'POST':
             req_id = data.get("id", "")
             value = data.get("value", "")
-            from opalacoder.agent_stdin import _gui_input_pending
+            from omnime.agent_stdin import _gui_input_pending
             fut = _gui_input_pending.get(req_id)
             if fut and not fut.done():
                 fut.get_loop().call_soon_threadsafe(fut.set_result, value)
@@ -1511,7 +1511,7 @@ class AsyncHTTPServer:
             return
 
         # 7b. Run Agent (Streaming)
-        elif path == '/api/opalacoder/run' and method == 'POST':
+        elif path == '/api/omnime/run' and method == 'POST':
 
             headers = (
                 "HTTP/1.1 200 OK\r\n"
@@ -1538,7 +1538,7 @@ class AsyncHTTPServer:
                 writer.write(chunk)
                 writer.write(b"\r\n")
 
-            from opalacoder.agent_stdin import handle_run
+            from omnime.agent_stdin import handle_run
             
             async def run_agent():
                 try:
@@ -1586,7 +1586,7 @@ class AsyncHTTPServer:
                     pass
 
         # 7b2. Interrupt Agent
-        elif path == '/api/opalacoder/interrupt' and method == 'POST':
+        elif path == '/api/omnime/interrupt' and method == 'POST':
             if self.active_agent_task and not self.active_agent_task.done():
                 self.active_agent_task.cancel()
                 self.send_response(writer, 200, b'{"success":true,"message":"Agent execution interrupted"}', "application/json")
@@ -1609,7 +1609,7 @@ class AsyncHTTPServer:
                     if not project_path or not os.path.exists(project_path):
                         self.send_response(writer, 400, b'{"error":"Project path required"}', "application/json")
                         return
-                    from opalacoder.terminal_manager import TerminalSession
+                    from omnime.terminal_manager import TerminalSession
                     try:
                         self.active_terminal = TerminalSession(project_path)
                         self.active_terminal.start_reading(asyncio.get_running_loop())
@@ -1672,7 +1672,7 @@ class AsyncHTTPServer:
             if term_id == "main":
                 if not self.active_terminal or not self.active_terminal.is_running:
                     if project_path:
-                        from opalacoder.terminal_manager import TerminalSession
+                        from omnime.terminal_manager import TerminalSession
                         try:
                             self.active_terminal = TerminalSession(project_path)
                             self.active_terminal.start_reading(asyncio.get_running_loop())
@@ -1711,7 +1711,7 @@ class AsyncHTTPServer:
                 self.send_response(writer, 400, b'{"error":"term_id, command and projectPath required"}', "application/json")
                 return
                 
-            from opalacoder.terminal_manager import TerminalSession
+            from omnime.terminal_manager import TerminalSession
             try:
                 term = TerminalSession(project_path)
                 term.start_reading(asyncio.get_running_loop())
@@ -1742,7 +1742,7 @@ class AsyncHTTPServer:
                 return
             import subprocess
             try:
-                git_cmd = ["git", f"--git-dir={os.path.join(project_path, '.opalacoder', '.shadowgit')}", f"--work-tree={project_path}"] if is_shadow else ["git"]
+                git_cmd = ["git", f"--git-dir={os.path.join(project_path, '.omnime', '.shadowgit')}", f"--work-tree={project_path}"] if is_shadow else ["git"]
                 res = subprocess.run(
                     git_cmd + ["status", "--porcelain"],
                     cwd=project_path,
@@ -1785,13 +1785,13 @@ class AsyncHTTPServer:
                 return
             import subprocess
             try:
-                git_cmd = ["git", f"--git-dir={os.path.join(project_path, '.opalacoder', '.shadowgit')}", f"--work-tree={project_path}"] if is_shadow else ["git"]
+                git_cmd = ["git", f"--git-dir={os.path.join(project_path, '.omnime', '.shadowgit')}", f"--work-tree={project_path}"] if is_shadow else ["git"]
                 # Commit only what is already staged (no implicit git add .)
                 res = subprocess.run(git_cmd + ["commit", "-m", message], cwd=project_path, capture_output=True, text=True)
                 if res.returncode == 0:
                     self.send_response(writer, 200, b'{"success":true}', "application/json")
                 elif "nothing to commit" in res.stdout or "nothing added to commit" in res.stdout:
-                    from opalacoder.i18n import _
+                    from omnime.i18n import _
                     self.send_response(writer, 400, json.dumps({"error": _("commit_nothing")}).encode('utf-8'), "application/json")
                 else:
                     raise Exception(res.stderr or res.stdout or "Git commit failed")
@@ -1807,7 +1807,7 @@ class AsyncHTTPServer:
                 return
             import subprocess
             try:
-                git_cmd = ["git", f"--git-dir={os.path.join(project_path, '.opalacoder', '.shadowgit')}", f"--work-tree={project_path}"] if is_shadow else ["git"]
+                git_cmd = ["git", f"--git-dir={os.path.join(project_path, '.omnime', '.shadowgit')}", f"--work-tree={project_path}"] if is_shadow else ["git"]
                 diff = ""
                 if file_path_param:
                     # Check if file is untracked
@@ -1847,7 +1847,7 @@ class AsyncHTTPServer:
                 return
             import subprocess
             try:
-                git_cmd = ["git", f"--git-dir={os.path.join(project_path, '.opalacoder', '.shadowgit')}", f"--work-tree={project_path}"] if is_shadow else ["git"]
+                git_cmd = ["git", f"--git-dir={os.path.join(project_path, '.omnime', '.shadowgit')}", f"--work-tree={project_path}"] if is_shadow else ["git"]
                 res = subprocess.run(
                     git_cmd + ["log", f"--max-count={limit}", "--pretty=format:%H|%h|%an|%ar|%s"],
                     cwd=project_path, capture_output=True, text=True
@@ -1872,7 +1872,7 @@ class AsyncHTTPServer:
                 return
             import subprocess
             try:
-                git_cmd = ["git", f"--git-dir={os.path.join(project_path, '.opalacoder', '.shadowgit')}", f"--work-tree={project_path}"] if is_shadow else ["git"]
+                git_cmd = ["git", f"--git-dir={os.path.join(project_path, '.omnime', '.shadowgit')}", f"--work-tree={project_path}"] if is_shadow else ["git"]
                 if action == "stage":
                     subprocess.run(git_cmd + ["add", "--", file_path_param], cwd=project_path, check=True)
                 else:
@@ -1891,7 +1891,7 @@ class AsyncHTTPServer:
                 return
             import subprocess
             try:
-                git_cmd = ["git", f"--git-dir={os.path.join(project_path, '.opalacoder', '.shadowgit')}", f"--work-tree={project_path}"] if is_shadow else ["git"]
+                git_cmd = ["git", f"--git-dir={os.path.join(project_path, '.omnime', '.shadowgit')}", f"--work-tree={project_path}"] if is_shadow else ["git"]
                 # For untracked files, remove them; for tracked files, restore
                 res = subprocess.run(
                     git_cmd + ["ls-files", "--error-unmatch", "--", file_path_param],
@@ -1985,7 +1985,7 @@ class AsyncHTTPServer:
                 installed = False
             self.send_response(writer, 200, json.dumps({"installed": installed}).encode('utf-8'), "application/json")
         # 7i. Problems scan
-        elif path == '/api/opalacoder/problems' and method == 'GET':
+        elif path == '/api/omnime/problems' and method == 'GET':
             project_path = query.get('projectPath', [None])[0]
             if not project_path:
                 self.send_response(writer, 400, b'{"error":"projectPath parameter is required"}', "application/json")
@@ -2001,7 +2001,7 @@ class AsyncHTTPServer:
 
         # 7j. Web search config — GET
         elif path == '/api/settings/web-search' and method == 'GET':
-            from opalacoder.web_search_config import load_config
+            from omnime.web_search_config import load_config
             try:
                 cfg = load_config()
                 self.send_response(writer, 200, json.dumps(cfg).encode('utf-8'), "application/json")
@@ -2010,7 +2010,7 @@ class AsyncHTTPServer:
 
         # 7k. Web search config — POST (save)
         elif path == '/api/settings/web-search' and method == 'POST':
-            from opalacoder.web_search_config import save_config
+            from omnime.web_search_config import save_config
             try:
                 save_config(data)
                 self.send_response(writer, 200, b'{"success":true}', "application/json")
@@ -2019,14 +2019,14 @@ class AsyncHTTPServer:
 
         # 7m. Language — GET
         elif path == '/api/settings/language' and method == 'GET':
-            from opalacoder.ui_settings import load_ui_settings
+            from omnime.ui_settings import load_ui_settings
             cfg = load_ui_settings()
             self.send_response(writer, 200, json.dumps({"lang": cfg.get("lang", "")}).encode('utf-8'), "application/json")
 
         # 7n. Language — POST (set)
         elif path == '/api/settings/language' and method == 'POST':
-            from opalacoder.i18n import set_lang
-            from opalacoder.ui_settings import save_ui_settings
+            from omnime.i18n import set_lang
+            from omnime.ui_settings import save_ui_settings
             lang = data.get("lang", "")
             save_ui_settings({"lang": lang})
             # map frontend locale to backend lang key
@@ -2036,7 +2036,7 @@ class AsyncHTTPServer:
 
         # 7l. Web search MCP test
         elif path == '/api/settings/web-search/test' and method == 'POST':
-            from opalacoder.web_search_config import test_mcp
+            from omnime.web_search_config import test_mcp
             mcp_url = data.get("mcp_url", "").strip()
             mcp_tool = data.get("mcp_tool", "web_search") or "web_search"
             mcp_api_key = data.get("mcp_api_key", "").strip()
@@ -2063,16 +2063,16 @@ class AsyncHTTPServer:
 
 def start_gui_server(host="127.0.0.1", port=3000):
     import os
-    from opalacoder.config import DEFAULT_LANG
-    from opalacoder.i18n import set_lang
-    from opalacoder.ui_settings import load_ui_settings
+    from omnime.config import DEFAULT_LANG
+    from omnime.i18n import set_lang
+    from omnime.ui_settings import load_ui_settings
     saved_lang = load_ui_settings().get("lang", "")
     if saved_lang:
         backend_lang = "pt" if saved_lang.startswith("pt") else "en"
         set_lang(backend_lang)
     else:
         set_lang(DEFAULT_LANG)
-    # Path to gui directory inside opalacoder package
+    # Path to gui directory inside omnime package
     package_dir = os.path.dirname(os.path.abspath(__file__))
     static_dir = os.path.join(package_dir, "gui")
 
@@ -2082,7 +2082,7 @@ def start_gui_server(host="127.0.0.1", port=3000):
 
     server = AsyncHTTPServer(host=host, port=port, static_dir=static_dir)
 
-    import opalacoder.agent_stdin as agent_stdin
+    import omnime.agent_stdin as agent_stdin
 
     def web_event_hook(payload):
         for q in server.active_queues:
@@ -2222,7 +2222,7 @@ def start_gui_server(host="127.0.0.1", port=3000):
             pass
 
         window = webview.create_window(
-            title="OpalaCoder IDE",
+            title="OmniMe",
             url=url,
             width=width,
             height=height,
@@ -2231,7 +2231,7 @@ def start_gui_server(host="127.0.0.1", port=3000):
             zoomable=True,
         )
 
-        # print(f"[OpalaCoder] Launching desktop window -> {url}")
+        # print(f"[OmniMe] Launching desktop window -> {url}")
 
         icon_path = os.path.join(os.path.dirname(__file__), "icon.png")
         if not os.path.exists(icon_path):
@@ -2246,7 +2246,7 @@ def start_gui_server(host="127.0.0.1", port=3000):
             icon_path = None
 
         # webview.start() blocks the main thread until the window is closed.
-        storage_path = os.path.expanduser("~/.opalacoder/webview")
+        storage_path = os.path.expanduser("~/.omnime/webview")
         os.makedirs(storage_path, exist_ok=True)
         
         gui_engine = 'edgechromium' if getattr(sys, 'frozen', False) and sys.platform == 'win32' else None
@@ -2261,7 +2261,7 @@ def start_gui_server(host="127.0.0.1", port=3000):
 
         # Graceful fallback: open in the default web browser
         import webbrowser
-        print(f"[OpalaCoder] pywebview failed to launch ({type(e).__name__}: {e}) — opening browser at {url}")
+        print(f"[OmniMe] pywebview failed to launch ({type(e).__name__}: {e}) — opening browser at {url}")
         webbrowser.open(url)
         # Keep the server alive
         try:
@@ -2269,7 +2269,7 @@ def start_gui_server(host="127.0.0.1", port=3000):
         except KeyboardInterrupt:
             pass
 
-    print("\nStopping OpalaCoder IDE Server...")
+    print("\nStopping OmniMe Server...")
     try:
         server.stop()
     except Exception as e:

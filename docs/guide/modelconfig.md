@@ -1,24 +1,24 @@
-# OpalaCoder `modelconfigs`: How It Works
+# OmniMe `modelconfigs`: How It Works
 
 ## Overview
 
-In OpalaCoder, `modelconfigs` work as a configuration management system for the language models you use.
+In OmniMe, `modelconfigs` work as a configuration management system for the language models you use.
 
 They store refined model parameters and are part of the `assetstore` module, which is the local repository for reusable resources. The `assetstore` manages both:
 
 * `skills`
 * `modelconfigs`
 
-In short, `modelconfigs` allow OpalaCoder to reuse, share, and automatically apply model-specific configuration files across projects.
+In short, `modelconfigs` allow OmniMe to reuse, share, and automatically apply model-specific configuration files across projects.
 
 ---
 
 ## 1. Structure and Storage
 
-`modelconfigs` are stored as global asset packages inside the OpalaCoder installation directory:
+`modelconfigs` are stored as global asset packages inside the OmniMe installation directory:
 
 ```text
-opalacoder/assetstore/modelconfigs/
+omnime/assetstore/modelconfigs/
 ```
 
 Each model configuration contains two files:
@@ -62,12 +62,12 @@ When you create or load a project using a specific model, for example:
 ollama/gpt-oss:latest
 ```
 
-OpalaCoder attempts to apply the configuration associated with that model.
+OmniMe attempts to apply the configuration associated with that model.
 
-Project-specific model configurations are stored inside the hidden `.opalacoder` directory of the project, following this structure:
+Project-specific model configurations are stored inside the hidden `.omnime` directory of the project, following this structure:
 
 ```text
-<project-directory>/.opalacoder/modelsconfig/<provider>/<model_name>.yaml
+<project-directory>/.omnime/modelsconfig/<provider>/<model_name>.yaml
 ```
 
 The model identifier is adapted to be filesystem-safe.
@@ -88,17 +88,17 @@ file: gpt-oss__latest.yaml
 So the local project configuration would be stored as:
 
 ```text
-<project-directory>/.opalacoder/modelsconfig/ollama/gpt-oss__latest.yaml
+<project-directory>/.omnime/modelsconfig/ollama/gpt-oss__latest.yaml
 ```
 
 ---
 
 ## 3. Automatic Loading and Fallback Behavior
 
-Whenever the OpalaCoder interface requests the configuration for a model through the following API route:
+Whenever the OmniMe interface requests the configuration for a model through the following API route:
 
 ```text
-/api/opalacoder/model-config
+/api/omnime/model-config
 ```
 
 defined in:
@@ -111,21 +111,21 @@ the system follows this lookup order:
 
 ### Step 1: Look for the local project configuration
 
-OpalaCoder first checks whether the exact configuration file exists inside:
+OmniMe first checks whether the exact configuration file exists inside:
 
 ```text
-.opalacoder/modelsconfig/...
+.omnime/modelsconfig/...
 ```
 
 ### Step 2: Try a fuzzy match
 
-If the exact file is not found, OpalaCoder tries to find an approximate match among the local configuration files available for the same provider.
+If the exact file is not found, OmniMe tries to find an approximate match among the local configuration files available for the same provider.
 
 ### Step 3: Search the Global AssetStore
 
-If no local configuration is found, OpalaCoder searches the Global AssetStore.
+If no local configuration is found, OmniMe searches the Global AssetStore.
 
-If a compatible global `modelconfig` package exists, OpalaCoder automatically installs or copies that global configuration into the current project and then loads it.
+If a compatible global `modelconfig` package exists, OmniMe automatically installs or copies that global configuration into the current project and then loads it.
 
 This ensures that commonly used models can come preconfigured, so you do not need to manually adjust parameters for every new project.
 
@@ -133,12 +133,12 @@ This ensures that commonly used models can come preconfigured, so you do not nee
 
 ## 4. Exporting a `modelconfig`
 
-You can refine a model configuration through the OpalaCoder interface and export it.
+You can refine a model configuration through the OmniMe interface and export it.
 
 The export route is:
 
 ```text
-/api/opalacoder/export-modelconfig
+/api/omnime/export-modelconfig
 ```
 
 This route receives the modified parameters, creates a temporary `.yaml` file, packages it into a `.zip`, generates the corresponding `.metadata` file, and saves everything to the destination folder you choose.
@@ -154,7 +154,7 @@ This allows you to:
 
 ## Summary
 
-`modelconfigs` are OpalaCoder’s mechanism for ensuring portability, modularity, and reuse of LLM configurations through YAML files.
+`modelconfigs` are OmniMe’s mechanism for ensuring portability, modularity, and reuse of LLM configurations through YAML files.
 
 They allow model parameters to be packaged, shared, automatically discovered, and applied across different projects.
 
@@ -162,7 +162,7 @@ They allow model parameters to be packaged, shared, automatically discovered, an
 
 # Currently Supported `modelconfig` Parameters
 
-OpalaCoder currently supports a strictly validated set of `modelconfig` parameters.
+OmniMe currently supports a strictly validated set of `modelconfig` parameters.
 
 These parameters are divided into categories and cover standard text generation settings, special model modes, vision and attachment handling, and advanced agent/memory behavior.
 
@@ -720,6 +720,6 @@ tool_role_workaround: ""
 
 ## Final Notes
 
-The `modelconfigs` feature provides a portable and reusable way to manage LLM behavior in OpalaCoder.
+The `modelconfigs` feature provides a portable and reusable way to manage LLM behavior in OmniMe.
 
 It allows each model to have its own validated YAML configuration, while also supporting project-level overrides, fuzzy matching, automatic fallback from the Global AssetStore, and exportable configuration packages.

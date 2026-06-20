@@ -33,7 +33,7 @@ run_python_script("<ABSOLUTE-PATH>/run_workflow.py", "--request-file <REQUEST-FI
 `run_python_script("/home/user/project/skills/implement-feature/scripts/run_workflow.py", "--request-file /tmp/request_456.txt")`
 
 3. Adding a new dark mode toggle feature:
-`run_python_script("/opt/opalacoder/skills/implement-feature/scripts/run_workflow.py", "--request-file /var/tmp/dark_mode_req.txt")`
+`run_python_script("/opt/omnime/skills/implement-feature/scripts/run_workflow.py", "--request-file /var/tmp/dark_mode_req.txt")`
 
 Important rules:
 - **DO NOT** type the request text directly into the command. The request is already saved in the file indicated in your prompt (`--request-file`). This prevents shell parsing errors with parentheses and quotes.

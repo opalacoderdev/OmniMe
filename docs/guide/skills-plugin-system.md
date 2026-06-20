@@ -1,6 +1,6 @@
 # Skills & Plugin System
 
-OpalaCoder uses **skills** to give the orchestrator language-specific knowledge, and **plugins** to give workers language-specific tools. Both are declared in `.md` skill files and loaded automatically when a project uses that skill.
+OmniMe uses **skills** to give the orchestrator language-specific knowledge, and **plugins** to give workers language-specific tools. Both are declared in `.md` skill files and loaded automatically when a project uses that skill.
 
 ---
 
@@ -15,7 +15,7 @@ OpalaCoder uses **skills** to give the orchestrator language-specific knowledge,
 
 ## Skill File Format
 
-Skill files live in the `skills/` directory (project-level, package-level, or `~/.opalacoder/skills/`).
+Skill files live in the `skills/` directory (project-level, package-level, or `~/.omnime/skills/`).
 
 ```markdown
 tags: html, css, javascript, js, web, frontend
@@ -61,12 +61,12 @@ tools:
 
 ## Plugin Search Order
 
-When loading a tool, OpalaCoder searches for `<module_name>.py` in the following directories, **in order of priority**:
+When loading a tool, OmniMe searches for `<module_name>.py` in the following directories, **in order of priority**:
 
 1. `{project_path}/plugins/` — project-local plugins (highest priority)
-2. `{cwd}/.opalacoder/plugins/` — workspace plugins
-3. `~/.opalacoder/plugins/` — user-global plugins
-4. `{opalacoder_package}/plugins/` — built-in plugins (lowest priority)
+2. `{cwd}/.omnime/plugins/` — workspace plugins
+3. `~/.omnime/plugins/` — user-global plugins
+4. `{omnime_package}/plugins/` — built-in plugins (lowest priority)
 
 The first directory containing the module wins. This allows projects to override built-in tools with custom implementations.
 
@@ -97,16 +97,16 @@ def check_api_contracts(path: str = ".") -> str:
 
 ### Function signature rules
 
-- Parameters must have **type annotations** and **default values** — OpalaCoder builds a Pydantic input model from them.
+- Parameters must have **type annotations** and **default values** — OmniMe builds a Pydantic input model from them.
 - The return type must be `str` (or a Pydantic `BaseModel`).
 - Use `path: str = "."` as the conventional first parameter for file/directory targeting.
 
 ### Accessing project context
 
-The project root is available via `opalacoder.tools.get_project_path()`:
+The project root is available via `omnime.tools.get_project_path()`:
 
 ```python
-from opalacoder.tools import get_project_path, AGENT_PROGRESS, _preview
+from omnime.tools import get_project_path, AGENT_PROGRESS, _preview
 
 @as_tool(name="my_tool", description="...")
 def my_tool(path: str = ".") -> str:
@@ -148,7 +148,7 @@ When a project has the `django_rest` skill active, workers will automatically ha
 
 ## Built-in Plugins
 
-OpalaCoder ships built-in plugins in `opalacoder/plugins/`:
+OmniMe ships built-in plugins in `omnime/plugins/`:
 
 | Module | Tool | Description |
 |--------|------|-------------|
@@ -204,12 +204,12 @@ Skill file (html_css_js.md)
 ```
 skills/my_skill.md          ← skill file with tools: frontmatter
 {project}/plugins/          ← project-specific plugin modules (highest priority)
-{cwd}/.opalacoder/plugins/  ← workspace plugins
-~/.opalacoder/plugins/      ← user-global plugins
-opalacoder/plugins/         ← built-in plugins (lowest priority)
+{cwd}/.omnime/plugins/  ← workspace plugins
+~/.omnime/plugins/      ← user-global plugins
+omnime/plugins/         ← built-in plugins (lowest priority)
 ```
 
-Key functions in `opalacoder/skills.py`:
+Key functions in `omnime/skills.py`:
 
 | Function | Purpose |
 |----------|---------|

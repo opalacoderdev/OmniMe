@@ -1,4 +1,4 @@
-"""Version Control System (VCS) strategies for OpalaCoder."""
+"""Version Control System (VCS) strategies for OmniMe."""
 
 import os
 import shutil
@@ -68,7 +68,7 @@ def _run_shadow_git(command: str, project_path: str | None = None) -> subprocess
     """Run a Git command using the internal shadow git directory."""
     if project_path is None:
         project_path = get_project_path()
-    shadow_dir = os.path.join(project_path, ".opalacoder", ".shadowgit")
+    shadow_dir = os.path.join(project_path, ".omnime", ".shadowgit")
     full_cmd = f'git --git-dir="{shadow_dir}" --work-tree="{project_path}" {command}'
     return subprocess.run(
         full_cmd,
@@ -80,7 +80,7 @@ def _run_shadow_git(command: str, project_path: str | None = None) -> subprocess
 
 def _init_shadow_git(project_path: str):
     """Initialize the shadow git repository if it doesn't exist."""
-    shadow_base = os.path.join(project_path, ".opalacoder")
+    shadow_base = os.path.join(project_path, ".omnime")
     shadow_dir = os.path.join(shadow_base, ".shadowgit")
     old_shadow_dir = os.path.join(shadow_base, ".git")
     gitignore_path = os.path.join(shadow_base, ".gitignore")

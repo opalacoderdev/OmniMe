@@ -48,7 +48,7 @@ class TerminalSession:
     def start_reading(self, loop):
         self.loop = loop
         if sys.platform == "win32" and self.process is None:
-            msg = "\r\n\x1b[31m[OpalaCoder] Para usar o terminal no Windows, instale o pacote: pip install pywinpty\x1b[0m\r\n"
+            msg = "\r\n\x1b[31m[OmniMe] Para usar o terminal no Windows, instale o pacote: pip install pywinpty\x1b[0m\r\n"
             for q in list(self.queues):
                 q.put_nowait(msg.encode('utf-8'))
             return

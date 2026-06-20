@@ -28,4 +28,4 @@ Consider using the `run_python_script` tool:
 3. If you want to inspect a project located in a relative subfolder named `frontend`:
 `run_python_script("skills/view-editor/scripts/run_view_editor.py", "--project-path ./frontend")`
 
-This script locates the staged editor state inside the project folder at `.opalacoder/_editor_state.json` and outputs the path, current selection, and full content in markdown.
+This script locates the staged editor state inside the project folder at `.omnime/_editor_state.json` and outputs the path, current selection, and full content in markdown.

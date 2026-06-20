@@ -8,7 +8,7 @@
   "statusBar": {
     "workspace": "Workspace: {{name}}",
     "noWorkspace": "No Workspace",
-    "agentRunning": "OpalaCoder Active..."
+    "agentRunning": "OmniMe Active..."
   },
   "explorerSidebar": {
     "header": "EXPLORER: PROJECTS",
@@ -56,11 +56,11 @@
     "save": "Save (Ctrl+S)",
     "restoreEditor": "Restore Editor",
     "maximizeEditor": "Maximize Editor",
-    "refineSelection": "Refine Selection (OpalaCoder)",
-    "fixSelection": "Fix Selection (OpalaCoder)",
-    "generateCode": "Generate Code (OpalaCoder)",
+    "refineSelection": "Refine Selection (OmniMe)",
+    "fixSelection": "Fix Selection (OmniMe)",
+    "generateCode": "Generate Code (OmniMe)",
     "inlinePromptTitle": "Inline Edit",
-    "inlinePromptPlaceholder": "Ask OpalaCoder...",
+    "inlinePromptPlaceholder": "Ask OmniMe...",
     "inlinePromptSend": "Send",
     "inlinePromptCancel": "Cancel",
     "inlinePromptRefineDefault": "Refine the selected code",
@@ -88,10 +88,10 @@
     "connectionOk": "✅ Connection OK",
     "connectionError": "❌ {{error}}",
     "you": "YOU",
-    "opalacoder": "OPALACODER",
+    "omnime": "OPALACODER",
     "setProjectFirst": "Set a project first...",
     "thinking": "Thinking...",
-    "askOpalaCoder": "Ask OpalaCoder...",
+    "askOmniMe": "Ask OmniMe...",
     "interruptAgent": "Interrupt agent"
   },
   "bottomPanel": {
@@ -264,13 +264,13 @@
     "fileRenameError": "Error renaming: {{error}}"
   },
   "onboarding": {
-    "welcome": "Welcome to OpalaCoder! 🚀",
+    "welcome": "Welcome to OmniMe! 🚀",
     "analyzingMessage": "We are analyzing your hardware to recommend the best AI architecture for you.",
     "viewRecommendation": "View Recommendation",
     "analyzingMachine": "Analyzing machine...",
     "hardwareDetected": "Hardware Detected: {{vram}}GB VRAM | {{ram}}GB RAM",
     "localTitle": "Excellent! 100% Local and Private",
-    "localMessage": "We detected you have powerful hardware. The best way to use OpalaCoder is installing Ollama to run models locally, for free and with total privacy.",
+    "localMessage": "We detected you have powerful hardware. The best way to use OmniMe is installing Ollama to run models locally, for free and with total privacy.",
     "cloudTitle": "Recommendation: Use Cloud API",
     "cloudMessage": "Autonomous coding agents require heavy reasoning. Since your machine has low dedicated memory (VRAM), running advanced models locally will be too slow. We recommend using a Cloud API (like Gemini or OpenAI) for a fast and fluid experience.",
     "installOllamaBtn": "Install Ollama and Create Pilot Project",
@@ -279,7 +279,7 @@
     "ollamaInstalledCompatible": "Ollama is already installed (v{{version}}) and compatible!",
     "startPilot": "Start Pilot Project",
     "updateRequired": "Update Required",
-    "updateMessage": "We detected Ollama (v{{version}}), but OpalaCoder requires version 0.30.5 or higher to fully support tool calls.",
+    "updateMessage": "We detected Ollama (v{{version}}), but OmniMe requires version 0.30.5 or higher to fully support tool calls.",
     "downloadUpdateBtn": "Download and Update Ollama",
     "ignoreStartBtn": "Ignore and Start Anyway",
     "installInstructions": "We will install Ollama on your machine. Please follow the instructions in the installer that will pop up.",

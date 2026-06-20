@@ -49,7 +49,7 @@ run_python_script("<ABSOLUTE-PATH>/check_contracts.py", "--project-path <PROJECT
 `run_python_script("/home/user/project/skills/html-css-js/scripts/check_contracts.py", "--project-path /home/user/project/frontend_app")`
 
 3. Checking a project located elsewhere:
-`run_python_script("/opt/opalacoder/skills/html-css-js/scripts/check_contracts.py", "--project-path /var/www/html/my-site")`
+`run_python_script("/opt/omnime/skills/html-css-js/scripts/check_contracts.py", "--project-path /var/www/html/my-site")`
 
 It reports `[CONTRACT ERROR]` / `[SYNTAX ERROR]` / `[WARNING]` / `[INFO]` lines.
 A `[CONTRACT ERROR]` indicating an incompatibility between the HTML and the JS must be fixed **in the pointed file** (usually the HTML, at the indicated line) — do not invent fixes outside what the detector points out.

@@ -394,7 +394,7 @@ export default function App() {
   // ── API calls ─────────────────────────────────────────────────────────────
   const fetchProjects = async () => {
     try {
-      const res = await fetch('/api/opalacoder/list-projects');
+      const res = await fetch('/api/omnime/list-projects');
       if (res.ok) {
         const data = await res.json();
         setProjects(data.projects || []);
@@ -418,7 +418,7 @@ export default function App() {
   const fetchProblems = async () => {
     if (!activeProject) return;
     try {
-      const res = await fetch(`/api/opalacoder/problems?projectPath=${encodeURIComponent(activeProject.project_path)}`);
+      const res = await fetch(`/api/omnime/problems?projectPath=${encodeURIComponent(activeProject.project_path)}`);
       if (res.ok) {
         const data = await res.json();
         setProblems(prev => {
@@ -788,7 +788,7 @@ export default function App() {
     const finalProjectPath = `${basePath}${sep}${newProjName}`;
 
     try {
-      const res = await fetch('/api/opalacoder/create-project', {
+      const res = await fetch('/api/omnime/create-project', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ project_name: newProjName, project_path: finalProjectPath, description: newProjDesc, model: newProjModel, worker_model: newProjWorkerModel, mode: newProjMode, api_key: newProjApiKey, api_base: newProjApiBase, worker_api_key: newProjWorkerApiKey, worker_api_base: newProjWorkerApiBase, model_params: Object.keys(newProjModelParams).length ? newProjModelParams : undefined, worker_model_params: Object.keys(newProjWorkerModelParams).length ? newProjWorkerModelParams : undefined }),
       });
@@ -809,7 +809,7 @@ export default function App() {
     const projName = projectToDelete;
     setProjectToDelete(null);
     try {
-      const res = await fetch('/api/opalacoder/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_name: projName, delete_dir: deleteDir }) });
+      const res = await fetch('/api/omnime/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_name: projName, delete_dir: deleteDir }) });
       if (res.ok) { addLog('info', `Projeto removido: ${projName}`); if (activeProject?.name === projName) setActiveProject(null); fetchProjects(); }
       else { const data = await res.json(); addLog('error', `Erro ao excluir: ${data.error}`); }
     } catch (err) { addLog('error', `Erro ao excluir: ${err.message}`); }
@@ -820,7 +820,7 @@ export default function App() {
     console.log("[DEBUG APP] Abrindo Configurações para projeto:", proj.name);
     let fresh = proj;
     try {
-      const res = await fetch('/api/opalacoder/list-projects');
+      const res = await fetch('/api/omnime/list-projects');
       if (res.ok) {
         const { projects: list } = await res.json();
         const found = list.find(p => p.name === proj.name);
@@ -841,7 +841,7 @@ export default function App() {
     setEditProjError('');
 
     try {
-      const res = await fetch('/api/opalacoder/update-project', {
+      const res = await fetch('/api/omnime/update-project', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ project_name: editingProject.name, display_name: editingProject.project_name, project_path: editingProject.project_path, model: editingProject.model, worker_model: editingProject.worker_model, mode: editingProject.mode, description: editingProject.description, model_params: editingProject.model_params, worker_model_params: editingProject.worker_model_params, api_key: editingProject.api_key, api_base: editingProject.api_base, worker_api_key: editingProject.worker_api_key, worker_api_base: editingProject.worker_api_base, use_shared_memory: editingProject.use_shared_memory }),
       });
@@ -863,7 +863,7 @@ export default function App() {
       return;
     }
     try {
-      const res = await fetch('/api/opalacoder/model-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectPath, model }) });
+      const res = await fetch('/api/omnime/model-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectPath, model }) });
       const data = await res.json();
       if (!data.found) {
         if (!silent) setModelConfigMsg(data.message);
@@ -872,7 +872,7 @@ export default function App() {
       if (silent) {
         setConfirmRequest({
           id: 'local-confirm',
-          prompt: `OpalaCoder encontrou configurações pré-definidas para o modelo "${data.model || model}". Deseja aplicar os parâmetros automaticamente?`,
+          prompt: `OmniMe encontrou configurações pré-definidas para o modelo "${data.model || model}". Deseja aplicar os parâmetros automaticamente?`,
           callback: (value) => {
             if (value === 'yes') {
               applyFn(data);
@@ -936,7 +936,7 @@ export default function App() {
         payloadParams.provider = provider;
       }
 
-      const res = await fetch('/api/opalacoder/export-modelconfig', {
+      const res = await fetch('/api/omnime/export-modelconfig', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -966,7 +966,7 @@ export default function App() {
     else if (dirPicker.target === 'import') {
       // Call import-project API
       try {
-        const res = await fetch('/api/opalacoder/import-project', {
+        const res = await fetch('/api/omnime/import-project', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ project_path: dirPicker.current })
         });
@@ -1036,7 +1036,7 @@ export default function App() {
   // ── Agent ─────────────────────────────────────────────────────────────────
   const handleInterruptAgent = async () => {
     try {
-      const res = await fetch('/api/opalacoder/interrupt', { method: 'POST' });
+      const res = await fetch('/api/omnime/interrupt', { method: 'POST' });
       if (res.ok) {
         addLog('info', 'Sinal de interrupção enviado ao agente.');
         setConfirmRequest(null);
@@ -1154,7 +1154,7 @@ export default function App() {
                 range.endLineNumber,
                 range.endColumn,
               );
-              editorRef.current.executeEdits('opalacoder-inline', [{
+              editorRef.current.executeEdits('omnime-inline', [{
                 range: monacoRange,
                 text: newCode,
                 forceMoveMarkers: true,
@@ -1201,7 +1201,7 @@ export default function App() {
 
     if (userText.trim().startsWith('/')) {
       try {
-        const res = await fetch('/api/opalacoder/slash-command', {
+        const res = await fetch('/api/omnime/slash-command', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt: userText.trim(), project_name: activeProject.name, project_path: activeProject.project_path }),
         });
@@ -1227,7 +1227,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('/api/opalacoder/run', {
+      const res = await fetch('/api/omnime/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           command: 'run', agent: 'chat_orchestrator', prompt: userText,
@@ -1273,7 +1273,7 @@ export default function App() {
     addLog('info', `✅ Confirmação: "${prompt}" → ${value}`);
     try {
       if (isSlashCommand) {
-        const res = await fetch('/api/opalacoder/slash-command/continue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, value }) });
+        const res = await fetch('/api/omnime/slash-command/continue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, value }) });
         const result = await res.json();
         if (result.status === 'done') {
           setChatMessages(prev => [...prev, { role: 'assistant', content: (result.messages || []).join('\n') || 'Comando executado.' }]);
@@ -1281,7 +1281,7 @@ export default function App() {
           fetchGitStatus();
         }
       } else {
-        await fetch('/api/opalacoder/input_response', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, value }) });
+        await fetch('/api/omnime/input_response', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, value }) });
       }
     } catch (err) { addLog('error', `Erro ao enviar confirmação: ${err.message}`); }
   };
@@ -1343,7 +1343,7 @@ export default function App() {
       "Your entire output must be just the markdown code block containing the final replacement code.";
 
     try {
-      const res = await fetch('/api/opalacoder/run', {
+      const res = await fetch('/api/omnime/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           command: 'run',
@@ -1437,7 +1437,7 @@ export default function App() {
 
         if (mode === 'generate') {
           const range = new monacoRef.current.Range(startLine, inlinePrompt.cursorCol, startLine, inlinePrompt.cursorCol);
-          editorRef.current.executeEdits('opalacoder_inline', [{
+          editorRef.current.executeEdits('omnime_inline', [{
             range: range,
             text: codeToInsert,
             forceMoveMarkers: true,
@@ -1449,7 +1449,7 @@ export default function App() {
           const endCol = model ? model.getLineMaxColumn(endLine) : 1;
 
           const range = new monacoRef.current.Range(startLine, 1, endLine, endCol);
-          editorRef.current.executeEdits('opalacoder_inline', [{
+          editorRef.current.executeEdits('omnime_inline', [{
             range: range,
             text: codeToInsert,
             forceMoveMarkers: true,
@@ -1494,7 +1494,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('/api/opalacoder/run', {
+      const res = await fetch('/api/omnime/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: 'run', agent: 'chat_orchestrator', prompt: userText, project_name: activeProject.name, project_path: activeProject.project_path, model: activeProject.model, current_file: selectedFile || '', editor_content: fileContent || '', selected_text: selectedText || '', chat_id: activeChatId, model_params: ephemeralParams }),
       });
@@ -1622,7 +1622,7 @@ export default function App() {
               onInlineSubmit={handleInlineSubmit}
               isInlineRunning={isInlineRunning}
               onInlineCancel={() => {
-                fetch('/api/opalacoder/interrupt', { method: 'POST' }).catch(() => { });
+                fetch('/api/omnime/interrupt', { method: 'POST' }).catch(() => { });
                 setIsInlineRunning(false);
               }}
               onToggleTerminal={() => {

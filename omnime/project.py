@@ -1,4 +1,4 @@
-"""Project management: create, load, save, and list OpalaCoder projects using SQLite."""
+"""Project management: create, load, save, and list OmniMe projects using SQLite."""
 
 import sqlite3
 import json
@@ -11,7 +11,11 @@ from .config import DEFAULT_DB_PATH
 
 
 def _ensure_dir(path: str) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if path == ":memory:":
+        return
+    dirname = os.path.dirname(path)
+    if dirname:
+        os.makedirs(dirname, exist_ok=True)
 
 
 def _conn(db_path: str) -> sqlite3.Connection:
@@ -33,7 +37,7 @@ def _init_schema(db_path: str) -> None:
                 model           TEXT NOT NULL DEFAULT '',
                 project_name    TEXT NOT NULL DEFAULT '',
                 project_path    TEXT NOT NULL DEFAULT '',
-                skills          TEXT NOT NULL DEFAULT '["opalacoder"]',
+                skills          TEXT NOT NULL DEFAULT '["omnime"]',
                 description     TEXT NOT NULL DEFAULT '',
                 request         TEXT NOT NULL DEFAULT '',
                 plan_text       TEXT NOT NULL DEFAULT '',
@@ -116,7 +120,7 @@ class ProjectData:
     worker_model: str = ""   # "" → falls back to the project.model
     project_name: str = ""
     project_path: str = ""
-    skills: list = field(default_factory=lambda: ["opalacoder"])
+    skills: list = field(default_factory=lambda: ["omnime"])
     description: str = ""
     request: str = ""
     plan_text: str = ""
@@ -222,9 +226,9 @@ class ProjectStore:
 
     def create(self, name: str, mode: str, model: str, project_name: str = "", project_path: str = "", skills: list = None, description: str = "", worker_model: str = "", api_key: str = None, api_base: str = None, worker_api_key: str = None, worker_api_base: str = None, model_params: dict = None, worker_model_params: dict = None, apply_modelconfig: bool = True) -> ProjectData:
         now = datetime.now(timezone.utc).isoformat()
-        _skills = skills if skills is not None else ["opalacoder"]
-        if "opalacoder" not in _skills:
-            _skills = ["opalacoder"] + _skills
+        _skills = skills if skills is not None else ["omnime"]
+        if "omnime" not in _skills:
+            _skills = ["omnime"] + _skills
         _model_params = model_params if model_params is not None else {}
         _worker_model_params = worker_model_params if worker_model_params is not None else _model_params.copy()
 
@@ -233,8 +237,8 @@ class ProjectStore:
         try:
             os.makedirs(abs_proj_path, exist_ok=True)
 
-            # 1. Initialize command-line skill inside the project's .opalacoder/skills/command-line/
-            shadow_skill_dir = os.path.join(abs_proj_path, ".opalacoder", "skills", "command-line")
+            # 1. Initialize command-line skill inside the project's .omnime/skills/command-line/
+            shadow_skill_dir = os.path.join(abs_proj_path, ".omnime", "skills", "command-line")
             os.makedirs(shadow_skill_dir, exist_ok=True)
 
             package_dir = os.path.dirname(os.path.abspath(__file__))
@@ -292,20 +296,20 @@ class ProjectStore:
             with open(env_path, "w", encoding="utf-8") as f:
                 f.writelines(env_lines)
 
-            # 4. Add .opalacoder/ to the project's own .gitignore so OpalaCoder
+            # 4. Add .omnime/ to the project's own .gitignore so OmniMe
             #    internal files don't appear in the user's git status.
             proj_gitignore = os.path.join(abs_proj_path, ".gitignore")
-            opalacoder_entry = ".opalacoder/"
+            omnime_entry = ".omnime/"
             try:
                 existing = ""
                 if os.path.isfile(proj_gitignore):
                     with open(proj_gitignore, "r", encoding="utf-8") as f:
                         existing = f.read()
-                if opalacoder_entry not in existing:
+                if omnime_entry not in existing:
                     with open(proj_gitignore, "a", encoding="utf-8") as f:
                         if existing and not existing.endswith("\n"):
                             f.write("\n")
-                        f.write(f"{opalacoder_entry}\n")
+                        f.write(f"{omnime_entry}\n")
             except Exception:
                 pass
 
@@ -338,7 +342,7 @@ class ProjectStore:
                         return re.sub(r'[-:_\s]+', '_', n).lower()
     
                     provider_dir, filename = _model_to_path(model)
-                    provider_dir_path = os.path.join(abs_proj_path, '.opalacoder', 'modelsconfig', provider_dir)
+                    provider_dir_path = os.path.join(abs_proj_path, '.omnime', 'modelsconfig', provider_dir)
                     config_path = os.path.join(provider_dir_path, filename)
                     
                     if not os.path.isfile(config_path):
@@ -525,8 +529,8 @@ class ProjectStore:
     def save(self, project: ProjectData) -> None:
         now = datetime.now(timezone.utc).isoformat()
         _skills = list(project.skills)
-        if "opalacoder" not in _skills:
-            _skills = ["opalacoder"] + _skills
+        if "omnime" not in _skills:
+            _skills = ["omnime"] + _skills
         _model_params = project.model_params if hasattr(project, "model_params") else {}
         _worker_model_params = project.worker_model_params if hasattr(project, "worker_model_params") and project.worker_model_params else _model_params.copy()
         

@@ -1,4 +1,4 @@
-# OpalaCoder — non-agent configuration
+# OmniMe — non-agent configuration
 # Agent model/LLM settings live in agents.yaml
 
 git_strategy: auto

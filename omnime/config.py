@@ -1,4 +1,4 @@
-"""Global configuration defaults for OpalaCoder."""
+"""Global configuration defaults for OmniMe."""
 
 import os
 import yaml
@@ -29,7 +29,7 @@ def get_opala_home() -> str:
                 return custom_path
         except Exception:
             pass
-    return str(pathlib.Path.home() / ".opalacoder")
+    return str(pathlib.Path.home() / ".omnime")
 
 global_env = pathlib.Path(get_opala_home()) / ".env"
 if global_env.exists():
@@ -54,7 +54,7 @@ def _load_yaml(filename: str) -> dict:
 _AGENTS_CONFIG = {} 
 _APP_CONFIG = _load_yaml("config.yaml")
 
-# Hardcoded defaults for internal OpalaCoder skills so they work without agents.yaml
+# Hardcoded defaults for internal OmniMe skills so they work without agents.yaml
 _CORE_AGENT_DEFAULTS = {
     "memgpt": {
         "num_ctx": 16384,
@@ -111,7 +111,7 @@ def _get_agents_config() -> dict:
     try:
         from .tools import get_project_path
         proj_path = get_project_path()
-        proj_yaml = pathlib.Path(proj_path) / ".opalacoder" / "agents.yaml"
+        proj_yaml = pathlib.Path(proj_path) / ".omnime" / "agents.yaml"
         if not proj_yaml.exists():
             proj_yaml = pathlib.Path(proj_path) / "agents.yaml"
             
@@ -125,7 +125,7 @@ def _get_agents_config() -> dict:
     return cfg
 
 # Model used for all agents (can be overridden via CLI --model)
-# Evaluated at module load to serve as CLI defaults (will read ~/.opalacoder/agents.yaml if present)
+# Evaluated at module load to serve as CLI defaults (will read ~/.omnime/agents.yaml if present)
 _initial_cfg = _get_agents_config()
 DEFAULT_MODEL = _initial_cfg.get("default", os.getenv("OPALA_MODEL", "ollama/gemma4:12b"))
 WORKER_MODEL = _initial_cfg.get("worker", _initial_cfg.get("alternative", "gemini/gemini-3.1-flash-lite"))
@@ -359,7 +359,7 @@ def get_run_logger():
 def setup_debug_logging():
     """Enable full debug logging for a run.
 
-    - Creates a timestamped log file: ~/.opalacoder/logs/run_<timestamp>.log
+    - Creates a timestamped log file: ~/.omnime/logs/run_<timestamp>.log
     - Logs every litellm call (full prompt + response) via success/failure callbacks.
     - Enables workflow step logs (oracle outputs, worker starts/results) to the same file.
     - Sets OPALACODER_WORKFLOW_DEBUG=1 so terminal.py debug_* functions also fire.
@@ -376,7 +376,7 @@ def setup_debug_logging():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = os.path.join(log_dir, f"run_{timestamp}.log")
 
-    logger = logging.getLogger(f"opalacoder.run.{timestamp}")
+    logger = logging.getLogger(f"omnime.run.{timestamp}")
     logger.setLevel(logging.DEBUG)
     logger.propagate = False
 

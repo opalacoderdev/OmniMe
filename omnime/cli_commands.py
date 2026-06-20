@@ -1,4 +1,4 @@
-"""REPL command registry and handlers for OpalaCoder CLI."""
+"""REPL command registry and handlers for OmniMe CLI."""
 
 from .project import ProjectStore, ProjectData
 from . import terminal as T
@@ -183,17 +183,17 @@ async def cmd_delete(state: REPLState, args: list[str]) -> str | None:
             except Exception as e:
                 T.error(_("dir_delete_failed", err=str(e)))
         else:
-            opalacoder_dir = os.path.join(project_to_delete.project_path, ".opalacoder")
-            if os.path.exists(opalacoder_dir):
+            omnime_dir = os.path.join(project_to_delete.project_path, ".omnime")
+            if os.path.exists(omnime_dir):
                 try:
-                    shutil.rmtree(opalacoder_dir)
+                    shutil.rmtree(omnime_dir)
                     T.success(_("vcs_deleted"))
                 except Exception as e:
                     T.error(_("vcs_delete_failed", err=str(e)))
 
     T.success(f"Project '{name}' deleted.")
     if state.project.name == name:
-        T.info("Current project was deleted. Please restart OpalaCoder.")
+        T.info("Current project was deleted. Please restart OmniMe.")
         return "break"
 
 
@@ -577,7 +577,7 @@ async def cmd_history(state: REPLState, args: list[str]) -> str | None:
     )
 
     role_styles = {"user": "bold cyan", "assistant": "bold green"}
-    role_labels = {"user": "You", "assistant": "OpalaCoder"}
+    role_labels = {"user": "You", "assistant": "OmniMe"}
 
     for i, msg in enumerate(messages, start=total - showing + 1):
         role = msg.get("role", "unknown")

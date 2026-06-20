@@ -1,6 +1,6 @@
-"""Persistent UI settings for OpalaCoder IDE.
+"""Persistent UI settings for OmniMe.
 
-Stored at ~/.opalacoder/ui_settings.json so they survive webview sessions,
+Stored at ~/.omnime/ui_settings.json so they survive webview sessions,
 which do not persist localStorage between app restarts.
 """
 

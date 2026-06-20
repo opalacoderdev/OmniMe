@@ -12,14 +12,14 @@ import asyncio
 import os
 
 
-from opalacoder.memgpt_runtime import (
+from omnime.memgpt_runtime import (
     resolve_skill_model,
     build_chat_orchestrator,
     build_run_skill_tool,
     make_intercepted_send_message,
 )
-from opalacoder.project import ProjectData
-from opalacoder.config import DEFAULT_MODEL, WORKER_MODEL
+from omnime.project import ProjectData
+from omnime.config import DEFAULT_MODEL, WORKER_MODEL
 
 
 def _project(tmp_path):
@@ -91,7 +91,7 @@ def test_run_skill_unknown_skill_returns_error(tmp_path):
 
 def test_build_chat_orchestrator_scopes_project_path(tmp_path):
     """Regression: building the MemGPT must set the global project context so the
-    sub-agent's file tools act inside the project, not the OpalaCoder repo root."""
-    from opalacoder.tools import get_project_path
+    sub-agent's file tools act inside the project, not the OmniMe repo root."""
+    from omnime.tools import get_project_path
     build_chat_orchestrator(_project(tmp_path), None)
     assert os.path.abspath(get_project_path()) == os.path.abspath(str(tmp_path))

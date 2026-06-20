@@ -2,7 +2,7 @@
 """Level-3 script for the `html-css-js` skill: HTML/CSS/JS bug & contract detector.
 
 Thin CLI wrapper around the existing detection logic
-(opalacoder.plugins.html_css_js_tools.search_html_css_js_bugs), reused here rather
+(omnime.plugins.html_css_js_tools.search_html_css_js_bugs), reused here rather
 than duplicated. Prints the structured report (including any [CONTRACT ERROR] /
 [SYNTAX ERROR] lines) to stdout.
 
@@ -18,9 +18,9 @@ import os
 import sys
 
 
-def _ensure_opalacoder_importable() -> None:
+def _ensure_omnime_importable() -> None:
     try:
-        import opalacoder  # noqa: F401
+        import omnime  # noqa: F401
         return
     except Exception:
         pass
@@ -44,12 +44,12 @@ def main(argv=None) -> int:
                         help="Project root to scope the analysis (default: cwd).")
     args = parser.parse_args(argv)
 
-    _ensure_opalacoder_importable()
+    _ensure_omnime_importable()
 
     # Scope file resolution to the project directory so get_project_path() inside
     # the detector points at the right tree.
-    from opalacoder.tools import set_project_context
-    from opalacoder.project import ProjectData
+    from omnime.tools import set_project_context
+    from omnime.project import ProjectData
 
     project_path = os.path.abspath(args.project_path or os.getcwd())
     set_project_context(
@@ -58,7 +58,7 @@ def main(argv=None) -> int:
         None,
     )
 
-    from opalacoder.plugins.html_css_js_tools import search_html_css_js_bugs
+    from omnime.plugins.html_css_js_tools import search_html_css_js_bugs
     fn = getattr(search_html_css_js_bugs, "_func", search_html_css_js_bugs)
     report = fn(args.path)
     print(report if report else "(no issues found)")

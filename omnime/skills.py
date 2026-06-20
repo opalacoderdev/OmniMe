@@ -22,15 +22,15 @@ def skill_search_dirs(project_path: str = "") -> list[str]:
 
     Target design (docs/specs/06 §5):
       1. <project>/skills/
-      2. <project>/.opalacoder/skills/
-      3. ~/.opalacoder/skills/
+      2. <project>/.omnime/skills/
+      3. ~/.omnime/skills/
       4. <package>/skills/  and  <repo-root>/skills/  (bundled / mandatory)
     """
     dirs: list[str] = []
     if project_path:
         dirs.append(os.path.join(project_path, "skills"))
-        dirs.append(os.path.join(project_path, ".opalacoder", "skills"))
-    dirs.append(os.path.expanduser("~/.opalacoder/skills"))
+        dirs.append(os.path.join(project_path, ".omnime", "skills"))
+    dirs.append(os.path.expanduser("~/.omnime/skills"))
     package_dir = os.path.dirname(os.path.abspath(__file__))
     dirs.append(os.path.join(package_dir, "skills"))
     repo_root = os.path.dirname(package_dir)

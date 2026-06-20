@@ -3,7 +3,7 @@ import subprocess
 import sys
 import yaml
 import pytest
-from opalacoder.project import ProjectStore
+from omnime.project import ProjectStore
 
 def test_command_line_skill_initialization(tmp_path):
     db_file = str(tmp_path / "test.db")
@@ -29,9 +29,9 @@ def test_command_line_skill_initialization(tmp_path):
     assert "skills" in data
     assert "command-line" in data["skills"]
     
-    # 2. Check that command-line skill files are copied under .opalacoder/skills/command-line/
-    skill_manifest = proj_dir / ".opalacoder" / "skills" / "command-line" / "SKILL.md"
-    skill_script = proj_dir / ".opalacoder" / "skills" / "command-line" / "scripts" / "command_executor.py"
+    # 2. Check that command-line skill files are copied under .omnime/skills/command-line/
+    skill_manifest = proj_dir / ".omnime" / "skills" / "command-line" / "SKILL.md"
+    skill_script = proj_dir / ".omnime" / "skills" / "command-line" / "scripts" / "command_executor.py"
     
     assert skill_manifest.exists()
     assert skill_script.exists()

@@ -8,7 +8,7 @@ Covers:
 """
 
 import pytest
-from opalacoder.config import get_agent_llm_kwargs
+from omnime.config import get_agent_llm_kwargs
 
 
 # Agents whose tool_calls field must be populated → thinking must be disabled.

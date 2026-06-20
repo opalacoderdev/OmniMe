@@ -1,6 +1,6 @@
-# OpalaCoder Technical Overview
+# OmniMe Technical Overview
 
-This document contains the deep-dive technical details, architecture descriptions, and configuration options for OpalaCoder IDE.
+This document contains the deep-dive technical details, architecture descriptions, and configuration options for OmniMe.
 
 ## Core Architecture & Features
 
@@ -19,11 +19,11 @@ Capabilities are defined as modular **skills** (defined via `SKILL.md` declarati
 ### 4. Code Generation (`implement-feature` Skill)
 Software development and bug-fixing tasks are handled by the default `implement-feature` skill, running a structured Plan → Execute → Verify loop:
 - **Interactive Planning**: Generates high-level task plans and refines them based on user feedback.
-- **Shadow Git Checkout**: Automatically checkpoints code to an isolated repository (`.opalacoder/.git`) before plan execution, allowing instant rollback via `/undo`.
+- **Shadow Git Checkout**: Automatically checkpoints code to an isolated repository (`.omnime/.git`) before plan execution, allowing instant rollback via `/undo`.
 - **Auto-Linting**: Validates changes using syntax checkers (`node --check`, `py_compile`) after each file edit, letting the worker self-correct syntax errors autonomously.
 
 ### 5. Web-Based IDE GUI
-OpalaCoder features an integrated desktop GUI built using React, Vite, and `pywebview`:
+OmniMe features an integrated desktop GUI built using React, Vite, and `pywebview`:
 - **Cross-Platform Support**: Works seamlessly on Linux and Windows. If `pywebview` is not available, it automatically falls back to hosting a local web server and launching the interface in your default browser.
 - **Integrated Terminal**: Includes a real-time xterm.js terminal with shell/PTY integration for running and inspecting commands natively.
 - **Git Source Control Sidebar**: A dedicated panel that tracks file modifications (color-coded as Modified/Untracked/Deleted) and provides a commit interface.
@@ -48,7 +48,7 @@ OpalaCoder features an integrated desktop GUI built using React, Vite, and `pywe
 ### 7. Modular Architecture
 
 ```text
-opalacoder/
+omnime/
 ├── cli.py                  Entrypoint, project loading, REPL loop
 ├── memgpt_runtime.py       MemGPT chat orchestrator and run_skill tool integration
 ├── agents.py               Agent creation helper functions
@@ -84,14 +84,14 @@ opalacoder/
 - **Desktop Window Mode (Optional)**: Launches a native app window using `pywebview`.
   - **Windows**: Works out of the box using Windows Webview2 (Edge).
   - **Linux**: Requires **WebKit2GTK** python bindings (specifically `python3-gi` and `gir1.2-webkit2-4.1`) or **Qt5/Qt6** (PyQt/PySide) installed on the system.
-  - **Browser Fallback**: If desktop window dependencies are missing, OpalaCoder automatically starts the IDE server and opens it in your default web browser (`http://127.0.0.1:3000`).
+  - **Browser Fallback**: If desktop window dependencies are missing, OmniMe automatically starts the IDE server and opens it in your default web browser (`http://127.0.0.1:3000`).
 - **Frontend Development (Optional)**: If you intend to compile the React/Vite frontend source code under `gui_src/`, you will need **Node.js 18+** and **npm**. (Compiled assets are already bundled in default packages).
 
 ---
 
 ## Execution Modes Reference
 
-OpalaCoder supports three main execution modes:
+OmniMe supports three main execution modes:
 
 ### 1. Web-Based IDE GUI (Default)
 Launches the integrated React desktop application. It opens as a local app window (via `pywebview`) or falls back to your web browser:
@@ -118,7 +118,7 @@ python main.py --stdin
 
 ## Configuration (`agents.yaml`)
 
-Configure model mappings and agent parameters inside `~/.opalacoder/agents.yaml`:
+Configure model mappings and agent parameters inside `~/.omnime/agents.yaml`:
 
 ```yaml
 default: ollama/gemma4:12b      # default local model

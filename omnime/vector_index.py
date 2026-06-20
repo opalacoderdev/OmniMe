@@ -4,7 +4,7 @@ Chunks every text file in the project into overlapping windows of lines,
 embeds them via litellm (Ollama by default, sentence-transformers as fallback),
 stores embeddings in SQLite, and retrieves top-K chunks by cosine similarity.
 
-Storage: <project_root>/.opalacoder/vector_index.sqlite
+Storage: <project_root>/.omnime/vector_index.sqlite
 Rebuild: incremental by file mtime — only re-embeds changed files.
 """
 
@@ -38,7 +38,7 @@ class RankedChunk(NamedTuple):
 # ---------------------------------------------------------------------------
 
 _SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
-              ".mypy_cache", "dist", "build", ".opalacoder"}
+              ".mypy_cache", "dist", "build", ".omnime"}
 _BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2",
                ".ttf", ".eot", ".pdf", ".zip", ".gz", ".bin", ".sqlite",
                ".sqlite-shm", ".sqlite-wal", ".pyc", ".pyo"}
@@ -156,7 +156,7 @@ class VectorIndex:
 
     def __init__(self, project_root: str | Path):
         self._root = Path(project_root)
-        db_dir = self._root / ".opalacoder"
+        db_dir = self._root / ".omnime"
         db_dir.mkdir(parents=True, exist_ok=True)
         self._db_path = db_dir / "vector_index.sqlite"
         self._conn: sqlite3.Connection | None = None

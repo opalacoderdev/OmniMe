@@ -27,7 +27,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
 
   const finishOnboarding = async (config) => {
     try {
-      await fetch('/api/opalacoder/create-project', {
+      await fetch('/api/omnime/create-project', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)
@@ -55,7 +55,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
         // Assume user completes it in powershell
         finishOnboarding({
           project_name: "Projeto Piloto (Ollama)",
-          project_path: "~/OpalaCoderPilot",
+          project_path: "~/OmniMePilot",
           model: ollamaModel,
           mode: "plan",
           api_base: "http://localhost:11434/v1"
@@ -71,7 +71,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
   const handleCreateCloudProject = () => {
     const config = {
       project_name: "Projeto Piloto (API)",
-      project_path: "~/OpalaCoderPilot",
+      project_path: "~/OmniMePilot",
       model: apiProvider,
       mode: "plan"
     };
@@ -184,7 +184,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
                   </p>
                   <button className="vscode-button" onClick={() => finishOnboarding({
                     project_name: "Projeto Piloto (Ollama)",
-                    project_path: "~/OpalaCoderPilot",
+                    project_path: "~/OmniMePilot",
                     model: ollamaModel,
                     mode: "plan",
                     api_base: "http://localhost:11434/v1"
@@ -203,7 +203,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
                   </button>
                   <button className="vscode-button" style={{ marginLeft: '12px', backgroundColor: '#3c3c3c' }} onClick={() => finishOnboarding({
                     project_name: "Projeto Piloto (Ollama)",
-                    project_path: "~/OpalaCoderPilot",
+                    project_path: "~/OmniMePilot",
                     model: ollamaModel,
                     mode: "plan",
                     api_base: "http://localhost:11434/v1"
@@ -234,7 +234,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
             </div>
             <button className="vscode-button" onClick={() => finishOnboarding({
               project_name: "Projeto Piloto (Ollama)",
-              project_path: "~/OpalaCoderPilot",
+              project_path: "~/OmniMePilot",
               model: ollamaModel,
               mode: "plan",
               api_base: "http://localhost:11434/v1"
@@ -292,7 +292,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
               <button className="vscode-button" style={{ backgroundColor: '#3c3c3c' }} onClick={() => {
                 const config = {
                   project_name: "Projeto Piloto",
-                  project_path: "~/OpalaCoderPilot",
+                  project_path: "~/OmniMePilot",
                   model: apiProvider,
                   mode: "plan"
                 };
@@ -305,7 +305,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
               <button className="vscode-button" onClick={() => {
                 const config = {
                   project_name: "Projeto Piloto (API)",
-                  project_path: "~/OpalaCoderPilot",
+                  project_path: "~/OmniMePilot",
                   model: apiProvider,
                   mode: "plan"
                 };

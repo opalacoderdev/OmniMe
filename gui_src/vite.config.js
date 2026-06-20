@@ -18,7 +18,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: path.resolve(__dirname, '../opalacoder/gui'),
+    outDir: path.resolve(__dirname, '../omnime/gui'),
     emptyOutDir: true,
     rollupOptions: {
       output: {

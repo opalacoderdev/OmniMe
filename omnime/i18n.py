@@ -1,4 +1,4 @@
-"""Internationalization support for OpalaCoder CLI."""
+"""Internationalization support for OmniMe CLI."""
 
 _LANG = "en"
 
@@ -17,7 +17,7 @@ _STRINGS = {
         "list_desc": "Lists all sessions",
         "load_desc": "Loads another session",
         "delete_desc": "Deletes a session",
-        "exit_desc": "Exits OpalaCoder",
+        "exit_desc": "Exits OmniMe",
         "undo_desc": "Reverts the last change made by the agent",
         "commit_desc": "Forces a commit to the local shadow git control",
         "undo_success": "Last change successfully undone.",
@@ -36,7 +36,7 @@ _STRINGS = {
         "usage_delete": "Usage: /delete <name>",
         "session_deleted": "Session '{name}' deleted.",
         "current_deleted": "The current session was deleted. Loading 'default'.",
-        "exiting": "Exiting OpalaCoder. Goodbye!",
+        "exiting": "Exiting OmniMe. Goodbye!",
         "unknown_command": "Unknown command: {cmd}. Type /help for help.",
         "agent_thinking": "Agent thinking...",
         "agent_plan_triggered": "The agent triggered the planning mode for the demand: '{req}'",
@@ -144,7 +144,7 @@ _STRINGS = {
         "list_desc": "Lista todas as sessões",
         "load_desc": "Carrega outra sessão",
         "delete_desc": "Apaga uma sessão",
-        "exit_desc": "Sai do OpalaCoder",
+        "exit_desc": "Sai do OmniMe",
         "undo_desc": "Desfaz a última alteração feita pelo agente",
         "commit_desc": "Força o envio das alterações para o controle local",
         "undo_success": "Última alteração desfeita com sucesso.",
@@ -163,7 +163,7 @@ _STRINGS = {
         "usage_delete": "Uso: /delete <nome>",
         "session_deleted": "Sessão '{name}' apagada.",
         "current_deleted": "A sessão atual foi apagada. Carregando 'default'.",
-        "exiting": "Encerrando OpalaCoder. Até logo!",
+        "exiting": "Encerrando OmniMe. Até logo!",
         "unknown_command": "Comando desconhecido: {cmd}. Digite /help para ajuda.",
         "agent_thinking": "Agente pensando...",
         "agent_plan_triggered": "O agente acionou o modo de planejamento para a demanda: '{req}'",

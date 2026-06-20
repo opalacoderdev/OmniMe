@@ -45,9 +45,9 @@ def ensure_api_key(model: str) -> bool:
     # Set in current process
     os.environ[env_var] = key
 
-    save = Confirm.ask("Do you want to save this key to ~/.opalacoder/.env for future sessions?", default=True)
+    save = Confirm.ask("Do you want to save this key to ~/.omnime/.env for future sessions?", default=True)
     if save:
-        env_path = pathlib.Path.home() / ".opalacoder" / ".env"
+        env_path = pathlib.Path.home() / ".omnime" / ".env"
         env_path.parent.mkdir(parents=True, exist_ok=True)
         
         lines = []

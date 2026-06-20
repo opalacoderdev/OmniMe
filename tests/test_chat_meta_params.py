@@ -1,7 +1,7 @@
-"""Tests for opalacoder.chat_meta_params."""
+"""Tests for omnime.chat_meta_params."""
 
 import pytest
-from opalacoder.chat_meta_params import parse_meta_params, apply_meta_params
+from omnime.chat_meta_params import parse_meta_params, apply_meta_params
 
 
 # ── parse_meta_params ────────────────────────────────────────────────────────

@@ -1,9 +1,9 @@
 """Manual integration test: verify that saving project settings via
-/api/opalacoder/update-project correctly persists and applies all model_params.
+/api/omnime/update-project correctly persists and applies all model_params.
 
 This test:
 1. Creates a temporary project in an isolated DB.
-2. POSTs to /api/opalacoder/update-project with every known parameter.
+2. POSTs to /api/omnime/update-project with every known parameter.
 3. Reloads the project from the DB and asserts each value was persisted.
 4. Asserts that get_agent_llm_kwargs() and get_project_agent_params() reflect
    the saved values (i.e., they are picked up by the runtime).
@@ -18,9 +18,9 @@ import tempfile
 import asyncio
 import pytest
 
-from opalacoder.project import ProjectStore, ProjectData
-from opalacoder.config import get_agent_llm_kwargs, get_project_agent_params
-from opalacoder import tools as _tools
+from omnime.project import ProjectStore, ProjectData
+from omnime.config import get_agent_llm_kwargs, get_project_agent_params
+from omnime import tools as _tools
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ ALL_PARAMS = {**LITELLM_PARAMS, **AGENT_PARAMS}
 def _reset_project_session():
     """Restore _PROJECT_SESSION to None after each test to avoid state leakage."""
     yield
-    import opalacoder.tools as _t
+    import omnime.tools as _t
     _t._PROJECT_SESSION = None
 
 
@@ -82,7 +82,7 @@ def tmp_store(tmp_path):
 
 
 def _apply_update(store: ProjectStore, project: ProjectData, params: dict) -> ProjectData:
-    """Simulate what /api/opalacoder/update-project does."""
+    """Simulate what /api/omnime/update-project does."""
     import re
     validated = {}
     for k, v in params.items():
@@ -201,7 +201,7 @@ class TestUpdateProjectPersistence:
         reloaded = _reload(store, project.name)
         _inject_session(reloaded, store)
 
-        from opalacoder.memgpt_runtime import build_chat_orchestrator
+        from omnime.memgpt_runtime import build_chat_orchestrator
         memgpt = build_chat_orchestrator(reloaded, store)
 
         for key, expected in LITELLM_PARAMS.items():
@@ -212,7 +212,7 @@ class TestUpdateProjectPersistence:
 
     def test_sanitize_and_clamp_model_params(self):
         """Verify that sanitize_model_params correctly handles string numbers with commas, and clamps out of bounds values."""
-        from opalacoder.ide_server import sanitize_model_params
+        from omnime.ide_server import sanitize_model_params
         
         raw_params = {
             "temperature": "-0.5",  # below min 0.0

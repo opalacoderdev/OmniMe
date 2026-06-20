@@ -3,18 +3,18 @@ import httpx
 
 async def main():
     # Start the IDE server in a background task
-    from opalacoder.ide_server import start_gui_server
+    from omnime.ide_server import start_gui_server
     
     # We will patch start_gui_server or run it directly on port 3005
     print("Starting GUI server on port 3005...")
     # Run the server startup in a separate thread/task
     
     # Set up project path
-    project_path = "/home/gilzamir/projetos/OpalaCoder"
+    project_path = "/home/gilzamir/projetos/OmniMe"
     project_name = "bobenglish"
     
     # Make a run request
-    url = "http://127.0.0.1:3005/api/opalacoder/run"
+    url = "http://127.0.0.1:3005/api/omnime/run"
     payload = {
         "command": "run",
         "agent": "chat_orchestrator",
@@ -28,7 +28,7 @@ async def main():
     server_task = asyncio.create_task(asyncio.to_thread(start_gui_server, "127.0.0.1", 3005))
     await asyncio.sleep(3)
     
-    print("Sending request to /api/opalacoder/run...")
+    print("Sending request to /api/omnime/run...")
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             async with client.stream("POST", url, json=payload) as response:

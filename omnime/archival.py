@@ -15,7 +15,7 @@ def _get_chroma_client():
         from .config import get_opala_home
         
         # O banco será salvo no mesmo diretório global do projects.db
-        # ex: ~/.opalacoder/chroma
+        # ex: ~/.omnime/chroma
         db_path = Path(get_opala_home()) / "chroma"
         db_path.mkdir(parents=True, exist_ok=True)
         

@@ -86,7 +86,7 @@ export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, f
     };
 
     evs.onerror = () => {
-      term.write('\r\n\x1b[31m[OpalaCoder] Conexão com o terminal perdida. Reconectando...\x1b[0m\r\n');
+      term.write('\r\n\x1b[31m[OmniMe] Conexão com o terminal perdida. Reconectando...\x1b[0m\r\n');
     };
 
     // Forward keystrokes to the backend.

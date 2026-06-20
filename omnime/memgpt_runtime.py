@@ -19,9 +19,9 @@ The module is additive: the legacy intent-routing path in cli.py is untouched
 until the REPL is switched over (Phase 4).
 """
 from __future__ import annotations
-from opalacoder.tools import read_file
-from opalacoder.tools import get_project_overview
-from opalacoder.tools import run_command
+from omnime.tools import read_file
+from omnime.tools import get_project_overview
+from omnime.tools import run_command
 import os
 from typing import Any
 
@@ -82,7 +82,7 @@ def _apply_modelconfig_provider(model: str, project) -> str:
         return model
     import yaml as _yaml
     yaml_name = model_name.replace(":", "__") + ".yaml"
-    config_path = os.path.join(project_path, ".opalacoder", "modelsconfig", provider_dir, yaml_name)
+    config_path = os.path.join(project_path, ".omnime", "modelsconfig", provider_dir, yaml_name)
     if not os.path.isfile(config_path):
         return model
     try:
@@ -145,7 +145,7 @@ def make_intercepted_send_message(memgpt: MemGPTAgentBlock, skill_name: str):
     )
     def send_message(message: str) -> str:
         # 1. Show to the user (the sub-agent speaks directly).
-        T.console.print(f"\n[bold green]OpalaCoder ({skill_name}):[/bold green] {message}\n")
+        T.console.print(f"\n[bold green]OmniMe ({skill_name}):[/bold green] {message}\n")
         import json
         print(json.dumps({
             "event": "info",
@@ -221,7 +221,7 @@ def build_run_skill_tool(
         #   python <abs>/run_workflow.py --request-file <path>
         request_file = ""
         try:
-            _staging = os.path.join(project_path, ".opalacoder")
+            _staging = os.path.join(project_path, ".omnime")
             os.makedirs(_staging, exist_ok=True)
             request_file = os.path.join(_staging, f"_skill_request_{skill_name}.txt")
             with open(request_file, "w", encoding="utf-8") as _rf:
@@ -353,7 +353,7 @@ def build_run_skill_tool(
             termination_tools=["send_message"],
         )
 
-        from opalacoder.agent_stdin import print_event
+        from omnime.agent_stdin import print_event
         
         if worker_kwargs.get("stream", False):
             if worker_kwargs.get("think", False):
@@ -482,7 +482,7 @@ def _chat_orchestrator_body(project_path: str) -> str:
         if meta and meta["body"]:
             return meta["body"]
     return (
-        "You are the OpalaCoder chat-orchestrator. You operate in a strict TOOL-ONLY environment.\n"
+        "You are the OmniMe chat-orchestrator. You operate in a strict TOOL-ONLY environment.\n"
         "1. You MUST NEVER reply to the user with plain conversational text. If you want to communicate with the user (to provide analysis, code snippets, or report completion), YOU MUST use the 'send_message' tool.\n"
         "2. When a user request requires making changes to files, running terminal commands, or writing code, YOU MUST DELEGATE IT by calling run_skill(skill_name, context) using the most appropriate skill.\n"
         "3. You CAN and SHOULD use your tools (like read_file, get_project_overview, search_conversation_history) to investigate the user's request and diagnose the problem first.\n"
@@ -517,7 +517,7 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
     project_worker = getattr(project, "worker_model", "") or project_model or DEFAULT_MODEL
 
     # Scope all file/terminal tools to the project directory. Without this,
-    # get_project_path() falls back to the cwd (the OpalaCoder repo root) and the
+    # get_project_path() falls back to the cwd (the OmniMe repo root) and the
     # sub-agent's write_file/run_command would act outside the project.
     set_project_context(project, store)
 

@@ -29,7 +29,7 @@ from rich.live import Live
 
 from agenticblocks.blocks.llm.agent import AgentInput, LLMAgentBlock, _get_shared_router as _llm_router
 
-from opalacoder.config import (
+from omnime.config import (
     get_agent_debug,
     get_agent_heartbeats_scale_factor,
     get_agent_llm_kwargs,
@@ -37,18 +37,18 @@ from opalacoder.config import (
     get_agent_model,
     DEFAULT_MODEL,
 )
-from opalacoder.code_index import CODE_INDEX
-from opalacoder.tools import AGENT_PROGRESS, get_project_path
+from omnime.code_index import CODE_INDEX
+from omnime.tools import AGENT_PROGRESS, get_project_path
 from workflow_tools import get_workflow_tools
-from opalacoder.orchestrator import (
+from omnime.orchestrator import (
     BaseOrchestratorStrategy,
     register_orchestrator,
     _build_progress_panel,
     _deduplicate_response,
 )
-from opalacoder import terminal as T
-from opalacoder.i18n import _
-from opalacoder.planner import generate_panorama, refine_plan
+from omnime import terminal as T
+from omnime.i18n import _
+from omnime.planner import generate_panorama, refine_plan
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +289,7 @@ async def _oracle(
 # ---------------------------------------------------------------------------
 
 _WORKER_SYSTEM = """\
-You are OpalaCoder Worker — execute one atomic coding command using tools.
+You are OmniMe Worker — execute one atomic coding command using tools.
 
 Your prompt will have this structure:
   TASK GOAL: <why this command exists>
@@ -663,8 +663,8 @@ Correction task schema:
             # specs3 #4 — escalate on failure signals
             if any(s in result.lower() for s in _failure):
                 try:
-                    from opalacoder.config import WORKER_MODEL
-                    from opalacoder.api_keys import ensure_api_key
+                    from omnime.config import WORKER_MODEL
+                    from omnime.api_keys import ensure_api_key
                     if self.model != WORKER_MODEL and ensure_api_key(WORKER_MODEL):
                         AGENT_PROGRESS.last_tool = f"Escalating → {WORKER_MODEL[:20]}"
                         alt = await _run_command(cmd_index, command, WORKER_MODEL)
@@ -713,7 +713,7 @@ Correction task schema:
         worker_debug = get_agent_debug("worker", debug)
 
         # Set project context early so get_project_path() is correct for VCS and workers
-        from opalacoder.tools import set_project_context
+        from omnime.tools import set_project_context
         if session and store:
             set_project_context(session, store)
 
@@ -746,8 +746,8 @@ Correction task schema:
         # _vcs is kept alive so per-task checkpoints can be created inside the loop.
         _vcs = None
         try:
-            from opalacoder.vcs import get_vcs_strategy
-            from opalacoder.config import get_git_strategy
+            from omnime.vcs import get_vcs_strategy
+            from omnime.config import get_git_strategy
             _vcs = get_vcs_strategy(get_git_strategy(), get_project_path())
             _vcs.setup()
             _vcs.manual_commit("auto-checkpoint before plan execution")
@@ -885,7 +885,7 @@ Correction task schema:
             """
             if _vcs is None:
                 return []
-            from opalacoder.vcs import _run_shadow_git
+            from omnime.vcs import _run_shadow_git
             res = _run_shadow_git("status --porcelain")
             if res.returncode != 0:
                 return []

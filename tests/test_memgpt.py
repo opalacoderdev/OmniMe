@@ -6,13 +6,13 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, "/home/gil/projetos/agenticblocks/src")
 
-from opalacoder.memgpt_runtime import build_chat_orchestrator
-from opalacoder.project import ProjectData
-from opalacoder.store import ProjectStore
+from omnime.memgpt_runtime import build_chat_orchestrator
+from omnime.project import ProjectData, ProjectStore
 from agenticblocks.blocks.llm.agent import AgentInput
 
 async def test():
     project = ProjectData(
+        name="test_proj",
         project_path=os.getcwd(),
         project_name="TestProject",
         model="gemini-2.5-flash",  
@@ -52,4 +52,5 @@ async def test():
     except Exception as e:
         print(f"Teste finalizado: {e}")
 
-asyncio.run(test())
+if __name__ == "__main__":
+    asyncio.run(test())

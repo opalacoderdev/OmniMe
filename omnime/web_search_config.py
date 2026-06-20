@@ -1,6 +1,6 @@
-"""Web search configuration manager for OpalaCoder.
+"""Web search configuration manager for OmniMe.
 
-Manages the global web search settings persisted at ~/.opalacoder/web_search.json.
+Manages the global web search settings persisted at ~/.omnime/web_search.json.
 
 Config schema:
     {
@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-_CONFIG_PATH = Path.home() / ".opalacoder" / "web_search.json"
+_CONFIG_PATH = Path.home() / ".omnime" / "web_search.json"
 
 _DEFAULTS: dict[str, Any] = {
     "enabled": True,
@@ -48,7 +48,7 @@ def load_config() -> dict[str, Any]:
 
 
 def save_config(config: dict[str, Any]) -> None:
-    """Persist *config* to ~/.opalacoder/web_search.json."""
+    """Persist *config* to ~/.omnime/web_search.json."""
     _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     # Only store known keys
     to_save = {
@@ -128,7 +128,7 @@ async def _mcp_search(mcp_url: str, mcp_tool: str, query: str, max_results: int,
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
-        "User-Agent": "OpalaCoder/1.0",
+        "User-Agent": "OmniMe/1.0",
     }
     if mcp_api_key:
         headers["Authorization"] = f"Bearer {mcp_api_key}"

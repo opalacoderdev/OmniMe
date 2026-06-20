@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "opalacoder"
+name = "omnime"
 version = "0.2.5"
 description = "Autonomous coding agent with interactive planning and modular execution"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-    { name = "Gilzamir Gomes", email = "dev@opalacoder.com" }
+    { name = "Gilzamir Gomes", email = "dev@omnime.com" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -42,15 +42,15 @@ dependencies = [
 embeddings = ["sentence-transformers>=3.0.0"]
 
 [project.urls]
-"Homepage" = "https://github.com/opalacoderdev/OpalaCoder"
-"Bug Tracker" = "https://github.com/opalacoderdev/OpalaCoder/issues"
+"Homepage" = "https://github.com/omnimedev/OmniMe"
+"Bug Tracker" = "https://github.com/omnimedev/OmniMe/issues"
 
 [project.scripts]
-opalacoder = "opalacoder.cli:main"
+omnime = "omnime.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["opalacoder"]
+packages = ["omnime"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"config.yaml" = "opalacoder/config.yaml"
-"skills" = "opalacoder/skills"
+"config.yaml" = "omnime/config.yaml"
+"skills" = "omnime/skills"

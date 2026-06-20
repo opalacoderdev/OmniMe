@@ -5,7 +5,7 @@ import sys
 
 def test_view_editor_script(tmp_path):
     # Setup mock editor state
-    state_dir = tmp_path / ".opalacoder"
+    state_dir = tmp_path / ".omnime"
     state_dir.mkdir()
     state_file = state_dir / "_editor_state.json"
     

@@ -9,7 +9,7 @@ def main():
     args, _ = parser.parse_known_args()
 
     project_path = os.path.abspath(args.project_path)
-    state_file = os.path.join(project_path, ".opalacoder", "_editor_state.json")
+    state_file = os.path.join(project_path, ".omnime", "_editor_state.json")
 
     if not os.path.exists(state_file):
         print(f"No editor state found at '{state_file}'. Check if the IDE has run any commands yet.")

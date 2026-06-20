@@ -128,3 +128,4 @@ local_settings.py
 *.swo
 *~
 *.db
+.omnime/

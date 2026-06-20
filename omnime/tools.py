@@ -1,4 +1,4 @@
-"""Tools for the OpalaCoder Autonomous Agent (MemGPT pattern + HITL)."""
+"""Tools for the OmniMe Autonomous Agent (MemGPT pattern + HITL)."""
 import os
 import subprocess
 import sys
@@ -85,11 +85,11 @@ def set_project_context(session, store=None) -> None:
     if session:
         _PROJECT_PATH = os.path.abspath(session.project_path) if getattr(session, "project_path", "") else os.getcwd()
 
-        # Ensure .opalacoder/ is ignored by the user's own git so internal
+        # Ensure .omnime/ is ignored by the user's own git so internal
         # files (editor state, skill requests) never appear in their git status.
         try:
             proj_gitignore = os.path.join(_PROJECT_PATH, ".gitignore")
-            entry = ".opalacoder/"
+            entry = ".omnime/"
             existing = ""
             if os.path.isfile(proj_gitignore):
                 with open(proj_gitignore, "r", encoding="utf-8") as _f:
@@ -99,9 +99,9 @@ def set_project_context(session, store=None) -> None:
                     if existing and not existing.endswith("\n"):
                         _f.write("\n")
                     _f.write(f"{entry}\n")
-                # Untrack any .opalacoder/ files already committed to the user's git index.
+                # Untrack any .omnime/ files already committed to the user's git index.
                 subprocess.run(
-                    ["git", "rm", "--cached", "-r", "--ignore-unmatch", ".opalacoder/"],
+                    ["git", "rm", "--cached", "-r", "--ignore-unmatch", ".omnime/"],
                     cwd=_PROJECT_PATH, capture_output=True
                 )
         except Exception:
@@ -412,7 +412,7 @@ def run_python_script(script_path: str, args: str = "") -> str:
 @as_tool(name="run_interactive_command", description="Run a command that requires user interaction (e.g. npm create, interactive scripts, prompts). This opens a dedicated interactive terminal popup in the user's GUI, allowing them to answer the prompts safely. Use this WHENEVER a command needs human choices, waits for input, or requires a PTY. Do NOT use standard `exec` or `run_command` for interactive tasks, as they will hang.")
 async def run_interactive_command(command: str) -> str:
     import uuid
-    import opalacoder.terminal as T
+    import omnime.terminal as T
     
     AGENT_PROGRESS.update("interactive_cmd", _preview(command))
     term_id = "temp_" + str(uuid.uuid4())[:8]
@@ -459,7 +459,7 @@ def search_code(query: str, path: str = ".") -> str:
 async def ask_human(question: str) -> str:
     AGENT_PROGRESS.update("ask_human", _preview(question))
     
-    import opalacoder.terminal as T
+    import omnime.terminal as T
     ans = await T.aask(question)
     
     if not ans:
@@ -670,7 +670,7 @@ def update_achievements_memory(summary: str) -> str:
     AGENT_PROGRESS.update("update_achievements_memory", f"summary={summary[:50]}")
     TURN_ACHIEVEMENTS = summary
     try:
-        from opalacoder.agent_stdin import print_event
+        from omnime.agent_stdin import print_event
         print_event("achievements_update", {"content": summary})
     except Exception as e:
         pass
@@ -747,7 +747,7 @@ def search_conversation_history(query: str, limit: int = 5) -> str:
         "Search the web for current information, documentation, news, or any topic. "
         "Use this when you need information that may be recent, external, or not in your training data. "
         "Returns a list of results with titles, URLs and snippets. "
-        "Requires web search to be enabled in OpalaCoder settings."
+        "Requires web search to be enabled in OmniMe settings."
     ),
 )
 def web_search(query: str, max_results: int = 5) -> str:
@@ -761,7 +761,7 @@ def web_search(query: str, max_results: int = 5) -> str:
     if not is_enabled():
         return (
             "[web_search] Web search is currently disabled. "
-            "Enable it via the Web Search toggle in the OpalaCoder chat panel."
+            "Enable it via the Web Search toggle in the OmniMe chat panel."
         )
 
     # Bridge the async do_search into the synchronous tool interface.
