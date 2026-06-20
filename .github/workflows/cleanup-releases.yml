@@ -1,0 +1,44 @@
+name: Cleanup Old Releases
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: # Allows manual triggering from the Actions tab
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Delete older releases (keep last 3)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching releases..."
+          # gh release list outputs: title, release_type, tag_name, published_at
+          # we only want the tag_name, which is the 3rd column, but wait, if title has spaces, awk might break.
+          # better to use gh api or gh release list with custom format:
+          RELEASES=$(gh release list --limit 100 --exclude-drafts --exclude-pre-releases | awk '{print $(NF-1)}')
+          
+          # Alternatively, ensuring we just get the tags directly using gh api:
+          # gh api repos/{owner}/{repo}/releases -q '.[].tag_name'
+          TAGS=$(gh api repos/${{ github.repository }}/releases -q '.[].tag_name')
+          
+          TOTAL_RELEASES=$(echo "$TAGS" | wc -w)
+          
+          if [ -z "$TAGS" ] || [ "$TOTAL_RELEASES" -le 3 ]; then
+            echo "Total releases: $TOTAL_RELEASES. Keeping at most 3. Nothing to delete."
+            exit 0
+          fi
+          
+          # Skip the first 3
+          TAGS_TO_DELETE=$(echo "$TAGS" | tail -n +4)
+          
+          for tag in $TAGS_TO_DELETE; do
+            echo "Deleting release and tag: $tag"
+            gh release delete "$tag" -y --cleanup-tag || true
+          done
