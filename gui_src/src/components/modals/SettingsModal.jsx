@@ -37,7 +37,7 @@ export default function SettingsModal({
       .then(r => r.ok ? r.json() : null)
       .then(cfg => { if (cfg?.lang !== undefined) setSelectedLang(cfg.lang); })
       .catch(() => { });
-      
+
     fetch('/api/settings/omnimehome')
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data?.path) setOmnimeHome(data.path); })
@@ -176,21 +176,21 @@ export default function SettingsModal({
                     style={{ flex: 1 }}
                     placeholder="Leave empty for default"
                   />
-                  <button 
+                  <button
                     onClick={() => {
                       fetch('/api/settings/omnimehome', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ path: omnimeHome })
                       })
-                      .then(r => r.json())
-                      .then(res => {
-                        if (res.requiresRestart) {
-                          alert("Directory changed! Please restart OmniMe for changes to take effect.");
-                        } else if (res.error) {
-                          alert("Error: " + res.error);
-                        }
-                      });
+                        .then(r => r.json())
+                        .then(res => {
+                          if (res.requiresRestart) {
+                            alert("Directory changed! Please restart OmniMe for changes to take effect.");
+                          } else if (res.error) {
+                            alert("Error: " + res.error);
+                          }
+                        });
                     }}
                     className="vscode-button"
                   >
@@ -203,7 +203,7 @@ export default function SettingsModal({
               {/* Ephemeral Agent Settings */}
               <div className="flex flex-col" style={{ gap: '6px', borderTop: '1px solid var(--vscode-border)', paddingTop: '12px', marginTop: '6px' }}>
                 <label className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.ephemeralAgentTitle')}</label>
-                
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <div className="flex flex-col" style={{ gap: '4px' }}>
                     <label style={{ fontSize: '11px', color: '#a0a0a0' }}>{t('settingsModal.ephemeralMaxTokens')}</label>
@@ -275,11 +275,12 @@ export default function SettingsModal({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: 'var(--vscode-text-fg)' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.version')}</span>
-                <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--vscode-text-fg)' }}>0.2.5 Preview</span>
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--vscode-text-fg)' }}>0.2.5</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.author')}</span>
-                <span style={{ fontSize: '13px', color: 'var(--vscode-text-fg)' }}>dev@omnime.com</span>
+                <span style={{ fontSize: '13px', color: 'var(--vscode-text-fg)' }}>
+                  dev@opalacoder.com</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className="vscode-sidebar-section-title" style={{ padding: 0 }}>{t('settingsModal.license')}</span>
