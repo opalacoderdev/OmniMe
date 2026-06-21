@@ -29,13 +29,23 @@ chmod +x "$BIN_DIR/omnime"
 
 # Verifica se ~/.local/bin está no PATH
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-    echo "=========================================="
-    echo "ATENÇÃO: $BIN_DIR não está no seu PATH!"
-    echo "Para rodar o comando 'omnime' facilmente,"
-    echo "adicione a seguinte linha ao seu ~/.bashrc ou ~/.zshrc:"
-    echo "export PATH=\"\$HOME/.local/bin:\$PATH\""
-    echo "E então rode: source ~/.bashrc"
-    echo "=========================================="
+    echo "Adicionando $BIN_DIR ao seu PATH automaticamente..."
+    
+    # Adiciona no ~/.bashrc
+    if [ -f "$HOME/.bashrc" ]; then
+        if ! grep -q "$BIN_DIR" "$HOME/.bashrc"; then
+            echo -e "\n# Adicionado pelo instalador do OmniMe\nexport PATH=\"$BIN_DIR:\$PATH\"" >> "$HOME/.bashrc"
+        fi
+    fi
+    
+    # Adiciona no ~/.zshrc se existir
+    if [ -f "$HOME/.zshrc" ]; then
+        if ! grep -q "$BIN_DIR" "$HOME/.zshrc"; then
+            echo -e "\n# Adicionado pelo instalador do OmniMe\nexport PATH=\"$BIN_DIR:\$PATH\"" >> "$HOME/.zshrc"
+        fi
+    fi
+    
+    echo "PATH atualizado com sucesso!"
 fi
 
 echo "Limpando arquivos temporários..."
