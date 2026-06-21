@@ -5,6 +5,49 @@ on:
     types: [published]
 
 jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglib2.0-0 libsm6 libxext6 libxrender-dev libgl1-mesa-glx
+
+      - name: Install Project Dependencies
+        run: |
+          pip install .
+
+      - name: Build OmniMe ELF
+        run: |
+          chmod +x build_exe.sh
+          ./build_exe.sh
+
+      - name: Tar Executable
+        run: |
+          tar -czvf OmniMe-linux-x64.tar.gz -C dist OmniMe
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: OmniMe-linux-x64.tar.gz
+
   build-windows:
     runs-on: windows-latest
     permissions:
@@ -24,6 +67,11 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
+
+      - name: Install Project Dependencies
+        shell: pwsh
+        run: |
+          pip install .
 
       - name: Build OmniMe EXE
         shell: pwsh

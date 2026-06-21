@@ -1,24 +1,24 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 echo "=========================================="
-echo "       OmniMe - Build do Executável (Linux) "
+echo "       OmniMe - Build do Executável       "
 echo "=========================================="
 
-echo -e "\n[1/4] Instalando PyInstaller e dependências..."
+echo -e "\n[1/4] Instalando dependências e PyInstaller..."
 pip install pyinstaller wheel setuptools
 
 echo -e "\n[2/4] Construindo o frontend (React/Vite)..."
-cd gui_src
+pushd gui_src > /dev/null
 npm install
 npm run build
-cd ..
+popd > /dev/null
 
 echo -e "\n[3/4] Limpando diretórios de build antigos..."
-rm -rf build dist
+rm -rf build
 
 echo -e "\n[4/4] Empacotando com PyInstaller..."
-# A sintaxe de --add-data no Linux usa dois pontos (:)
+# A sintaxe de --add-data no Linux/macOS usa dois pontos (:)
 pyinstaller --name "OmniMe" \
             --windowed \
             --icon="icon.png" \
@@ -44,7 +44,6 @@ pyinstaller --name "OmniMe" \
             --collect-all "clr_loader" \
             --collect-all "PyQt6" \
             --collect-all "PyQt6-WebEngine" \
-            --collect-all "winpty" \
             --collect-all "pymupdf" \
             --collect-all "pymupdf4llm" \
             --collect-all "tree_sitter" \

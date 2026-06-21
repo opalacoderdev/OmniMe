@@ -32,6 +32,12 @@ Open your PowerShell and run the following command to download and install OmniM
 irm https://raw.githubusercontent.com/omnimedev/OmniMe/main/install.ps1 | iex
 ```
 
+#### Linux (1-Click Install)
+Open your terminal and run the following command:
+```bash
+curl -fsSL https://raw.githubusercontent.com/omnimedev/OmniMe/main/install.sh | bash
+```
+
 #### Python / Pip
 
 Install OmniMe directly via pip:
