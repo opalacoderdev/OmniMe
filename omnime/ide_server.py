@@ -2131,6 +2131,9 @@ def start_gui_server(host="127.0.0.1", port=3000):
             _os.environ['PYWEBVIEW_GUI'] = 'qt'
 
         import webview  # pywebview
+        
+        # Allow file downloads (like export markdown/pdf)
+        webview.settings['ALLOW_DOWNLOADS'] = True
 
         # Monkey-patch pywebview's Qt backend to use proper Qt enum values
         # instead of raw ints for setFeaturePermission. Modern Qt wrappers (PyQt6/PySide6)
@@ -2205,6 +2208,32 @@ def start_gui_server(host="127.0.0.1", port=3000):
 
                 _wv_qt2.BrowserView.__init__ = _patched_init
                 # print('[patch] BrowserView.__init__ patched successfully')
+                
+                # Patch on_download_requested for PyQt6 compatibility
+                _orig_on_download_requested = getattr(_wv_qt2.BrowserView, "on_download_requested", None)
+                if _orig_on_download_requested:
+                    def _patched_on_download_requested(self, download):
+                        try:
+                            from PyQt6.QtWidgets import QFileDialog
+                            import os
+                            old_path = download.url().path() if hasattr(download, 'url') else ""
+                            if hasattr(download, 'suggestedFileName'):
+                                default_name = download.suggestedFileName()
+                            else:
+                                default_name = os.path.basename(old_path)
+                            path, _ = QFileDialog.getSaveFileName(
+                                self, getattr(self, 'localization', {}).get('global.saveFile', 'Salvar Arquivo'), default_name
+                            )
+                            if path:
+                                if hasattr(download, 'setDownloadDirectory') and hasattr(download, 'setDownloadFileName'):
+                                    download.setDownloadDirectory(os.path.dirname(path))
+                                    download.setDownloadFileName(os.path.basename(path))
+                                elif hasattr(download, 'setPath'):
+                                    download.setPath(path)
+                                download.accept()
+                        except Exception as e:
+                            print('[patch download] FAILED:', e)
+                    _wv_qt2.BrowserView.on_download_requested = _patched_on_download_requested
         except Exception as e:
             print('[patch init] FAILED:', e)
 
