@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useLayoutEffect } from 'react';
 import { Plus, FolderPlus, Edit2, Trash2, Copy, ClipboardPaste } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -15,6 +15,19 @@ export default function ContextMenu({
   clipboardNode,
 }) {
   const { t } = useTranslation();
+  const menuRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (menuRef.current && contextMenu) {
+      const rect = menuRef.current.getBoundingClientRect();
+      if (rect.bottom > window.innerHeight) {
+        menuRef.current.style.top = `${window.innerHeight - rect.height - 5}px`;
+      }
+      if (rect.right > window.innerWidth) {
+        menuRef.current.style.left = `${window.innerWidth - rect.width - 5}px`;
+      }
+    }
+  }, [contextMenu]);
 
   if (!contextMenu) return null;
 
@@ -26,6 +39,7 @@ export default function ContextMenu({
 
   return (
     <div
+      ref={menuRef}
       className="vscode-context-menu"
       style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
     >

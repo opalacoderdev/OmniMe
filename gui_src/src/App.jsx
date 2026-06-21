@@ -17,6 +17,7 @@ import ExplorerSidebar from './components/ExplorerSidebar';
 import GitSidebar from './components/GitSidebar';
 import EditorPanel from './components/EditorPanel';
 import ChatPanel from './components/ChatPanel';
+import ChatSidebar from './components/ChatSidebar';
 import BottomPanel from './components/BottomPanel';
 import ContextMenu from './components/ContextMenu';
 
@@ -72,6 +73,7 @@ export default function App() {
   });
 
   // ── UI state ──────────────────────────────────────────────────────────────
+  const [layoutMode, setLayoutMode] = useState('chat');
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [activeSidebarTab, setActiveSidebarTab] = useState('explorer');
   const [contextMenu, setContextMenu] = useState(null);
@@ -1540,10 +1542,12 @@ export default function App() {
           gitChangesCount={gitChanges.length}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenHardware={() => setIsHardwareModalOpen(true)}
+          layoutMode={layoutMode}
+          setLayoutMode={setLayoutMode}
         />
 
         {/* Left Sidebar */}
-        {!isEditorMaximized && activeSidebarTab && (
+        {!isEditorMaximized && activeSidebarTab && layoutMode === 'ide' && (
           <aside className="vscode-sidebar" style={{ width: `${sidebarWidth}px` }}>
             {activeSidebarTab === 'explorer' ? (
               <ExplorerSidebar
@@ -1590,15 +1594,62 @@ export default function App() {
             )}
           </aside>
         )}
+        
+        {/* Chat Sidebar (Only in Chat Mode) */}
+        {!isEditorMaximized && layoutMode === 'chat' && (
+          <aside className="vscode-sidebar" style={{ width: `${sidebarWidth}px`, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <ChatSidebar 
+                chats={chats}
+                activeChatId={activeChatId}
+                setActiveChatId={setActiveChatId}
+                setChats={setChats}
+                activeProject={activeProject}
+                setChatMessages={setChatMessages}
+              />
+            </div>
+            
+            <div style={{ height: '4px', backgroundColor: 'var(--vscode-border)', cursor: 'row-resize', flexShrink: 0 }} />
+            
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <ExplorerSidebar
+                projects={projects}
+                activeProject={activeProject}
+                handleSelectProject={handleSelectProject}
+                onNewProject={() => { setShowNewProjectModal(true); setModelConfigMsg(''); setNewProjModelParams({}); }}
+                onImportProject={() => { setImportError(''); openDirPicker('import', '~'); }}
+                importError={importError}
+                onClearImportError={() => setImportError('')}
+                files={files}
+                selectedFile={selectedFile}
+                selectedNodes={selectedNodes}
+                fileContents={fileContents}
+                originalFileContents={originalFileContents}
+                handleNodeSelect={handleNodeSelect}
+                handleFileSelect={handleFileSelect}
+                handleNodeContextMenu={handleNodeContextMenu}
+                handleWorkspaceContextMenu={handleWorkspaceContextMenu}
+                draggedNode={draggedNode}
+                setDraggedNode={setDraggedNode}
+                dragOverPath={dragOverPath}
+                setDragOverPath={setDragOverPath}
+                handleMoveNode={handleMoveNode}
+                fetchFiles={fetchFiles}
+                openEditModal={openEditModal}
+                handleDeleteProject={handleDeleteProject}
+              />
+            </div>
+          </aside>
+        )}
 
         {/* Left resize handle */}
-        {!isEditorMaximized && activeSidebarTab && (
+        {!isEditorMaximized && ((activeSidebarTab && layoutMode === 'ide') || layoutMode === 'chat') && (
           <div className="vscode-resizer-horizontal" onMouseDown={(e) => startResizing(e, 'left')} />
         )}
 
         {/* Center — Editor + Bottom Panel */}
-        <main className="vscode-editor-panel">
-          {!isBottomMaximized && (
+        <main className="vscode-editor-panel" style={{ flex: layoutMode === 'chat' ? 0 : 1, display: layoutMode === 'chat' ? 'none' : 'flex' }}>
+          {!isBottomMaximized && layoutMode === 'ide' && (
             <EditorPanel
               selectedFile={selectedFile}
               openFiles={openFiles}
@@ -1670,13 +1721,14 @@ export default function App() {
         </main>
 
         {/* Right resize handle */}
-        {!isEditorMaximized && isChatVisible && (
+        {!isEditorMaximized && isChatVisible && layoutMode === 'ide' && (
           <div className="vscode-resizer-horizontal" onMouseDown={(e) => startResizing(e, 'right')} />
         )}
 
         {/* Chat Panel */}
-        {!isEditorMaximized && (
+        {(!isEditorMaximized && (isChatVisible || layoutMode === 'chat')) && (
           <ChatPanel
+            isChatMode={layoutMode === 'chat'}
             chatMessages={chatMessages}
             chatInput={chatInput}
             setChatInput={setChatInput}

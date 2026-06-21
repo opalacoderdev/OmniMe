@@ -30,6 +30,7 @@ export default function ChatPanel({
   setChatMessages,
   pendingAttachments,
   setPendingAttachments,
+  isChatMode
 }) {
   const { t } = useTranslation();
   const historyRef = useRef(null);
@@ -417,7 +418,10 @@ export default function ChatPanel({
   };
 
   return (
-    <aside className="vscode-chat" style={{ width: `${chatWidth}px` }}>
+    <aside 
+      className="vscode-chat" 
+      style={isChatMode ? { flex: 1, borderLeft: 'none', width: '100%' } : { width: `${chatWidth}px` }}
+    >
       <TextContextMenu
         menu={menu}
         onCopy={handleCopy}
@@ -466,45 +470,49 @@ export default function ChatPanel({
           >
             <Eraser size={14} />
           </button>
-          <button
-            onClick={() => setIsChatVisible(false)}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)' }}
-          >
-            <X size={14} />
-          </button>
-        </div>
-      </div>
-      
-      {/* Chat Selector Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 10px', borderBottom: '1px solid var(--vscode-border)', background: 'var(--vscode-sidebar-bg)', minHeight: '28px', gap: '6px' }}>
-        <select 
-          className="vscode-settings-input" 
-          value={activeChatId} 
-          onChange={(e) => handleSwitchChat(e.target.value)}
-          style={{ flex: 1, padding: '2px 4px', fontSize: '11px', height: '22px' }}
-        >
-          {chats.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <div style={{ display: 'flex', gap: '4px' }}>
-          <button onClick={() => setShowSearchModal(true)} title={t('chat.searchChats', 'Search Chats')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)', display: 'flex', alignItems: 'center', padding: '2px' }}>
-            <Search size={14} />
-          </button>
-          <button onClick={handleCreateChatClick} title="Novo Chat" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#4ec9b0', display: 'flex', alignItems: 'center', padding: '2px' }}>
-            <Plus size={14} />
-          </button>
-          {activeChatId !== 'main' && (
-            <button onClick={(e) => handleDeleteChatClick(activeChatId, e)} title="Deletar Chat Atual" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', alignItems: 'center', padding: '2px' }}>
-              <Trash2 size={14} />
+          {!isChatMode && (
+            <button
+              onClick={() => setIsChatVisible(false)}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)' }}
+            >
+              <X size={14} />
             </button>
           )}
         </div>
       </div>
+      
+      {/* Chat Selector Toolbar - Only shown in IDE mode */}
+      {!isChatMode && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 10px', borderBottom: '1px solid var(--vscode-border)', background: 'var(--vscode-sidebar-bg)', minHeight: '28px', gap: '6px' }}>
+          <select 
+            className="vscode-settings-input" 
+            value={activeChatId} 
+            onChange={(e) => handleSwitchChat(e.target.value)}
+            style={{ flex: 1, padding: '2px 4px', fontSize: '11px', height: '22px' }}
+          >
+            {chats.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button onClick={() => setShowSearchModal(true)} title={t('chat.searchChats', 'Search Chats')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)', display: 'flex', alignItems: 'center', padding: '2px' }}>
+              <Search size={14} />
+            </button>
+            <button onClick={handleCreateChatClick} title="Novo Chat" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#4ec9b0', display: 'flex', alignItems: 'center', padding: '2px' }}>
+              <Plus size={14} />
+            </button>
+            {activeChatId !== 'main' && (
+              <button onClick={(e) => handleDeleteChatClick(activeChatId, e)} title="Deletar Chat Atual" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', alignItems: 'center', padding: '2px' }}>
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {chatToDelete && (
         <div style={{ padding: '8px', borderBottom: '1px solid var(--vscode-border)', background: 'var(--vscode-sidebar-bg)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <span style={{ fontSize: '11px', color: '#ccc' }}>Deletar este chat e todo o seu histórico?</span>
+          <span style={{ fontSize: '11px', color: 'var(--vscode-text-fg)' }}>Deletar este chat e todo o seu histórico?</span>
           <div style={{ display: 'flex', gap: '6px' }}>
             <button onClick={confirmDeleteChat} className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px', background: '#f87171', color: '#fff', border: 'none' }}>
               Deletar

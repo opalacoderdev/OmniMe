@@ -1,5 +1,5 @@
 import React from 'react';
-import { Files, GitBranch, MessageSquare, Settings, Cpu } from 'lucide-react';
+import { Files, GitBranch, MessageSquare, Settings, Cpu, LayoutTemplate } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 // Left-side vertical activity bar (VSCode-style icon strip).
@@ -11,6 +11,8 @@ export default function ActivityBar({
   gitChangesCount,
   onOpenSettings,
   onOpenHardware,
+  layoutMode,
+  setLayoutMode
 }) {
   const { t } = useTranslation();
 
@@ -18,16 +20,30 @@ export default function ActivityBar({
     <div className="vscode-activitybar">
       <div className="vscode-activitybar-top">
         <button
-          onClick={() => setActiveSidebarTab(activeSidebarTab === 'explorer' ? null : 'explorer')}
-          className={`vscode-activitybar-btn ${activeSidebarTab === 'explorer' ? 'active' : ''}`}
+          onClick={() => setLayoutMode(layoutMode === 'ide' ? 'chat' : 'ide')}
+          className={`vscode-activitybar-btn ${layoutMode === 'chat' ? 'active' : ''}`}
+          title="Alternar Modo Chat / IDE"
+        >
+          <LayoutTemplate size={22} />
+        </button>
+
+        <button
+          onClick={() => {
+            setLayoutMode('ide');
+            setActiveSidebarTab(activeSidebarTab === 'explorer' ? null : 'explorer');
+          }}
+          className={`vscode-activitybar-btn ${activeSidebarTab === 'explorer' && layoutMode === 'ide' ? 'active' : ''}`}
           title={t('activityBar.explorer')}
         >
           <Files size={22} />
         </button>
 
         <button
-          onClick={() => setActiveSidebarTab(activeSidebarTab === 'git' ? null : 'git')}
-          className={`vscode-activitybar-btn ${activeSidebarTab === 'git' ? 'active' : ''}`}
+          onClick={() => {
+            setLayoutMode('ide');
+            setActiveSidebarTab(activeSidebarTab === 'git' ? null : 'git');
+          }}
+          className={`vscode-activitybar-btn ${activeSidebarTab === 'git' && layoutMode === 'ide' ? 'active' : ''}`}
           title={t('activityBar.sourceControl')}
           style={{ position: 'relative' }}
         >
@@ -55,9 +71,11 @@ export default function ActivityBar({
         </button>
 
         <button
-          onClick={() => setIsChatVisible(!isChatVisible)}
-          className={`vscode-activitybar-btn ${isChatVisible ? 'active' : ''}`}
+          onClick={() => { if (layoutMode !== 'chat') setIsChatVisible(!isChatVisible); }}
+          className={`vscode-activitybar-btn ${isChatVisible || layoutMode === 'chat' ? 'active' : ''}`}
           title={t('activityBar.omnimeCodes')}
+          disabled={layoutMode === 'chat'}
+          style={{ opacity: layoutMode === 'chat' ? 0.5 : 1, cursor: layoutMode === 'chat' ? 'not-allowed' : 'pointer' }}
         >
           <MessageSquare size={22} />
         </button>
