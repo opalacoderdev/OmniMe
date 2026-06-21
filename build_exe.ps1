@@ -48,6 +48,10 @@ pyinstaller --name "OmniMe" `
             --collect-all "PyQt6" `
             --collect-all "PyQt6-WebEngine" `
             --collect-all "winpty" `
+            --collect-all "pymupdf" `
+            --collect-all "pymupdf4llm" `
+            --collect-all "tree_sitter" `
+            --collect-all "tree_sitter_language_pack" `
             --add-binary ".\.venv\Lib\site-packages\winpty\winpty-agent.exe;winpty" `
             --noconfirm `
             --clean `
