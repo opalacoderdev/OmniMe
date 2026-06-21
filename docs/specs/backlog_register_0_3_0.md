@@ -5,5 +5,5 @@
 3. Skill to specs.
 4. Answer to use similar to Gemini/Claude chat with the user. ✅
 5. Add a button to create a conversion branch from existent chat flow.
-
+6. Add a feature to display available memory in the chat, including a visual indicator that shows a battery draining as memory is consumed.
 
