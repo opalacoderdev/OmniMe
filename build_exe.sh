@@ -44,6 +44,8 @@ pyinstaller --name "OmniMe" \
             --collect-all "clr_loader" \
             --collect-all "PyQt6" \
             --collect-all "PyQt6-WebEngine" \
+            --collect-all "winpty" \
+            --add-binary "./.venv/Lib/site-packages/winpty/winpty-agent.exe:winpty" \
             --noconfirm \
             --clean \
             main.py

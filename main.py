@@ -10,6 +10,8 @@ if sys.stderr and getattr(sys.stderr, "encoding", "").lower() != "utf-8":
     except Exception: pass
 
 import os
+import subprocess
+
 # PyInstaller + PythonNet workaround: explicitly set the python DLL path 
 # so pythonnet can initialize correctly on other machines
 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
@@ -25,6 +27,33 @@ if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             ctypes.CDLL(python_dlls[0])
         except Exception:
             pass
+
+    # Add the specific pywinpty bin directory to PATH so winpty-agent.exe can be found
+    meipass = sys._MEIPASS
+    winpty_dir = None
+    for root, dirs, files in os.walk(meipass):
+        if 'winpty-agent.exe' in files:
+            winpty_dir = root
+            break
+            
+    if winpty_dir:
+        try:
+            os.environ["PATH"] = winpty_dir + os.pathsep + os.environ.get("PATH", "")
+        except ValueError:
+            # Fallback if PATH exceeds Windows 32K limit
+            pass
+
+
+
+# Prevent command prompt windows from flashing when using subprocess in --windowed mode on Windows
+if sys.platform == "win32":
+    _orig_popen_init = subprocess.Popen.__init__
+    def _patched_popen_init(self, *args, **kwargs):
+        if 'creationflags' not in kwargs:
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+        _orig_popen_init(self, *args, **kwargs)
+    subprocess.Popen.__init__ = _patched_popen_init
+
 
 
 

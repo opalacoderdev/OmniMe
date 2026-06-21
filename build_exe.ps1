@@ -18,7 +18,7 @@ try {
 
 Write-Host "`n[3/4] Limpando diretórios de build antigos..."
 if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
-if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
+# We let PyInstaller handle the dist folder overwriting because Remove-Item fails if File Explorer is open
 
 Write-Host "`n[4/4] Empacotando com PyInstaller..."
 # A sintaxe de --add-data no Windows usa ponto-e-vírgula (;)
@@ -47,6 +47,8 @@ pyinstaller --name "OmniMe" `
             --collect-all "clr_loader" `
             --collect-all "PyQt6" `
             --collect-all "PyQt6-WebEngine" `
+            --collect-all "winpty" `
+            --add-binary ".\.venv\Lib\site-packages\winpty\winpty-agent.exe;winpty" `
             --noconfirm `
             --clean `
             main.py
