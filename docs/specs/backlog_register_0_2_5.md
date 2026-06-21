@@ -1,195 +1,195 @@
-# BUGS TO FIX DETECTED ON LAST PUBLIC RELEASE (READ THE LAST SUBTOPIC)
+# BACKLOG 01 - ARCHIVED
 
 ## FROM CURRENT = 0.1.17 TO NEXT = 0.1.18
 
-1. Terminal dont work, no obvious message in back terminal, but on IDE terminal we get the message "[OmniMe] Conexão com o terminal perdida. Reconectando...". ✅
+1. Terminal doesn't work, no obvious message in back terminal, but on IDE terminal we get the message "[OmniMe] Terminal connection lost. Reconnecting...". ✅
 
-2. A janela de criação de projeto somente deveria permitir confirmar criação de projeto se o diretório especificado for válido. ✅
+2. The project creation window should only allow confirming project creation if the specified directory is valid. ✅
 
 3. New feature: install optional modules must be on IDE startup. ✅
 
 ## FROM CURRENT = 0.1.18 TO NEXT = 0.1.19
 
-1. Projeto não mostra nenhum erro quando o backend de modelos falha, por exemplo, tenta-se rodar um modelo que o ollama não tem instalado. ✅
+1. Project doesn't show any error when the models backend fails, for example, when trying to run a model that ollama doesn't have installed. ✅
 
-2. Ao criar um novo arquivo, ficou congelado em carregando. ✅
+2. When creating a new file, it froze on loading. ✅
 
-3. A aba de Problems nunca mostra nada errado, mesmo tendo. ✅
+3. The Problems tab never shows anything wrong, even when there are issues. ✅
 
-4. Adicionar opção de renomear arquivo/diretório selecionado. ✅
+4. Add an option to rename the selected file/directory. ✅
 
-5. Adicionar opção de limpar output e problems. ✅
+5. Add an option to clear output and problems. ✅
 
-6. Abrir mais de uma aba no editor de arquivo (vários arquivos abertos ao mesmo tempo). ✅
+6. Open more than one tab in the file editor (multiple files open at the same time). ✅
 
-7. Verificar se o agente de comunicação com o backend é um LLMAgentBlock e, se for, como está as configurações de limite de chamada de ferramentas e de reflexão e outras. ✅
+7. Check if the agent communicating with the backend is an LLMAgentBlock and, if so, what are the settings for tool call limits, reflection, and others. ✅
 
 ## FROM CURRENT = 0.1.19 TO NEXT = 0.1.20
 
-1. Implementar a visualização do pensamento do agente em uma aba thinking do painel inferior Implementar em uma aba separada thinking. ✅
+1. Implement the visualization of the agent's thoughts in a separate thinking tab in the bottom panel. ✅
 
-2. Aumentar tamanho da fonte quando digitar ctrl+ no editor, ou diminuir quando digitar ctrl-.
-3. Disponibilizar uma skill da ide que permite ao chat visualizar o conteúdo atual do editor e retornar o trecho selecionado. ✅
+2. Increase font size when typing ctrl+ in the editor, or decrease when typing ctrl-.
+3. Provide an IDE skill that allows the chat to view the current content of the editor and return the selected excerpt. ✅
 
-4. Colocar botão de interroper o agente. ✅
+4. Add a button to interrupt the agent. ✅
 
-5. Descobrir porque o agente granite4:latest demora a responder. ✅
+5. Find out why the granite4:latest agent takes a long time to respond. ✅
 
-6. O erro ao criar um projeto em um diretório existente ou proibido deveria ser mostrado como mensagem na janela de criação de projeto e não no terminal (colocar mensagem correta, de acordo com exceção).
-	6.1 Se diretório já existe e der erro de permissão, mostrar erro de permissão, se diretório não existe, criar diretório com nome do projeto. ✅
+6. The error when creating a project in an existing or forbidden directory should be shown as a message in the project creation window and not in the terminal (put the correct message, according to the exception).
+	6.1 If the directory already exists and there's a permission error, show permission error, if the directory doesn't exist, create a directory with the project's name. ✅
 
-7. Colocar hint de completação de servidor ollama (já trazer preenchido com o valor que geralmente é). ✅
+7. Add a completion hint for the ollama server (already bring it filled with the value it usually is). ✅
 
-8. Criar uma janela de configuração de modelo com parâmetros mais usados que são aceitos no agenticblocks. E criar um comando set-model-param param-name value que permite qualquer parâmetro geralmente permitido pro litellm/ollama. Cuidado para implementar controle de verdade (valores adequados de parâmetro, por example). ✅
+8. Create a model configuration window with the most used parameters that are accepted in agenticblocks. And create a command set-model-param param-name value that allows any parameter generally allowed for litellm/ollama. Be careful to implement real control (appropriate parameter values, for example). ✅
 
-9. Permitir que mensagens no chat não podem ser copiadas. ✅
+9. Ensure that messages in the chat cannot be copied. ✅
 
 ## FROM CURRENT = 0.2.3 TO NEXT = 0.2.4
-1. Revisar código. ✅
+1. Review code. ✅
 
-2. Adicionar botões de maximizar e de minimizar o editor de texto (e outros paineis?). ✅
+2. Add maximize and minimize buttons for the text editor (and other panels?). ✅
 
-3. Adicionar o conceito de meta configurações de chat (configurações que somente são válidas naquele momento que se conversa com o agente - durante a vida de uma mensagem). Por enquanto, apenas os parâmetros max_tokens, system_prompt, temperature, top-k, top-p, min-p são permitidos. Exemplos:
-	3.1 User: Implemente uma função que calcula a série de fourier. <param max_tokens=3>.
+3. Add the concept of meta chat configurations (configurations that are only valid at that moment when chatting with the agent - during the life of a message). For now, only the parameters max_tokens, system_prompt, temperature, top-k, top-p, min-p are allowed. Examples:
+	3.1 User: Implement a function that calculates the Fourier series. <param max_tokens=3>.
 	3.2 Agent: ok ok
-	3.3 User: Ora, ora, o que é você?  @system_prompt="seja irônico na resposta"@
-	3.4 Agent: resposta irônica
+	3.3 User: Well, well, what are you?  @system_prompt="be ironic in your response"@
+	3.4 Agent: ironic response
 	3.5 User:...
 	3.6 Agent:...
 	...
 
-	Neste exemplo, em 3.1, o valor de max_tokens deve ser revertido depois que o agente der a resposta (a vida de uma meta instrução é só o do turno).
-	Em 3.3, o system_prompt softre uma injeção, mas que dura somente enquanto o agente responde. Observe que, a partir de 3.3, max_tokens já volta para o seu valor padrão. E partir de 3.5, a injeção de system prompt perde o efeito (resetando-se o system prompt para sua versão original).
-	Por baixo dos panos, primeiro identifica se a mensagem tem params, que são substituições válidas que começam com @, remove os parmas, faz a alteração temporária, executa a chamada, espera o modelo responder, desfaz a alteração temporária. ✅
+	In this example, in 3.1, the value of max_tokens should be reverted after the agent gives the response (the life of a meta instruction is only for the turn).
+	In 3.3, the system_prompt suffers an injection, but which lasts only while the agent responds. Note that, from 3.3, max_tokens already returns to its default value. And from 3.5, the system prompt injection loses its effect (resetting the system prompt to its original version).
+	Behind the scenes, it first identifies if the message has params, which are valid substitutions that start with @, removes the params, makes the temporary change, executes the call, waits for the model to respond, and undoes the temporary change. ✅
 
-4. Disponibilizar a ferramenta web_search para o agente. ✅
+4. Make the web_search tool available for the agent. ✅
 
-5. Terminal do windows 11. ✅
+5. Windows 11 terminal. ✅
 
-6. Menu contextual para copiar, cortar e colar no terminal. ✅
+6. Context menu to copy, cut and paste in the terminal. ✅
 
-7. Adicionar mais opções de parâmetros na interface de configuração do projeto, como temperature,  top_p, top_k,  min_p,  presence_penalty, repetition_penalty. ✅
+7. Add more parameter options in the project configuration interface, such as temperature, top_p, top_k, min_p, presence_penalty, repetition_penalty. ✅
 
-8. Histórico na entrada do chat. ✅
+8. History in chat input. ✅
 
-## FROM CURRENT = 0.2.4 TO NEXT = 0.3.0 (RELEASE FINAL DESSA ETAPA)
+## FROM CURRENT = 0.2.4 TO NEXT = 0.3.0 (FINAL RELEASE OF THIS STAGE)
 
-1. Revisar a Internacionalização. ✅ 
+1. Review Internationalization. ✅ 
 
-2. Implementar suporte a git. ✅
+2. Implement git support. ✅
 
-3. Prover ferramentas/funções de selecionar e pedir para o agente redefinir o que está selecionado. Ou para o agente detectar um erro em uma função ou trecho de código selecionado. Possíveis formas de se fazer isso:
-	4.1 : o usuário seleciona o texto, e no menu contextual tem opções: refinar e corrigir se algo estiver selecionado. Também há a possibilidade do usuário selecionar algo ou deixar o cursor em alguma parte e executar CTRL+L e então abrir uma caixa em que o usuário pode pedir algo (o agente recebe o que foi selecionado, a linha inicial, a linha final e a posição do cursor. Uma interpretação é feita "se seleção vazia e linha inicial igual a linha final, focar na posição do cursor como o lugar onde posso começar a colocar algo.") ✅
+3. Provide tools/functions to select and ask the agent to redefine what is selected. Or for the agent to detect an error in a selected function or code snippet. Possible ways to do this:
+	4.1 : the user selects the text, and in the context menu there are options: refine and fix if something is selected. There is also the possibility for the user to select something or leave the cursor somewhere and press CTRL+L and then open a box where the user can ask for something (the agent receives what was selected, the start line, the end line and the cursor position. An interpretation is made "if selection is empty and start line equals end line, focus on the cursor position as the place where I can start putting something.") ✅
 
-4. Melhorar contraste dos themas (dark está razoável, o modo claro não está legal). ✅
+4. Improve themes contrast (dark is reasonable, light mode is not good). ✅
 
-5. Em refine e generate, é frágil a solução de mostrar os pensamentos do agente m thinking, dado que, tendo tido bloqueio das funções da IDE, muitas vezes (editor maximizado), não é possível olhar para essas subjanelas (thinking, output, etc). ✅
+5. In refine and generate, the solution of showing the agent's thoughts in thinking is fragile, given that, having blocked the IDE functions, often (editor maximized), it is not possible to look at these subwindows (thinking, output, etc). ✅
 
-6. Na deleção de projeto, ter um check para escolher deletar pasta também.✅
+6. On project deletion, have a check to choose to delete the folder as well.✅
 
 # BUGS TO FIX DETECTED ON LAST PUBLIC RELEASE (READ THE LAST SUBTOPIC)
 
 ## FROM CURRENT = 0.1.17 TO NEXT = 0.1.18
 
-1. Terminal dont work, no obvious message in back terminal, but on IDE terminal we get the message "[OmniMe] Conexão com o terminal perdida. Reconectando...". ✅
+1. Terminal doesn't work, no obvious message in back terminal, but on IDE terminal we get the message "[OmniMe] Terminal connection lost. Reconnecting...". ✅
 
-2. A janela de criação de projeto somente deveria permitir confirmar criação de projeto se o diretório especificado for válido. ✅
+2. The project creation window should only allow confirming project creation if the specified directory is valid. ✅
 
 3. New feature: install optional modules must be on IDE startup. ✅
 
 ## FROM CURRENT = 0.1.18 TO NEXT = 0.1.19
 
-1. Projeto não mostra nenhum erro quando o backend de modelos falha, por exemplo, tenta-se rodar um modelo que o ollama não tem instalado. ✅
+1. Project doesn't show any error when the models backend fails, for example, when trying to run a model that ollama doesn't have installed. ✅
 
-2. Ao criar um novo arquivo, ficou congelado em carregando. ✅
+2. When creating a new file, it froze on loading. ✅
 
-3. A aba de Problems nunca mostra nada errado, mesmo tendo. ✅
+3. The Problems tab never shows anything wrong, even when there are issues. ✅
 
-4. Adicionar opção de renomear arquivo/diretório selecionado. ✅
+4. Add an option to rename the selected file/directory. ✅
 
-5. Adicionar opção de limpar output e problems. ✅
+5. Add an option to clear output and problems. ✅
 
-6. Abrir mais de uma aba no editor de arquivo (vários arquivos abertos ao mesmo tempo). ✅
+6. Open more than one tab in the file editor (multiple files open at the same time). ✅
 
-7. Verificar se o agente de comunicação com o backend é um LLMAgentBlock e, se for, como está as configurações de limite de chamada de ferramentas e de reflexão e outras. ✅
+7. Check if the agent communicating with the backend is an LLMAgentBlock and, if so, what are the settings for tool call limits, reflection, and others. ✅
 
 ## FROM CURRENT = 0.1.19 TO NEXT = 0.1.20
 
-1. Implementar a visualização do pensamento do agente em uma aba thinking do painel inferior Implementar em uma aba separada thinking. ✅
+1. Implement the visualization of the agent's thoughts in a separate thinking tab in the bottom panel. ✅
 
-2. Aumentar tamanho da fonte quando digitar ctrl+ no editor, ou diminuir quando digitar ctrl-.
-3. Disponibilizar uma skill da ide que permite ao chat visualizar o conteúdo atual do editor e retornar o trecho selecionado. ✅
+2. Increase font size when typing ctrl+ in the editor, or decrease when typing ctrl-.
+3. Provide an IDE skill that allows the chat to view the current content of the editor and return the selected excerpt. ✅
 
-4. Colocar botão de interroper o agente. ✅
+4. Add a button to interrupt the agent. ✅
 
-5. Descobrir porque o agente granite4:latest demora a responder. ✅
+5. Find out why the granite4:latest agent takes a long time to respond. ✅
 
-6. O erro ao criar um projeto em um diretório existente ou proibido deveria ser mostrado como mensagem na janela de criação de projeto e não no terminal (colocar mensagem correta, de acordo com exceção).
-	6.1 Se diretório já existe e der erro de permissão, mostrar erro de permissão, se diretório não existe, criar diretório com nome do projeto. ✅
+6. The error when creating a project in an existing or forbidden directory should be shown as a message in the project creation window and not in the terminal (put the correct message, according to the exception).
+	6.1 If the directory already exists and there's a permission error, show permission error, if the directory doesn't exist, create a directory with the project's name. ✅
 
-7. Colocar hint de completação de servidor ollama (já trazer preenchido com o valor que geralmente é). ✅
+7. Add a completion hint for the ollama server (already bring it filled with the value it usually is). ✅
 
-8. Criar uma janela de configuração de modelo com parâmetros mais usados que são aceitos no agenticblocks. E criar um comando set-model-param param-name value que permite qualquer parâmetro geralmente permitido pro litellm/ollama. Cuidado para implementar controle de verdade (valores adequados de parâmetro, por example). ✅
+8. Create a model configuration window with the most used parameters that are accepted in agenticblocks. And create a command set-model-param param-name value that allows any parameter generally allowed for litellm/ollama. Be careful to implement real control (appropriate parameter values, for example). ✅
 
-9. Permitir que mensagens no chat não podem ser copiadas. ✅
+9. Ensure that messages in the chat cannot be copied. ✅
 
 ## FROM CURRENT = 0.2.3 TO NEXT = 0.2.4
-1. Revisar código. ✅
+1. Review code. ✅
 
-2. Adicionar botões de maximizar e de minimizar o editor de texto (e outros paineis?). ✅
+2. Add maximize and minimize buttons for the text editor (and other panels?). ✅
 
-3. Adicionar o conceito de meta configurações de chat (configurações que somente são válidas naquele momento que se conversa com o agente - durante a vida de uma mensagem). Por enquanto, apenas os parâmetros max_tokens, system_prompt, temperature, top-k, top-p, min-p são permitidos. Exemplos:
-	3.1 User: Implemente uma função que calcula a série de fourier. <param max_tokens=3>.
+3. Add the concept of meta chat configurations (configurations that are only valid at that moment when chatting with the agent - during the life of a message). For now, only the parameters max_tokens, system_prompt, temperature, top-k, top-p, min-p are allowed. Examples:
+	3.1 User: Implement a function that calculates the Fourier series. <param max_tokens=3>.
 	3.2 Agent: ok ok
-	3.3 User: Ora, ora, o que é você?  @system_prompt="seja irônico na resposta"@
-	3.4 Agent: resposta irônica
+	3.3 User: Well, well, what are you?  @system_prompt="be ironic in your response"@
+	3.4 Agent: ironic response
 	3.5 User:...
 	3.6 Agent:...
 	...
 
-	Neste exemplo, em 3.1, o valor de max_tokens deve ser revertido depois que o agente der a resposta (a vida de uma meta instrução é só o do turno).
-	Em 3.3, o system_prompt softre uma injeção, mas que dura somente enquanto o agente responde. Observe que, a partir de 3.3, max_tokens já volta para o seu valor padrão. E partir de 3.5, a injeção de system prompt perde o efeito (resetando-se o system prompt para sua versão original).
-	Por baixo dos panos, primeiro identifica se a mensagem tem params, que são substituições válidas que começam com @, remove os parmas, faz a alteração temporária, executa a chamada, espera o modelo responder, desfaz a alteração temporária. ✅
+	In this example, in 3.1, the value of max_tokens should be reverted after the agent gives the response (the life of a meta instruction is only for the turn).
+	In 3.3, the system_prompt suffers an injection, but which lasts only while the agent responds. Note that, from 3.3, max_tokens already returns to its default value. And from 3.5, the system prompt injection loses its effect (resetting the system prompt to its original version).
+	Behind the scenes, it first identifies if the message has params, which are valid substitutions that start with @, removes the params, makes the temporary change, executes the call, waits for the model to respond, and undoes the temporary change. ✅
 
-4. Disponibilizar a ferramenta web_search para o agente. ✅
+4. Make the web_search tool available for the agent. ✅
 
-5. Terminal do windows 11. ✅
+5. Windows 11 terminal. ✅
 
-6. Menu contextual para copiar, cortar e colar no terminal. ✅
+6. Context menu to copy, cut and paste in the terminal. ✅
 
-7. Adicionar mais opções de parâmetros na interface de configuração do projeto, como temperature,  top_p, top_k,  min_p,  presence_penalty, repetition_penalty. ✅
+7. Add more parameter options in the project configuration interface, such as temperature, top_p, top_k, min_p, presence_penalty, repetition_penalty. ✅
 
-8. Histórico na entrada do chat. ✅
+8. History in chat input. ✅
 
-## FROM CURRENT = 0.2.4 TO NEXT = 0.3.0 (RELEASE FINAL DESSA ETAPA)
+## FROM CURRENT = 0.2.4 TO NEXT = 0.3.0 (FINAL RELEASE OF THIS STAGE)
 
-1. Revisar a Internacionalização. ✅ 
+1. Review Internationalization. ✅ 
 
-2. Implementar suporte a git. ✅
+2. Implement git support. ✅
 
-3. Prover ferramentas/funções de selecionar e pedir para o agente redefinir o que está selecionado. Ou para o agente detectar um erro em uma função ou trecho de código selecionado. Possíveis formas de se fazer isso:
-	4.1 : o usuário seleciona o texto, e no menu contextual tem opções: refinar e corrigir se algo estiver selecionado. Também há a possibilidade do usuário selecionar algo ou deixar o cursor em alguma parte e executar CTRL+L e então abrir uma caixa em que o usuário pode pedir algo (o agente recebe o que foi selecionado, a linha inicial, a linha final e a posição do cursor. Uma interpretação é feita "se seleção vazia e linha inicial igual a linha final, focar na posição do cursor como o lugar onde posso começar a colocar algo.") ✅
+3. Provide tools/functions to select and ask the agent to redefine what is selected. Or for the agent to detect an error in a selected function or code snippet. Possible ways to do this:
+	4.1 : the user selects the text, and in the context menu there are options: refine and fix if something is selected. There is also the possibility for the user to select something or leave the cursor somewhere and press CTRL+L and then open a box where the user can ask for something (the agent receives what was selected, the start line, the end line and the cursor position. An interpretation is made "if selection is empty and start line equals end line, focus on the cursor position as the place where I can start putting something.") ✅
 
-4. Melhorar contraste dos themas (dark está razoável, o modo claro não está legal). ✅
+4. Improve themes contrast (dark is reasonable, light mode is not good). ✅
 
-5. Em refine e generate, é frágil a solução de mostrar os pensamentos do agente m thinking, dado que, tendo tido bloqueio das funções da IDE, muitas vezes (editor maximizado), não é possível olhar para essas subjanelas (thinking, output, etc). ✅
+5. In refine and generate, the solution of showing the agent's thoughts in thinking is fragile, given that, having blocked the IDE functions, often (editor maximized), it is not possible to look at these subwindows (thinking, output, etc). ✅
 
-6. Na deleção de projeto, ter um check para escolher deletar pasta também.✅
+6. On project deletion, have a check to choose to delete the folder as well.✅
 
-7. Inicializar configurações padrão do projeto com um modelo do ollama compatível com a máquina do usuário. ✅
+7. Initialize default project settings with an ollama model compatible with the user's machine. ✅
 
-8. Ao executar o software pela primeira vez, sugerir intalar o ollama (executar instalação via comando de instalação -- no window: irm https://ollama.com/install.ps1 | iex); no Linux: curl -fsSL https://ollama.com/install.sh | sh; no macosx:curl -fsSL https://ollama.com/install.sh | sh . se ainda não instalado (verificar complexidade e portabildiade dessa funcionalidade). Seria interessante instruir o usuário ou instalar por ele? ✅
+8. When running the software for the first time, suggest installing ollama (execute installation via installation command -- on windows: irm https://ollama.com/install.ps1 | iex; on Linux: curl -fsSL https://ollama.com/install.sh | sh; on macosx:curl -fsSL https://ollama.com/install.sh | sh . if not yet installed (check complexity and portability of this feature). Would it be interesting to instruct the user or install it for them? ✅
 
-9. Instalador autocontido para linux e windows. ✅
+9. Self-contained installer for linux and windows. ✅
 
-10. Path hint change according to the operation system. ✅
+10. Path hint change according to the operating system. ✅
 
 11. On project creation, set project name as the last folder name. ✅
 
-12. Renderização de latex no chat. ✅
+12. Latex rendering in chat. ✅
 
 13. PDF, media and websites on chat. Maybe with tools to summarize and take notes. ✅
 
-14. Export chat messages (pdf e markdown). ✅ 
+14. Export chat messages (pdf and markdown). ✅ 
 
 DONE!
