@@ -3,9 +3,21 @@ name: Build and Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      build_target:
+        description: 'What to build'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - linux
+          - windows
 
 jobs:
   build-linux:
+    if: github.event_name == 'release' || inputs.build_target == 'all' || inputs.build_target == 'linux'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -28,7 +40,7 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libglib2.0-0 libsm6 libxext6 libxrender-dev libgl1-mesa-glx
+          sudo apt-get install -y libglib2.0-0 libsm6 libxext6 libxrender-dev libgl1
 
       - name: Install Project Dependencies
         run: |
@@ -49,6 +61,7 @@ jobs:
           files: OmniMe-linux-x64.tar.gz
 
   build-windows:
+    if: github.event_name == 'release' || inputs.build_target == 'all' || inputs.build_target == 'windows'
     runs-on: windows-latest
     permissions:
       contents: write

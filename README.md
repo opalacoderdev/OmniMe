@@ -29,13 +29,13 @@ Enjoy the best of both worlds. Connect to powerful cloud models or run completel
 #### Windows (1-Click Install)
 Open your PowerShell and run the following command to download and install OmniMe instantly:
 ```powershell
-irm https://raw.githubusercontent.com/omnimedev/OmniMe/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/opalacoderdev/OmniMe/main/install.ps1 | iex
 ```
 
 #### Linux (1-Click Install)
 Open your terminal and run the following command:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/omnimedev/OmniMe/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/opalacoderdev/OmniMe/main/install.sh | bash
 ```
 
 #### Python / Pip
@@ -49,7 +49,7 @@ pip install omnime
 Or run it from source:
 
 ```bash
-git clone https://github.com/omnimedev/OmniMe
+git clone https://github.com/opalacoderdev/OmniMe
 cd OmniMe
 python -m venv .env
 source .env/bin/activate          # Linux/macOS
@@ -83,4 +83,4 @@ Curious about what powers OmniMe under the hood? Want to learn about our MemGPT 
 
 OmniMe is proudly open source and available under the **MIT** license.
 
-*   **Repository**: [https://github.com/omnimedev/OmniMe](https://github.com/omnimedev/OmniMe)
+*   **Repository**: [https://github.com/opalacoderdev/OmniMe](https://github.com/opalacoderdev/OmniMe)

@@ -8,7 +8,7 @@ echo "=========================================="
 INSTALL_DIR="$HOME/.local/share/OmniMe"
 BIN_DIR="$HOME/.local/bin"
 TEMP_FILE="/tmp/omnime_release.tar.gz"
-DOWNLOAD_URL="https://github.com/omnimedev/OmniMe/releases/latest/download/OmniMe-linux-x64.tar.gz"
+DOWNLOAD_URL="https://github.com/opalacoderdev/OmniMe/releases/latest/download/OmniMe-linux-x64.tar.gz"
 
 echo "Baixando a última versão do OmniMe..."
 curl -fsSL "$DOWNLOAD_URL" -o "$TEMP_FILE"

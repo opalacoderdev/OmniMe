@@ -9,7 +9,7 @@ $installDir = "$env:LOCALAPPDATA\OmniMe"
 $tempZip = "$env:TEMP\omnime_release.zip"
 
 # Link para baixar a release mais recente do repositório oficial
-$downloadUrl = "https://github.com/omnimedev/OmniMe/releases/latest/download/OmniMe-windows-x64.zip"
+$downloadUrl = "https://github.com/opalacoderdev/OmniMe/releases/latest/download/OmniMe-windows-x64.zip"
 
 Write-Host "Iniciando a instalacao do OmniMe..." -ForegroundColor Cyan
 
