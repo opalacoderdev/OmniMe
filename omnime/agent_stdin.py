@@ -552,7 +552,9 @@ async def handle_run(data: dict):
                 "content": msg.get("content", "")
             })
             
+    thought_chunks = []
     def _on_thinking(chunk: str) -> None:
+        thought_chunks.append(chunk)
         print_event("thought", {"content": chunk, "agent": agent_type})
 
     def _on_chunk(chunk: str) -> None:
@@ -713,6 +715,14 @@ async def handle_run(data: dict):
                 with apply_meta_params(agent, _meta_overrides):
                     resp_obj = await agent.run(AgentInput(prompt=retry_prompt))
                 response = resp_obj.response.strip() if resp_obj.response else ""
+            
+            # Inject aggregated thoughts into response so they persist in history
+            full_thoughts = "".join(thought_chunks).strip()
+            if full_thoughts:
+                if "<think>" in response:
+                    import re
+                    response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL).strip()
+                response = f"```thought\n{full_thoughts}\n```\n\n" + response
             
             # Save assistant response and achievements
             if agent_type in ("orchestrator", "chat_orchestrator") and current_store and current_project:

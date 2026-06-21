@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useLayoutEffect } from 'react';
+import { useRef, useState, useCallback, useLayoutEffect, useEffect } from 'react';
 import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings, Plus, Trash2, Search, Paperclip, FileText, ZoomIn, ZoomOut, Download, Printer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatMessageContent } from '../utils/formatMessage';
@@ -13,6 +13,7 @@ export default function ChatPanel({
   chatInput,
   setChatInput,
   isAgentRunning,
+  chatThoughtStream,
   activeProject,
   isChatVisible,
   setIsChatVisible,
@@ -46,6 +47,12 @@ export default function ChatPanel({
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   }, [chatInput]);
+
+  useEffect(() => {
+    if (isAgentRunning && chatThoughtStream && chatEndRef?.current) {
+      chatEndRef.current.scrollIntoView();
+    }
+  }, [chatThoughtStream, isAgentRunning, chatEndRef]);
 
   const handlePaste = useCallback(() => {
     readClipboard().then((text) => {
@@ -818,11 +825,22 @@ export default function ChatPanel({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <span className="vscode-chat-msg-header chat-header-agent">{t('chatPanel.omnime')}</span>
             <div className="vscode-chat-msg-content">
-              <div className="thinking-indicator">
-                <span className="dot" />
-                <span className="dot" />
-                <span className="dot" />
-              </div>
+              {chatThoughtStream ? (
+                <details open style={{ margin: '8px 0', border: '1px solid var(--vscode-widget-border, #3c3c3c)', borderRadius: '4px', background: 'var(--vscode-sideBar-background, #252526)' }}>
+                  <summary style={{ padding: '6px 10px', fontSize: '11px', cursor: 'pointer', userSelect: 'none', color: 'var(--vscode-descriptionForeground, #717171)' }}>
+                    Pensamentos da IA
+                  </summary>
+                  <pre style={{ margin: 0, padding: '10px', background: 'var(--vscode-editor-background, #1e1e1e)', overflowX: 'auto', fontSize: '11px', color: 'var(--vscode-textPreformat-foreground, #d7ba7d)', borderTop: '1px solid var(--vscode-widget-border, #3c3c3c)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {chatThoughtStream}
+                  </pre>
+                </details>
+              ) : (
+                <div className="thinking-indicator">
+                  <span className="dot" />
+                  <span className="dot" />
+                  <span className="dot" />
+                </div>
+              )}
             </div>
           </div>
         )}

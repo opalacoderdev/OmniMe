@@ -38,7 +38,7 @@ const components = {
       return (
         <code
           className="chat-inline-code"
-          style={{ padding: '2px 4px', borderRadius: '3px', fontFamily: 'monospace', fontSize: '11px' }}
+          style={{ padding: '2px 4px', borderRadius: '3px', fontFamily: 'monospace', fontSize: '11px', background: 'var(--vscode-editor-background, #1e1e1e)', color: 'var(--vscode-textPreformat-foreground, #d7ba7d)' }}
         >
           {children}
         </code>
@@ -46,14 +46,26 @@ const components = {
     }
     // Block code
     const lang = (className || '').replace('language-', '');
+    if (lang === 'thought') {
+      return (
+        <details style={{ margin: '8px 0', border: '1px solid var(--vscode-widget-border, #3c3c3c)', borderRadius: '4px', background: 'var(--vscode-sideBar-background, #252526)' }}>
+          <summary style={{ padding: '6px 10px', fontSize: '11px', cursor: 'pointer', userSelect: 'none', color: 'var(--vscode-descriptionForeground, #717171)' }}>
+            Pensamentos da IA
+          </summary>
+          <pre style={{ margin: 0, padding: '10px', background: 'var(--vscode-editor-background, #1e1e1e)', overflowX: 'auto', fontSize: '11px', color: 'var(--vscode-textPreformat-foreground, #d7ba7d)', borderTop: '1px solid var(--vscode-widget-border, #3c3c3c)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {children}
+          </pre>
+        </details>
+      );
+    }
     return (
       <div style={{ margin: '8px 0', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color, #3c3c3c)' }}>
         {lang && (
-          <div style={{ background: 'var(--titlebar-bg, #1a1a1a)', padding: '2px 10px', fontSize: '10px', color: '#888', borderBottom: '1px solid var(--border-color, #3c3c3c)' }}>
+          <div style={{ background: 'var(--titlebar-bg, #1a1a1a)', padding: '2px 10px', fontSize: '10px', color: 'var(--vscode-descriptionForeground, #888)', borderBottom: '1px solid var(--border-color, #3c3c3c)' }}>
             {lang}
           </div>
         )}
-        <pre style={{ margin: 0, padding: '10px', background: 'var(--editor-bg, #1e1e1e)', overflowX: 'auto', fontSize: '12px', lineHeight: '1.5', fontFamily: 'monospace' }}>
+        <pre style={{ margin: 0, padding: '10px', background: 'var(--editor-bg, #1e1e1e)', color: 'var(--vscode-textPreformat-foreground, #d7ba7d)', overflowX: 'auto', fontSize: '12px', lineHeight: '1.5', fontFamily: 'monospace' }}>
           <code>{children}</code>
         </pre>
       </div>
@@ -82,7 +94,7 @@ const components = {
 
   // Bold / italic
   strong: ({ children }) => (
-    <strong style={{ fontWeight: 'bold', color: 'var(--vscode-text-light, #ffffff)' }}>
+    <strong style={{ fontWeight: 'bold', color: 'var(--vscode-text-fg)' }}>
       {children}
     </strong>
   ),

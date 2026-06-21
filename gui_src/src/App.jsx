@@ -55,6 +55,7 @@ export default function App() {
 
   // ── Chat / agent ──────────────────────────────────────────────────────────
   const [chatMessages, setChatMessages] = useState([]);
+  const [chatThoughtStream, setChatThoughtStream] = useState('');
   const [chatInput, setChatInput] = useState('');
   const [pendingAttachments, setPendingAttachments] = useState([]);
   const [isAgentRunning, setIsAgentRunning] = useState(false);
@@ -1053,6 +1054,7 @@ export default function App() {
       case 'agent_started': addLog('info', `Agente ${data.agent} iniciado.`, data.agent); break;
       case 'thought':
         addLog('thought', data.content, data.agent);
+        setChatThoughtStream(prev => prev + (data.content || ''));
         break;
       case 'reflection':
         addLog('reflection', data.content, data.agent);
@@ -1199,6 +1201,7 @@ export default function App() {
     setIsAgentRunning(true);
     setProblems([]);
     setAchievementsMemory('');
+    setChatThoughtStream('');
     addLog('info', `Iniciando: "${userText}"`);
 
     if (userText.trim().startsWith('/')) {
@@ -1733,6 +1736,7 @@ export default function App() {
             chatInput={chatInput}
             setChatInput={setChatInput}
             isAgentRunning={isAgentRunning}
+            chatThoughtStream={chatThoughtStream}
             activeProject={activeProject}
             isChatVisible={isChatVisible}
             setIsChatVisible={setIsChatVisible}
