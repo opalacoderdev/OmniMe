@@ -26,6 +26,14 @@ Enjoy the best of both worlds. Connect to powerful cloud models or run completel
 
 ### Installation
 
+#### Windows (1-Click Install)
+Open your PowerShell and run the following command to download and install OmniMe instantly:
+```powershell
+irm https://raw.githubusercontent.com/omnimedev/OmniMe/main/install.ps1 | iex
+```
+
+#### Python / Pip
+
 Install OmniMe directly via pip:
 
 ```bash

@@ -21,6 +21,9 @@ if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
 # We let PyInstaller handle the dist folder overwriting because Remove-Item fails if File Explorer is open
 
 Write-Host "`n[4/4] Empacotando com PyInstaller..."
+# Find winpty-agent.exe dynamically to avoid hardcoding .venv path
+$winptyAgentPath = python -c "import winpty, os; print(os.path.join(os.path.dirname(winpty.__file__), 'winpty-agent.exe'))"
+
 # A sintaxe de --add-data no Windows usa ponto-e-vírgula (;)
 pyinstaller --name "OmniMe" `
             --windowed `
@@ -52,7 +55,7 @@ pyinstaller --name "OmniMe" `
             --collect-all "pymupdf4llm" `
             --collect-all "tree_sitter" `
             --collect-all "tree_sitter_language_pack" `
-            --add-binary ".\.venv\Lib\site-packages\winpty\winpty-agent.exe;winpty" `
+            --add-binary "$winptyAgentPath;winpty" `
             --noconfirm `
             --clean `
             main.py
