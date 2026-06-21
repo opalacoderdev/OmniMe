@@ -39,6 +39,11 @@ pyinstaller --name "OmniMe" \
             --collect-all "duckduckgo_search" \
             --collect-all "instructor" \
             --collect-all "agenticblocks" \
+            --collect-all "webview" \
+            --collect-all "pythonnet" \
+            --collect-all "clr_loader" \
+            --collect-all "PyQt6" \
+            --collect-all "PyQt6-WebEngine" \
             --noconfirm \
             --clean \
             main.py

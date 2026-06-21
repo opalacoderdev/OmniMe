@@ -2117,10 +2117,9 @@ def start_gui_server(host="127.0.0.1", port=3000):
 
     try:
         import os as _os
-        # Force Qt backend on Linux: PyGObject/GTK may be installed but the system
-        # WebKit2GTK WebKitNetworkProcess can crash when snap's libpthread pollutes
-        # LD_LIBRARY_PATH. Qt WebEngine ships its own bundled libs and is unaffected.
-        if _os.name != 'nt' and 'PYWEBVIEW_GUI' not in _os.environ:
+        # Force Qt backend on all platforms (including Windows). 
+        # PythonNet and WinForms are extremely fragile when packaged with PyInstaller on some Windows machines.
+        if 'PYWEBVIEW_GUI' not in _os.environ:
             _os.environ['PYWEBVIEW_GUI'] = 'qt'
 
         import webview  # pywebview
@@ -2249,7 +2248,7 @@ def start_gui_server(host="127.0.0.1", port=3000):
         storage_path = os.path.expanduser("~/.omnime/webview")
         os.makedirs(storage_path, exist_ok=True)
         
-        gui_engine = 'edgechromium' if getattr(sys, 'frozen', False) and sys.platform == 'win32' else None
+        gui_engine = 'qt' if getattr(sys, 'frozen', False) and sys.platform == 'win32' else None
         webview.start(gui=gui_engine, debug=False, icon=icon_path, private_mode=False, storage_path=storage_path)
 
     except (ImportError, Exception) as e:

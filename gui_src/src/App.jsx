@@ -435,7 +435,7 @@ export default function App() {
       const res = await fetch(`/api/git/status?projectPath=${encodeURIComponent(activeProject.project_path)}&shadow=${useShadowGit}&t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
-        console.log(`[DEBUG fetchGitStatus] projectPath="${activeProject.project_path}" shadow=${useShadowGit} files=`, data.files);
+        // console.log(`[DEBUG fetchGitStatus] projectPath="${activeProject.project_path}" shadow=${useShadowGit} files=`, data.files);
         setGitChanges(data.files || []);
       }
     } catch (err) { console.error('Failed to fetch git status', err); }
