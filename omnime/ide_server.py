@@ -2131,6 +2131,9 @@ def start_gui_server(host="127.0.0.1", port=3000):
             _os.environ['PYWEBVIEW_GUI'] = 'qt'
 
         import webview  # pywebview
+        
+        # Allow file downloads (like export markdown/pdf)
+        webview.settings['ALLOW_DOWNLOADS'] = True
 
         # Monkey-patch pywebview's Qt backend to use proper Qt enum values
         # instead of raw ints for setFeaturePermission. Modern Qt wrappers (PyQt6/PySide6)
