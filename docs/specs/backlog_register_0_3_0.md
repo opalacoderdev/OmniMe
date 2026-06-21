@@ -1,8 +1,8 @@
-# FROM 0.3.0 to 0.4.0
+# FROM 0.2.* to 0.3.0
 
 1. FakeShell: a linux simulated shell encapsulating all operation system interactions. Thus, the agent has a uniform shell (linux) independent from the subjacent operation system (linux, windows, mac).
-2. Desktop Mode /versus IDE Mode
+2. Desktop Mode /versus IDE Mode ✅
 3. Skill to specs.
-4. Answer to use similar to Gemini/Claude chat with the user.
-
+4. Answer to use similar to Gemini/Claude chat with the user. ✅
+5. Add a button to create a conversion branch from existent chat flow.
 
