@@ -92,7 +92,19 @@
     "setProjectFirst": "Defina um projeto...",
     "thinking": "Pensando...",
     "askOmniMe": "Pergunte ao OmniMe...",
-    "interruptAgent": "Interromper agente"
+    "interruptAgent": "Interromper agente",
+    "deleteCurrentChat": "Deletar Chat Atual",
+    "aiThoughts": "Pensamentos da IA"
+  },
+  "chatSidebar": {
+    "newChat": "Novo Chat",
+    "chatName": "Nome do chat",
+    "create": "Criar",
+    "cancel": "Cancelar",
+    "deletePrompt": "Deletar este chat e todo o seu histórico?",
+    "delete": "Deletar",
+    "chatHistory": "Histórico de Chats",
+    "removeChat": "Remover Chat"
   },
   "bottomPanel": {
     "outputTab": "OUTPUT",

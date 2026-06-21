@@ -505,11 +505,11 @@ export default function ChatPanel({
             <button onClick={() => setShowSearchModal(true)} title={t('chat.searchChats', 'Search Chats')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)', display: 'flex', alignItems: 'center', padding: '2px' }}>
               <Search size={14} />
             </button>
-            <button onClick={handleCreateChatClick} title="Novo Chat" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#4ec9b0', display: 'flex', alignItems: 'center', padding: '2px' }}>
+            <button onClick={handleCreateChatClick} title={t('chatSidebar.newChat', 'Novo Chat')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#4ec9b0', display: 'flex', alignItems: 'center', padding: '2px' }}>
               <Plus size={14} />
             </button>
             {activeChatId !== 'main' && (
-              <button onClick={(e) => handleDeleteChatClick(activeChatId, e)} title="Deletar Chat Atual" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', alignItems: 'center', padding: '2px' }}>
+              <button onClick={(e) => handleDeleteChatClick(activeChatId, e)} title={t('chatPanel.deleteCurrentChat', 'Deletar Chat Atual')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171', display: 'flex', alignItems: 'center', padding: '2px' }}>
                 <Trash2 size={14} />
               </button>
             )}
@@ -519,13 +519,13 @@ export default function ChatPanel({
 
       {chatToDelete && (
         <div style={{ padding: '8px', borderBottom: '1px solid var(--vscode-border)', background: 'var(--vscode-sidebar-bg)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <span style={{ fontSize: '11px', color: 'var(--vscode-text-fg)' }}>Deletar este chat e todo o seu histórico?</span>
+          <span style={{ fontSize: '11px', color: 'var(--vscode-text-fg)' }}>{t('chatSidebar.deletePrompt', 'Deletar este chat e todo o seu histórico?')}</span>
           <div style={{ display: 'flex', gap: '6px' }}>
             <button onClick={confirmDeleteChat} className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px', background: '#f87171', color: '#fff', border: 'none' }}>
-              Deletar
+              {t('chatSidebar.delete', 'Deletar')}
             </button>
             <button onClick={() => setChatToDelete(null)} className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px', background: 'transparent', color: 'var(--vscode-text-fg)', border: '1px solid var(--vscode-border)' }}>
-              Cancelar
+              {t('chatSidebar.cancel', 'Cancelar')}
             </button>
           </div>
         </div>
@@ -547,14 +547,14 @@ export default function ChatPanel({
               className="vscode-settings-input"
               value={newChatName}
               onChange={e => setNewChatName(e.target.value)}
-              placeholder="Nome do chat"
+              placeholder={t('chatSidebar.chatName', 'Nome do chat')}
               style={{ flex: 1, height: '24px', fontSize: '11px' }}
             />
             <button type="submit" className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px' }}>
-              Criar
+              {t('chatSidebar.create', 'Criar')}
             </button>
             <button type="button" onClick={() => setShowNewChatPrompt(false)} className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px', background: 'transparent', color: 'var(--vscode-text-fg)', border: '1px solid var(--vscode-border)' }}>
-              Cancelar
+              {t('chatSidebar.cancel', 'Cancelar')}
             </button>
           </form>
         </div>
@@ -828,9 +828,9 @@ export default function ChatPanel({
               {chatThoughtStream ? (
                 <details open style={{ margin: '8px 0', border: '1px solid var(--vscode-widget-border, #3c3c3c)', borderRadius: '4px', background: 'var(--titlebar-bg, #252526)' }}>
                   <summary style={{ padding: '6px 10px', fontSize: '11px', cursor: 'pointer', userSelect: 'none', color: 'var(--vscode-descriptionForeground, #717171)' }}>
-                    Pensamentos da IA
+                    {t('chatPanel.aiThoughts', 'Pensamentos da IA')}
                   </summary>
-                  <pre style={{ margin: 0, padding: '10px', background: 'var(--editor-bg, #1e1e1e)', overflowX: 'auto', fontSize: '11px', color: 'var(--vscode-text-fg, inherit)', borderTop: '1px solid var(--vscode-widget-border, #3c3c3c)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  <pre style={{ margin: 0, padding: '10px', background: 'var(--editor-bg, #1e1e1e)', overflowX: 'auto', fontSize: '11px', color: 'var(--vscode-textPreformat-foreground, #d7ba7d)', borderTop: '1px solid var(--vscode-widget-border, #3c3c3c)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                     {chatThoughtStream}
                   </pre>
                 </details>

@@ -20,6 +20,7 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, '../omnime/gui'),
     emptyOutDir: true,
+    chunkSizeWarningLimit: 1500,
     rollupOptions: {
       output: {
         manualChunks(id) {

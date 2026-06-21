@@ -590,17 +590,25 @@ class AsyncHTTPServer:
             try:
                 import subprocess, platform
                 system = platform.system()
+                
+                # Strip PyInstaller's LD_LIBRARY_PATH so system apps (like nautilus) don't crash
+                env = os.environ.copy()
+                if 'LD_LIBRARY_PATH_ORIG' in env:
+                    env['LD_LIBRARY_PATH'] = env['LD_LIBRARY_PATH_ORIG']
+                elif 'LD_LIBRARY_PATH' in env:
+                    del env['LD_LIBRARY_PATH']
+
                 if system == "Windows":
                     os.startfile(project_path)
                 elif system == "Darwin":
-                    subprocess.Popen(["open", project_path])
+                    subprocess.Popen(["open", project_path], env=env)
                 else:
                     # Check if it's WSL (Windows Subsystem for Linux)
                     release = platform.uname().release.lower()
                     if "microsoft" in release or "wsl" in release:
-                        subprocess.Popen(["explorer.exe", "."], cwd=project_path)
+                        subprocess.Popen(["explorer.exe", "."], cwd=project_path, env=env)
                     else:
-                        subprocess.Popen(["xdg-open", project_path])
+                        subprocess.Popen(["xdg-open", project_path], env=env)
                 self.send_response(writer, 200, b'{"success":true}', "application/json")
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")

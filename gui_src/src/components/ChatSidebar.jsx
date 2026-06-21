@@ -102,7 +102,7 @@ export default function ChatSidebar({
         <button
           onClick={handleCreateChatClick}
           style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)' }}
-          title="Novo Chat"
+          title={t('chatSidebar.newChat', 'Novo Chat')}
         >
           <Plus size={14} />
         </button>
@@ -116,14 +116,14 @@ export default function ChatSidebar({
               className="vscode-settings-input"
               value={newChatName}
               onChange={e => setNewChatName(e.target.value)}
-              placeholder="Nome do chat"
+              placeholder={t('chatSidebar.chatName', 'Nome do chat')}
               style={{ flex: 1, height: '24px', fontSize: '11px' }}
             />
             <button type="submit" className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px' }}>
-              Criar
+              {t('chatSidebar.create', 'Criar')}
             </button>
             <button type="button" onClick={() => setShowNewChatPrompt(false)} className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px', background: 'transparent', color: 'var(--vscode-text-fg)', border: '1px solid var(--vscode-border)' }}>
-              Cancelar
+              {t('chatSidebar.cancel', 'Cancelar')}
             </button>
           </form>
         </div>
@@ -131,13 +131,13 @@ export default function ChatSidebar({
 
       {chatToDelete && (
         <div style={{ padding: '8px', borderBottom: '1px solid var(--vscode-border)', background: 'var(--vscode-sidebar-bg)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <span style={{ fontSize: '11px', color: 'var(--vscode-text-fg)' }}>Deletar este chat e todo o seu histórico?</span>
+          <span style={{ fontSize: '11px', color: 'var(--vscode-text-fg)' }}>{t('chatSidebar.deletePrompt', 'Deletar este chat e todo o seu histórico?')}</span>
           <div style={{ display: 'flex', gap: '6px' }}>
             <button onClick={confirmDeleteChat} className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px', background: '#f87171', color: '#fff', border: 'none' }}>
-              Deletar
+              {t('chatSidebar.delete', 'Deletar')}
             </button>
             <button onClick={() => setChatToDelete(null)} className="vscode-button" style={{ height: '24px', padding: '0 8px', fontSize: '11px', background: 'transparent', color: 'var(--vscode-text-fg)', border: '1px solid var(--vscode-border)' }}>
-              Cancelar
+              {t('chatSidebar.cancel', 'Cancelar')}
             </button>
           </div>
         </div>
@@ -150,13 +150,13 @@ export default function ChatSidebar({
           className="vscode-button"
           style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', height: '32px' }}
         >
-          <Plus size={14} /> Novo Chat
+          <Plus size={14} /> {t('chatSidebar.newChat', 'Novo Chat')}
         </button>
       </div>
 
       {/* Chat List */}
       <div className="vscode-sidebar-section flex-1 overflow-y-auto">
-        <div className="vscode-sidebar-section-title">Histórico de Chats</div>
+        <div className="vscode-sidebar-section-title">{t('chatSidebar.chatHistory', 'Histórico de Chats')}</div>
         <div>
           {chats.map(c => {
             const isActive = activeChatId === c.id;
@@ -175,7 +175,7 @@ export default function ChatSidebar({
                   <button
                     onClick={(e) => handleDeleteChatClick(c.id, e)}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0', padding: '2px 4px' }}
-                    title="Remover Chat"
+                    title={t('chatSidebar.removeChat', 'Remover Chat')}
                   >
                     <Trash2 size={12} />
                   </button>
