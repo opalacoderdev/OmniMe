@@ -12,11 +12,11 @@ def _get_chroma_client():
         except ImportError:
             raise ImportError("Please install chromadb: pip install chromadb")
             
-        from .config import get_opala_home
+        from .config import get_omnime_home
         
         # O banco será salvo no mesmo diretório global do projects.db
         # ex: ~/.omnime/chroma
-        db_path = Path(get_opala_home()) / "chroma"
+        db_path = Path(get_omnime_home()) / "chroma"
         db_path.mkdir(parents=True, exist_ok=True)
         
         _chroma_client = chromadb.PersistentClient(path=str(db_path))

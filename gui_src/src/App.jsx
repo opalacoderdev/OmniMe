@@ -602,6 +602,34 @@ export default function App() {
     if (selectedFile) setFileContents(prev => ({ ...prev, [selectedFile]: fileContent }));
     setOpenFiles(prev => prev.includes(filePath) ? prev : [...prev, filePath]);
     setSelectedFile(filePath);
+    setLayoutMode('ide'); // Force the IDE view so the text editor is visible
+    
+    // Auto-switch to edit mode (IDE mode) when a file is opened
+    if (activeProject.mode !== 'edit') {
+      const updatedProject = { ...activeProject, mode: 'edit' };
+      setActiveProject(updatedProject);
+      fetch('/api/omnime/update-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_name: activeProject.name,
+          display_name: activeProject.project_name,
+          project_path: activeProject.project_path,
+          model: activeProject.model,
+          worker_model: activeProject.worker_model,
+          mode: 'edit',
+          description: activeProject.description,
+          model_params: activeProject.model_params,
+          worker_model_params: activeProject.worker_model_params,
+          api_key: activeProject.api_key,
+          api_base: activeProject.api_base,
+          worker_api_key: activeProject.worker_api_key,
+          worker_api_base: activeProject.worker_api_base,
+          use_shared_memory: activeProject.use_shared_memory
+        })
+      }).catch(err => console.error("Failed to auto-switch to edit mode:", err));
+    }
+
     if (fileContents[filePath] !== undefined) {
       console.log(`[DEBUG handleFileSelect] CACHE HIT for "${filePath}" — serving cached content (${fileContents[filePath].length} chars). Disk NOT read.`);
       setFileContent(fileContents[filePath]);
@@ -1800,6 +1828,7 @@ export default function App() {
           newProjError={newProjError}
           modelConfigMsg={modelConfigMsg}
           onLoadModelConfig={() => loadModelConfig(newProjPath, newProjModel, (cfg) => {
+            if (!cfg) return;
             if (cfg.model_params) {
               const loaded = { ...cfg.model_params };
               if (loaded.api_base !== undefined) {
@@ -1837,12 +1866,13 @@ export default function App() {
           setShowAdvancedParams={setShowAdvancedParams}
           modelConfigMsg={modelConfigMsg}
           onLoadModelConfig={(silent = false) => loadModelConfig(editingProject.project_path, editingProject.model, (cfg) => setEditingProject(p => {
+            if (!p || !cfg) return p;
             const loaded = cfg.model_params || {};
             const { api_base, api_key, worker_model, worker_api_base, worker_api_key, ...restParams } = loaded;
             const cleanRestParams = Object.fromEntries(Object.entries(restParams).filter(([_, v]) => v !== null && v !== undefined));
             return {
               ...p,
-              model_params: Object.keys(cleanRestParams).length > 0 ? { ...p.model_params, ...cleanRestParams } : p.model_params,
+              model_params: Object.keys(cleanRestParams).length > 0 ? { ...(p.model_params || {}), ...cleanRestParams } : p.model_params,
               model: cfg.model || p.model,
               api_base: (api_base !== undefined && api_base !== "") ? api_base : p.api_base,
               api_key: (api_key !== undefined && api_key !== "") ? api_key : p.api_key,

@@ -541,6 +541,26 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         else:
             core_memory = ""
 
+    mode_instructions = ""
+    if project_mode == "plan":
+        mode_instructions = (
+            "\n🚨 **SYSTEM ALERT: You are currently in 'plan' mode.**\n"
+            "INSTRUCTIONS: Your goal is to gather context and propose a plan. "
+            "You MUST NOT execute modifying tools (like editing files or running terminal commands). "
+            "Once you have enough context, you MUST use the `create_plan` tool to present your plan for user approval.\n"
+        )
+    elif project_mode == "edit":
+        mode_instructions = (
+            "\n🚨 **SYSTEM ALERT: You are currently in 'edit' mode.**\n"
+            "INSTRUCTIONS: You should focus on editing files and answering questions. "
+            "If an action requires terminal execution or long-running tasks, ask the user for permission first.\n"
+        )
+    elif project_mode == "auto":
+        mode_instructions = (
+            "\n🚨 **SYSTEM ALERT: You are currently in 'auto' mode.**\n"
+            "INSTRUCTIONS: You have full autonomy to execute tools, run commands, and complete tasks without asking for permission on every step.\n"
+        )
+
     project_block = (
         f"## Current Project\n"
         f"- **Name**: {project_name}\n"
@@ -548,6 +568,7 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         f"- **Model**: {project_model}\n"
         f"- **Worker Model**: {project_worker}\n"
         f"- **Mode**: {project_mode}\n"
+        f"{mode_instructions}"
     )
     if project_desc:
         project_block += f"- **Description**: {project_desc}\n"
@@ -574,6 +595,7 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
     enable_achievements = model_params.get("enable_achievements", True)
     
     from .agent_stdin import wrap_tool
+    from .tools import create_plan
 
     orchestrator_tools = [
         wrap_tool(read_core_memory), 
@@ -581,7 +603,8 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         wrap_tool(get_project_overview), 
         wrap_tool(append_core_memory), 
         wrap_tool(search_conversation_history), 
-        wrap_tool(web_search)
+        wrap_tool(web_search),
+        wrap_tool(create_plan)
     ]
     if enable_achievements:
         from .tools import update_achievements_memory
