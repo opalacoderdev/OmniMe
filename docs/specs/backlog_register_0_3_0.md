@@ -5,5 +5,6 @@
 3. Skill to specs.
 4. Answer to use similar to Gemini/Claude chat with the user. ✅
 5. Add a button to create a conversion branch from existent chat flow.
+6. Add option to export conversation blocks to a markdown file (currently is only possible export the whole conversation).
 
 
