@@ -736,6 +736,11 @@ async def handle_run(data: dict):
                     resp_obj = await agent.run(AgentInput(prompt=retry_prompt))
                 response = resp_obj.response.strip() if resp_obj.response else ""
             
+            if thought_chunks:
+                full_thought = "".join(thought_chunks).strip()
+                if full_thought and not response.startswith("```thought"):
+                    response = f"```thought\n{full_thought}\n```\n\n{response}".strip()
+
             # Save assistant response and achievements
             if agent_type in ("orchestrator", "chat_orchestrator") and current_store and current_project:
                 if tools_mod.TURN_ACHIEVEMENTS:
