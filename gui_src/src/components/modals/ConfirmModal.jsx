@@ -1,58 +1,129 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 // Modal displayed when the backend emits an input_request (Yes/No confirmation).
 export default function ConfirmModal({ confirmRequest, onConfirm }) {
   const { t } = useTranslation();
+  
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedText, setEditedText] = useState(confirmRequest?.markdown_content || "");
 
   if (!confirmRequest) return null;
 
+  const hasMarkdown = !!confirmRequest.markdown_content;
+
+  const handleConfirm = (action) => {
+    if (hasMarkdown && action === 'yes') {
+      onConfirm(JSON.stringify({ response: action, editedContent: editedText }));
+    } else {
+      onConfirm(action);
+    }
+  };
+
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 1000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
-      animation: 'fadeIn 0.15s ease',
-    }}>
-      <div style={{
-        background: 'linear-gradient(135deg, #1e1e2e 0%, #252537 100%)',
-        border: '1px solid #3c3c5c',
-        borderRadius: '12px',
-        padding: '28px 32px',
-        maxWidth: '420px',
+    <div className="vscode-modal-overlay">
+      <div className="vscode-modal" style={{
+        maxWidth: hasMarkdown ? '800px' : '420px',
         width: '90%',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+        maxHeight: '90vh',
+        display: 'flex',
+        flexDirection: 'column',
       }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-          <span style={{ fontSize: '22px' }}>🔔</span>
-          <span style={{ fontSize: '12px', fontWeight: 700, color: '#a0a0c0', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            {t('confirmModal.title')}
-          </span>
+        <div className="vscode-sidebar-header" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '20px' }}>🔔</span>
+            <span className="vscode-sidebar-title" style={{ letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              {t('confirmModal.title', 'Confirm')}
+            </span>
+          </div>
+          {hasMarkdown && (
+            <button
+              onClick={() => setIsEditing(!isEditing)}
+              className="vscode-button"
+              style={{
+                background: isEditing ? 'var(--vscode-button-bg)' : 'transparent',
+                color: isEditing ? 'var(--vscode-button-fg)' : 'var(--vscode-text-fg)',
+                border: '1px solid var(--vscode-button-bg)',
+                padding: '4px 12px',
+                fontSize: '12px',
+                transition: 'all 0.2s'
+              }}
+            >
+              {isEditing ? t('confirmModal.preview', 'Preview') : t('confirmModal.editPlan', 'Edit Plan')}
+            </button>
+          )}
         </div>
 
-        {/* Prompt text */}
-        <p style={{ fontSize: '14px', color: '#e0e0f0', lineHeight: 1.6, marginBottom: '24px', margin: '0 0 24px 0' }}>
-          {confirmRequest.prompt}
-        </p>
+        {/* Body */}
+        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          {/* Prompt text */}
+          <p style={{ fontSize: '14px', color: 'var(--vscode-text-fg)', lineHeight: 1.6, marginBottom: '16px', marginTop: '16px' }}>
+            {confirmRequest.prompt}
+          </p>
 
-        {/* Buttons */}
-        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+          {/* Markdown Content (if available) */}
+          {hasMarkdown && (
+            <div className="markdown-body" style={{ 
+              flex: 1, 
+              overflowY: 'auto', 
+              background: 'var(--vscode-editor-bg)', 
+              padding: isEditing ? '0' : '16px', 
+              borderRadius: '4px', 
+              border: '1px solid var(--vscode-border)',
+              marginBottom: '20px',
+              fontSize: '14px',
+              color: 'var(--vscode-text-fg)',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              {isEditing ? (
+                <textarea
+                  value={editedText}
+                  onChange={(e) => setEditedText(e.target.value)}
+                  style={{
+                    flex: 1,
+                    width: '100%',
+                    minHeight: '300px',
+                    background: 'transparent',
+                    color: 'var(--vscode-text-fg)',
+                    border: 'none',
+                    padding: '16px',
+                    fontSize: '14px',
+                    fontFamily: 'var(--vscode-editor-font)',
+                    resize: 'none',
+                    outline: 'none'
+                  }}
+                />
+              ) : (
+                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                  {editedText}
+                </ReactMarkdown>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer Buttons */}
+        <div style={{ 
+          display: 'flex', gap: '8px', justifyContent: 'flex-end', 
+          padding: '16px 20px', borderTop: '1px solid var(--vscode-border)', 
+          backgroundColor: 'var(--vscode-sidebar-bg)' 
+        }}>
           {(confirmRequest.options || ['no', 'yes']).map(opt => {
             if (opt === 'cancel') {
               return (
                 <button
                   key="cancel"
-                  onClick={() => onConfirm('cancel')}
-                  style={{
-                    padding: '8px 20px', borderRadius: '8px', border: '1px solid #4c4c6c',
-                    background: 'transparent', color: '#a0a0c0', cursor: 'pointer',
-                    fontSize: '13px', fontWeight: 600, transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => { e.target.style.background = '#2c2c3c'; e.target.style.color = '#e0e0f0'; }}
-                  onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = '#a0a0c0'; }}
+                  onClick={() => handleConfirm('cancel')}
+                  className="vscode-button"
+                  style={{ background: 'transparent', border: '1px solid var(--vscode-border)', color: 'var(--vscode-text-fg)' }}
                 >
-                  Cancelar
+                  {t('confirmModal.cancel', 'Cancel')}
                 </button>
               );
             }
@@ -61,14 +132,9 @@ export default function ConfirmModal({ confirmRequest, onConfirm }) {
                 <button
                   key="no"
                   id="confirm-no-btn"
-                  onClick={() => onConfirm('no')}
-                  style={{
-                    padding: '8px 20px', borderRadius: '8px', border: '1px solid #4c4c6c',
-                    background: 'transparent', color: '#a0a0c0', cursor: 'pointer',
-                    fontSize: '13px', fontWeight: 600, transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => { e.target.style.background = '#2c2c3c'; e.target.style.color = '#e0e0f0'; }}
-                  onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = '#a0a0c0'; }}
+                  onClick={() => handleConfirm('no')}
+                  className="vscode-button"
+                  style={{ background: 'transparent', border: '1px solid var(--vscode-border)', color: 'var(--vscode-text-fg)' }}
                 >
                   {t('confirmModal.no')}
                 </button>
@@ -79,19 +145,23 @@ export default function ConfirmModal({ confirmRequest, onConfirm }) {
                 <button
                   key="yes"
                   id="confirm-yes-btn"
-                  onClick={() => onConfirm('yes')}
-                  style={{
-                    padding: '8px 24px', borderRadius: '8px', border: 'none',
-                    background: 'linear-gradient(135deg, #007acc, #0062a3)',
-                    color: '#fff', cursor: 'pointer',
-                    fontSize: '13px', fontWeight: 700,
-                    boxShadow: '0 4px 16px rgba(0,122,204,0.35)',
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => { e.target.style.background = 'linear-gradient(135deg, #0090f0, #007acc)'; }}
-                  onMouseLeave={e => { e.target.style.background = 'linear-gradient(135deg, #007acc, #0062a3)'; }}
+                  onClick={() => handleConfirm('yes')}
+                  className="vscode-button"
                 >
                   {t('confirmModal.yes')}
+                </button>
+              );
+            }
+            if (opt === 'always') {
+              return (
+                <button
+                  key="always"
+                  id="confirm-always-btn"
+                  onClick={() => handleConfirm('always')}
+                  className="vscode-button"
+                  style={{ background: '#2ea043', border: '1px solid #238636', color: '#ffffff' }}
+                >
+                  {t('confirmModal.always', 'Always Allow')}
                 </button>
               );
             }

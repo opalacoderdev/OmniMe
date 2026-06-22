@@ -6,6 +6,9 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import functools
+import asyncio
+import concurrent.futures
 from agenticblocks.core.function_block import as_tool
 
 from . import terminal as T
@@ -248,8 +251,121 @@ def _decode_escape_sequences(s: str) -> str:
         .replace(r"\\", "\\")
     )
 
+SAFE_SHELL_COMMANDS = {
+    # Linux/macOS
+    "ls", "pwd", "cat", "grep", "find", "whoami", "head", "tail", "less", "more", "tree", "cd", "echo",
+    # Windows (CMD / PowerShell)
+    "dir", "type", "findstr", "Get-ChildItem", "Get-Location", "Get-Content", "Select-String", "tasklist"
+}
+
+_DENIED_TOOLS = set()
+
+class UserCancelException(BaseException):
+    """Raised to immediately abort the agent turn when a user denies permission."""
+    pass
+
+def omnime_tool(name: str, description: str, is_safe: bool = False):
+    """
+    Decorator that wraps the agenticblocks tool.
+    Enforces 'plan', 'edit', and 'auto' mode safety rules.
+    """
+    def decorator(func):
+        is_async = asyncio.iscoroutinefunction(func)
+
+        def _check_permission(*args, **kwargs):
+            mode = getattr(_PROJECT_SESSION, "mode", "auto") if _PROJECT_SESSION else "auto"
+            
+            # Auto mode or safe tool -> always execute
+            if mode == "auto" or is_safe:
+                return True
+                
+            # Check if this tool was set to 'always allow'
+            if _PROJECT_SESSION and hasattr(_PROJECT_SESSION, "results"):
+                allowed_tools = _PROJECT_SESSION.results.get("allowed_tools", [])
+                if name in allowed_tools:
+                    return True
+
+            if name in _DENIED_TOOLS:
+                return f"Execution blocked: You already asked to use '{name}' and the user DENIED it. Do not try again."
+
+            # Now we are in 'edit' or 'plan' mode, and the tool is NOT safe.
+            is_run_command_safe = False
+            question = f"O agente quer usar a ferramenta '{name}'. Permitir?"
+            
+            if name == "run_command":
+                cmd = kwargs.get("command") or (args[0] if args else "")
+                base_cmd = cmd.strip().split()[0] if cmd else ""
+                is_writing = ">" in cmd or "|" in cmd
+                if base_cmd in SAFE_SHELL_COMMANDS and not is_writing:
+                    is_run_command_safe = True
+                else:
+                    question = f"O agente quer executar o comando: '{cmd}'. Permitir?"
+            
+            if is_run_command_safe:
+                return True
+                
+            if mode == "plan":
+                return "Execution blocked: In 'plan' mode, you are not allowed to execute operations that modify the system."
+                
+            if mode == "edit":
+                return question
+                
+            return True
+
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            res = _check_permission(*args, **kwargs)
+            if isinstance(res, str):
+                if res.startswith("Execution blocked"):
+                    raise UserCancelException(res)
+                
+                # Ask user for permission using a custom confirm modal
+                import uuid
+                import asyncio
+                from omnime.agent_stdin import print_event, _gui_input_pending
+                loop = asyncio.get_event_loop()
+                req_id = str(uuid.uuid4())
+                fut = loop.create_future()
+                _gui_input_pending[req_id] = fut
+                
+                print_event("input_request", {
+                    "id": req_id,
+                    "prompt": res,
+                    "type": "confirm",
+                    "options": ["yes", "no", "always"],
+                    "default": "yes"
+                })
+                
+                try:
+                    raw = await asyncio.wait_for(asyncio.shield(fut), timeout=86400.0) # wait up to 24h
+                    ans = str(raw).strip().lower()
+                except asyncio.TimeoutError:
+                    ans = "no"
+                finally:
+                    _gui_input_pending.pop(req_id, None)
+                    
+                if ans not in ("yes", "y", "s", "sim", "true", "1", "always", "a"):
+                    _DENIED_TOOLS.add(name)
+                    raise UserCancelException(f"Operação cancelada pelo usuário (Modo Edit) para a ferramenta: {name}")
+                    
+                if ans in ("always", "a"):
+                    if _PROJECT_SESSION and hasattr(_PROJECT_SESSION, "results"):
+                        if "allowed_tools" not in _PROJECT_SESSION.results:
+                            _PROJECT_SESSION.results["allowed_tools"] = []
+                        if name not in _PROJECT_SESSION.results["allowed_tools"]:
+                            _PROJECT_SESSION.results["allowed_tools"].append(name)
+                            
+            if is_async:
+                return await func(*args, **kwargs)
+            else:
+                return func(*args, **kwargs)
+                
+        return as_tool(name=name, description=description)(async_wrapper)
+            
+    return decorator
+
 # ─── Tools ───────────────────────────────────────────────────────────────────
-@as_tool(name="read_file", description="Read the contents of a file in the project workspace. Relative paths are resolved from the project directory.")
+@omnime_tool(name="read_file", is_safe=True, description="Read the contents of a file in the project workspace. Relative paths are resolved from the project directory.")
 def read_file(path: str) -> str:
     try:
         resolved = _resolve_path(path)
@@ -273,7 +389,7 @@ def read_file(path: str) -> str:
     except Exception as e:
         raise ValueError(f"Error reading {_preview(resolved)}: {e}")
 
-@as_tool(name="write_file", description="Write or overwrite a file inside the project directory. Relative paths are resolved from the project directory. Creates parent directories if needed. ALWAYS use this tool to save file content — never use run_command with echo/printf/cat to write files, as shell quoting will break with multi-line or HTML/JSON content.")
+@omnime_tool(name="write_file", is_safe=False, description="Write or overwrite a file inside the project directory. Relative paths are resolved from the project directory. Creates parent directories if needed. ALWAYS use this tool to save file content — never use run_command with echo/printf/cat to write files, as shell quoting will break with multi-line or HTML/JSON content.")
 def write_file(path: str, content: str) -> str:
     try:
         resolved = _resolve_path(path)
@@ -308,7 +424,7 @@ import platform
 _os_info = f"{platform.system()} ({platform.release()})"
 _run_cmd_desc = f"Execute a non-interactive shell command (e.g. ls, dir, mkdir, grep, npm install). Runs inside the project directory. Returns stdout/stderr. NEVER run servers or infinite processes. NEVER use echo/printf/cat to write file content — use write_file instead. NOTE: Host OS is {_os_info}. Use the appropriate shell commands."
 
-@as_tool(name="run_command", description=_run_cmd_desc)
+@omnime_tool(name="run_command", is_safe=False, description=_run_cmd_desc)
 def run_command(command: str) -> str:
     AGENT_PROGRESS.update("run_command", f"$ {_preview(command)}")
     cwd = get_project_path()
@@ -341,7 +457,7 @@ def run_command(command: str) -> str:
     except Exception as e:
         raise ValueError(f"Error running command: {e}")
 
-@as_tool(name="run_background_command", description="Start a long-running background command or server (e.g., `npm run dev`) directly in the user's MAIN IDE terminal. This runs asynchronously and returns immediately, allowing the agent to continue working while the server runs. NEVER use this for commands where you need to see the output to proceed.")
+@omnime_tool(name="run_background_command", is_safe=False, description="Start a long-running background command or server (e.g., `npm run dev`) directly in the user's MAIN IDE terminal. This runs asynchronously and returns immediately, allowing the agent to continue working while the server runs. NEVER use this for commands where you need to see the output to proceed.")
 async def run_background_command(command: str) -> str:
     import json
     import urllib.request
@@ -370,7 +486,7 @@ async def run_background_command(command: str) -> str:
         return f"FAILED to send command to background terminal: {str(e)}"
 
 
-@as_tool(name="run_python_script", description="Execute a Python script securely. It automatically uses the correct Python interpreter for the environment. Provide the script path and any optional arguments.")
+@omnime_tool(name="run_python_script", is_safe=False, description="Execute a Python script securely. It automatically uses the correct Python interpreter for the environment. Provide the script path and any optional arguments.")
 def run_python_script(script_path: str, args: str = "") -> str:
     try:
         resolved = _resolve_path(script_path)
@@ -409,7 +525,7 @@ def run_python_script(script_path: str, args: str = "") -> str:
     except Exception as e:
         raise ValueError(f"Error running script: {e}")
 
-@as_tool(name="run_interactive_command", description="Run a command that requires user interaction (e.g. npm create, interactive scripts, prompts). This opens a dedicated interactive terminal popup in the user's GUI, allowing them to answer the prompts safely. Use this WHENEVER a command needs human choices, waits for input, or requires a PTY. Do NOT use standard `exec` or `run_command` for interactive tasks, as they will hang.")
+@omnime_tool(name="run_interactive_command", is_safe=False, description="Run a command that requires user interaction (e.g. npm create, interactive scripts, prompts). This opens a dedicated interactive terminal popup in the user's GUI, allowing them to answer the prompts safely. Use this WHENEVER a command needs human choices, waits for input, or requires a PTY. Do NOT use standard `exec` or `run_command` for interactive tasks, as they will hang.")
 async def run_interactive_command(command: str) -> str:
     import uuid
     import omnime.terminal as T
@@ -425,7 +541,7 @@ async def run_interactive_command(command: str) -> str:
     else:
         return f"FAILURE: The user indicated that the interactive command '{command}' failed or was cancelled. Please ask the user for details if needed."
 
-@as_tool(name="search_code", description="Search for a specific string across all files using grep. Searches inside the project directory by default.")
+@omnime_tool(name="search_code", is_safe=True, description="Search for a specific string across all files using grep. Searches inside the project directory by default.")
 def search_code(query: str, path: str = ".") -> str:
     try:
         resolved = _resolve_path(path)
@@ -446,8 +562,9 @@ def search_code(query: str, path: str = ".") -> str:
     except Exception as e:
         raise ValueError(f"Error searching code in {_preview(resolved)}: {e}")
 
-@as_tool(
+@omnime_tool(
     name="ask_human",
+    is_safe=True,
     description=(
         "Pause execution and ask the human a critical question. "
         "Use ONLY for genuinely dangerous or irreversible operations such as: "
@@ -467,8 +584,9 @@ async def ask_human(question: str) -> str:
     return f"The user responded: {ans}"
 
 
-@as_tool(
+@omnime_tool(
     name="get_project_overview",
+    is_safe=True,
     description=(
         "Return a compact overview of the current project: directory tree (max depth defined by parameter max_depth, DEFAULT/MINIMUM 5), "
         "file count by type, and a summary of key files (README, package.json, requirements.txt, etc.). "
@@ -556,8 +674,9 @@ def get_project_overview(max_depth:int = 5) -> str:
     except Exception as e:
         return f"Error generating project overview: {e}"
 
-@as_tool(
+@omnime_tool(
     name="write_content_pos",
+    is_safe=False,
     description=(
         "Insert content into a file starting at a specific line number (1-indexed). "
         "The new content will be inserted just before the specified line."
@@ -597,8 +716,9 @@ def write_content_pos(path: str, content: str, pos: int) -> str:
     except Exception as e:
         raise ValueError(f"Error writing to {_preview(resolved)}: {e}")
 
-@as_tool(
+@omnime_tool(
     name="read_content_pos",
+    is_safe=True,
     description=(
         "Read a specific range of lines from a file. "
         "start_pos and end_pos are 1-indexed line numbers (inclusive)."
@@ -655,8 +775,9 @@ def get_available_tools():
     ]
 
 # ─── Achievements Memory ─────────────────────────────────────────────────────
-@as_tool(
+@omnime_tool(
     name="update_achievements_memory", 
+    is_safe=True,
     description=(
         "Update the transient Achievements Memory with a summary of the important milestones and tasks "
         "you have accomplished so far during this turn. Keep it concise (e.g. bullet points). "
@@ -677,7 +798,7 @@ def update_achievements_memory(summary: str) -> str:
     return "Achievements Memory updated successfully."
 
 # ─── Long-Term Memory (MemGPT-style) ──────────────────────────────────────────
-@as_tool(name="read_core_memory", description="Read the global 'Core Memory' of the project. Contains rules, persistent context, and architectural decisions you should follow.")
+@omnime_tool(name="read_core_memory", is_safe=True, description="Read the global 'Core Memory' of the project. Contains rules, persistent context, and architectural decisions you should follow.")
 def read_core_memory() -> str:
     AGENT_PROGRESS.update("read_core_memory")
     if not _PROJECT_SESSION:
@@ -691,7 +812,7 @@ def read_core_memory() -> str:
         mem = _PROJECT_STORE.get_chat_core_memory(_PROJECT_SESSION.name, getattr(_PROJECT_SESSION, "current_chat_id", "main"))
         return mem or "(Core memory is empty)"
 
-@as_tool(name="append_core_memory", description="Append a new persistent rule, context, or decision to the Core Memory. Do this when you learn something about the user's preferences or the project's state that you want to remember across different executions.")
+@omnime_tool(name="append_core_memory", is_safe=False, description="Append a new persistent rule, context, or decision to the Core Memory. Do this when you learn something about the user's preferences or the project's state that you want to remember across different executions.")
 def append_core_memory(content: str) -> str:
     AGENT_PROGRESS.update("append_core_memory", f"content={_preview(content)}")
     if not _PROJECT_SESSION or not _PROJECT_STORE:
@@ -718,7 +839,7 @@ def append_core_memory(content: str) -> str:
         except Exception as e:
             raise ValueError(f"Error saving isolated Core Memory: {e}")
 
-@as_tool(name="search_conversation_history", description="Search through the past conversations of this project using semantic search (RAG) to remember previous context, decisions, or user instructions. Use this when you need context about past tasks.")
+@omnime_tool(name="search_conversation_history", is_safe=True, description="Search through the past conversations of this project using semantic search (RAG) to remember previous context, decisions, or user instructions. Use this when you need context about past tasks.")
 def search_conversation_history(query: str, limit: int = 5) -> str:
     AGENT_PROGRESS.update("search_conversation_history", f"query={_preview(query)}")
     if not _PROJECT_SESSION:
@@ -740,9 +861,75 @@ def search_conversation_history(query: str, limit: int = 5) -> str:
     except Exception as e:
         raise ValueError(f"Error searching Archival Memory: {e}")
 
+@omnime_tool(
+    name="create_plan",
+    is_safe=True,
+    description=(
+        "Presents a proposed implementation plan to the user for approval. "
+        "Use this tool when you are in 'plan' mode and have gathered enough context to propose a plan. "
+        "This tool halts execution and waits for the user to approve or reject the plan."
+    )
+)
+async def create_plan(plan_content: str) -> str:
+    AGENT_PROGRESS.update("create_plan")
+    if not _PROJECT_SESSION:
+        return "Failed: No active session."
+    
+    T.info("Presenting Proposed Plan to user for approval...")
+    
+    # Emit custom input_request with markdown_content instead of using T.aconfirm
+    import uuid
+    import asyncio
+    from omnime.agent_stdin import print_event, _gui_input_pending
+    
+    loop = asyncio.get_event_loop()
+    req_id = str(uuid.uuid4())
+    fut = loop.create_future()
+    _gui_input_pending[req_id] = fut
+    
+    print_event("input_request", {
+        "id": req_id,
+        "prompt": "Review the proposed plan below:",
+        "markdown_content": plan_content,
+        "type": "confirm",
+        "options": ["yes", "no"],
+        "default": "yes"
+    })
+    
+    try:
+        raw = await asyncio.wait_for(asyncio.shield(fut), timeout=86400.0) # wait up to 24h
+        
+        # Try parsing JSON if the frontend sent the edited content
+        import json
+        try:
+            data = json.loads(raw)
+            approved_str = data.get("response", "no")
+            edited_plan = data.get("editedContent", plan_content)
+        except Exception:
+            approved_str = raw.strip()
+            edited_plan = plan_content
+            
+        approved = approved_str.lower() in ("yes", "y", "s", "sim", "true", "1")
+    except asyncio.TimeoutError:
+        approved = True
+        edited_plan = plan_content
+    finally:
+        _gui_input_pending.pop(req_id, None)
+    
+    if approved:
+        _PROJECT_SESSION.mode = "auto"
+        if edited_plan != plan_content:
+            _PROJECT_SESSION.plan_text = edited_plan
+            # We don't save to db yet, it'll be saved at the end of the turn by agent_stdin
+        return f"The user APPROVED the plan. The system is now in 'auto' mode. Proceed to execute the plan.\n\nPlan Content:\n{edited_plan}"
+    else:
+        # Throw an error to halt the agent immediately and prevent it from continuing
+        raise ValueError("The user REJECTED the plan. Wait for the user to provide feedback in the chat.")
 
-@as_tool(
+
+@omnime_tool(
     name="web_search",
+    is_safe=True,
     description=(
         "Search the web for current information, documentation, news, or any topic. "
         "Use this when you need information that may be recent, external, or not in your training data. "

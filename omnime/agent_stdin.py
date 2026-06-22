@@ -452,6 +452,10 @@ async def handle_slash_command_continue(data: dict) -> dict:
 
 async def handle_run(data: dict):
     global current_project, current_store, current_memgpt
+    
+    import omnime.tools
+    omnime.tools._DENIED_TOOLS.clear()
+    
     agent_type = data.get("agent") or "chat_orchestrator"
     model = data.get("model")
     system_prompt = data.get("system_prompt")
@@ -464,6 +468,10 @@ async def handle_run(data: dict):
     # Setup project context if provided
     if "project_path" in data or "project_name" in data:
         await handle_load_project(data)
+
+    initial_project_mode = None
+    if current_project:
+        initial_project_mode = current_project.mode
 
     if current_project and current_project.project_path:
         state_dir = os.path.join(current_project.project_path, ".omnime")
@@ -716,23 +724,22 @@ async def handle_run(data: dict):
                     resp_obj = await agent.run(AgentInput(prompt=retry_prompt))
                 response = resp_obj.response.strip() if resp_obj.response else ""
             
-            # Inject aggregated thoughts into response so they persist in history
-            full_thoughts = "".join(thought_chunks).strip()
-            if full_thoughts:
-                if "<think>" in response:
-                    import re
-                    response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL).strip()
-                response = f"```thought\n{full_thoughts}\n```\n\n" + response
-            
             # Save assistant response and achievements
             if agent_type in ("orchestrator", "chat_orchestrator") and current_store and current_project:
                 if tools_mod.TURN_ACHIEVEMENTS:
                     current_store.append_message(current_project, "system", f"Achievements logged during this turn:\n{tools_mod.TURN_ACHIEVEMENTS}")
                 if response:
                     current_store.append_message(current_project, "assistant", response)
+                # Revert any temporary mode changes (like create_plan setting mode to 'auto')
+                if 'initial_project_mode' in locals() and initial_project_mode:
+                    current_project.mode = initial_project_mode
                 current_store.save(current_project)
 
             print_event("agent_response", {"response": response})
+        except omnime.tools.UserCancelException as e:
+            # The user denied a tool operation; gracefully abort the turn without feeding an error back to the LLM.
+            print_event("agent_response", {"response": "Turno cancelado pelo usuário."})
+            print_event("error", {"message": str(e), "trace": ""})
         except Exception as e:
             import traceback
             err_msg = traceback.format_exc()

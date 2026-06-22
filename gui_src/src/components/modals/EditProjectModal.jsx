@@ -52,8 +52,9 @@ export default function EditProjectModal({
   // Helper to update a model_param key.
   const setParam = (key, value, isWorker = false) => {
     setEditingProject(p => {
+      if (!p) return p;
       const targetObj = isWorker ? p.worker_model_params : p.model_params;
-      const n = { ...targetObj };
+      const n = { ...(targetObj || {}) };
       
       if (value === undefined || value === '') {
         delete n[key];
