@@ -7,4 +7,5 @@
 5. Add a button to create a conversion branch from existent chat flow.
 6. Add option to export conversation blocks to a markdown file (currently is only possible export the whole conversation).
 7. Add a feature to display available memory in the chat, including a visual indicator that shows a battery draining as memory is consumed.
+8. Provider/Model selection list in chat (automatically change provider for next message based on selection).
 
