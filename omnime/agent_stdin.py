@@ -5,6 +5,18 @@ import json
 import asyncio
 import os
 
+# Fix charmap error on Windows by forcing UTF-8 on standard streams
+if sys.stdout is not None:
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+if sys.stderr is not None:
+    try:
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 # Save real stdout and redirect sys.stdout to sys.stderr to prevent pollution
 _real_stdout = sys.stdout
 sys.stdout = sys.stderr
