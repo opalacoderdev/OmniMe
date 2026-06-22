@@ -429,7 +429,7 @@ async def handle_slash_command(data: dict) -> dict:
         return {"status": "confirm", **confirm_info}
 
     await cmd_task
-    response_text = "\n".join(m for m in messages if m is not None) or f"Comando {cmd} executado com sucesso."
+    response_text = "\n".join(m for m in messages if m is not None) or f"Comando {cmd} concluído."
     return {"status": "done", "messages": [response_text]}
 
 

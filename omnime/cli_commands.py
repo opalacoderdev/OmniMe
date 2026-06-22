@@ -85,6 +85,8 @@ async def cmd_clear(state: REPLState, _args: list[str]) -> None:
         from .archival import clear_archival
         clear_archival(state.project.name)
         T.success("Project global memory and all chats cleared.")
+    else:
+        T.warning("Ação cancelada.")
 
 @_registry.register("/clear_chat", description="Clear only the current chat's history and its isolated memory (if any)")
 async def cmd_clear_chat(state: REPLState, _args: list[str]) -> None:
@@ -100,6 +102,8 @@ async def cmd_clear_chat(state: REPLState, _args: list[str]) -> None:
         from .archival import clear_archival_chat
         clear_archival_chat(state.project.name, chat_id)
         T.success(f"Chat '{chat_id}' cleared.")
+    else:
+        T.warning("Ação cancelada.")
 
 
 
@@ -523,6 +527,8 @@ async def cmd_restoreckp(state: REPLState, args: list[str]) -> str | None:
             T.success(msg)
         else:
             T.error(msg)
+    else:
+        T.warning("Ação cancelada.")
     return "continue"
 
 
@@ -546,6 +552,8 @@ async def cmd_removechk(state: REPLState, args: list[str]) -> str | None:
             T.success(msg)
         else:
             T.error(msg)
+    else:
+        T.warning("Ação cancelada.")
     return "continue"
 
 

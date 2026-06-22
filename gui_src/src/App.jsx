@@ -1242,7 +1242,7 @@ export default function App() {
       try {
         const res = await fetch('/api/omnime/slash-command', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: userText.trim(), project_name: activeProject.name, project_path: activeProject.project_path }),
+          body: JSON.stringify({ prompt: userText.trim(), project_name: activeProject.name, project_path: activeProject.project_path, chat_id: activeChatId }),
         });
         const result = await res.json();
         if (result.status === 'confirm') {
