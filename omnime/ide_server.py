@@ -1992,6 +1992,36 @@ class AsyncHTTPServer:
             except ImportError:
                 installed = False
             self.send_response(writer, 200, json.dumps({"installed": installed}).encode('utf-8'), "application/json")
+            
+        # 7h2. Models Store Endpoints
+        elif path == '/api/settings/models' and method == 'GET':
+            from omnime.models_store import load_models
+            try:
+                models = load_models()
+                self.send_response(writer, 200, json.dumps({"models": models}).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+                
+        elif path == '/api/settings/models' and method == 'POST':
+            from omnime.models_store import add_or_update_model
+            try:
+                add_or_update_model(data)
+                self.send_response(writer, 200, b'{"success":true}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+                
+        elif path == '/api/settings/models' and method == 'DELETE':
+            from omnime.models_store import delete_model
+            try:
+                model_id = data.get("id")
+                if not model_id:
+                    self.send_response(writer, 400, b'{"error":"id is required"}', "application/json")
+                    return
+                success = delete_model(model_id)
+                self.send_response(writer, 200, json.dumps({"success": success}).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
         # 7i. Problems scan
         elif path == '/api/omnime/problems' and method == 'GET':
             project_path = query.get('projectPath', [None])[0]

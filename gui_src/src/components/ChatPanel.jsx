@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useLayoutEffect, useEffect } from 'react';
-import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings, Plus, Trash2, Search, Paperclip, FileText, ZoomIn, ZoomOut, Download, Printer } from 'lucide-react';
+import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings, Settings2, Plus, Trash2, Search, Paperclip, FileText, ZoomIn, ZoomOut, Download, Printer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatMessageContent } from '../utils/formatMessage';
 import { readClipboard } from '../utils/clipboard.js';
@@ -31,7 +31,11 @@ export default function ChatPanel({
   setChatMessages,
   pendingAttachments,
   setPendingAttachments,
-  isChatMode
+  isChatMode,
+  globalModels = [],
+  onRefreshModels,
+  onEditModels,
+  onModelChange
 }) {
   const { t } = useTranslation();
   const historyRef = useRef(null);
@@ -560,20 +564,62 @@ export default function ChatPanel({
         </div>
       )}
 
-      {/* Quick actions toolbar */}
-      <div className="vscode-chat-toolbar">
-        <button onClick={() => setChatInput('/skills')} className="vscode-chat-tool-btn">
-          <Cpu size={11} />
-          <span>/skills</span>
-        </button>
-        <button onClick={() => setChatInput('/help')} className="vscode-chat-tool-btn">
-          <HelpCircle size={11} />
-          <span>/help</span>
-        </button>
-        <button onClick={() => setChatInput('/commit')} className="vscode-chat-tool-btn">
-          <Check size={11} />
-          <span>/commit</span>
-        </button>
+      {/* Model selectors toolbar */}
+      <div className="vscode-chat-toolbar" style={{ display: 'flex', gap: '8px', padding: '6px 10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: '150px' }}>
+          <Settings2 size={12} style={{ color: 'var(--vscode-descriptionForeground)' }} />
+          <span style={{ fontSize: '11px', color: 'var(--vscode-descriptionForeground)' }}>{t('chatPanel.orchestrator', 'Orchestrator')}:</span>
+          <select
+            className="vscode-settings-input"
+            style={{ flex: 1, padding: '2px 4px', fontSize: '11px', height: '22px' }}
+            value={activeProject?.model || ''}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === 'edit_models') onEditModels?.();
+              else if (val === 'refresh_models') onRefreshModels?.();
+              else onModelChange?.('model', val);
+            }}
+            disabled={!activeProject}
+          >
+            {(!activeProject || !activeProject.model) && <option value="">Select...</option>}
+            {Object.entries((globalModels || []).reduce((acc, m) => { const p = m.provider || 'custom'; if (!acc[p]) acc[p] = []; acc[p].push(m); return acc; }, {})).map(([provider, models]) => (
+              <optgroup key={`orch-${provider}`} label={provider.toUpperCase()}>
+                {models.map(m => <option key={`orch-${m.id}`} value={m.id}>{m.name || m.id}</option>)}
+              </optgroup>
+            ))}
+            <optgroup label={t('common.actions', 'Actions')}>
+              <option value="refresh_models">🔄 {t('chatPanel.refreshModels', 'Refresh Models')}</option>
+              <option value="edit_models">⚙️ {t('chatPanel.editModels', 'Edit Models...')}</option>
+            </optgroup>
+          </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: '150px' }}>
+          <Cpu size={12} style={{ color: 'var(--vscode-descriptionForeground)' }} />
+          <span style={{ fontSize: '11px', color: 'var(--vscode-descriptionForeground)' }}>{t('chatPanel.worker', 'Worker')}:</span>
+          <select
+            className="vscode-settings-input"
+            style={{ flex: 1, padding: '2px 4px', fontSize: '11px', height: '22px' }}
+            value={activeProject?.worker_model || ''}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === 'edit_models') onEditModels?.();
+              else if (val === 'refresh_models') onRefreshModels?.();
+              else onModelChange?.('worker_model', val);
+            }}
+            disabled={!activeProject}
+          >
+            {(!activeProject || !activeProject.worker_model) && <option value="">Select...</option>}
+            {Object.entries((globalModels || []).reduce((acc, m) => { const p = m.provider || 'custom'; if (!acc[p]) acc[p] = []; acc[p].push(m); return acc; }, {})).map(([provider, models]) => (
+              <optgroup key={`work-${provider}`} label={provider.toUpperCase()}>
+                {models.map(m => <option key={`work-${m.id}`} value={m.id}>{m.name || m.id}</option>)}
+              </optgroup>
+            ))}
+            <optgroup label={t('common.actions', 'Actions')}>
+              <option value="refresh_models">🔄 {t('chatPanel.refreshModels', 'Refresh Models')}</option>
+              <option value="edit_models">⚙️ {t('chatPanel.editModels', 'Edit Models...')}</option>
+            </optgroup>
+          </select>
+        </div>
       </div>
 
       {/* Web Search toggle bar */}

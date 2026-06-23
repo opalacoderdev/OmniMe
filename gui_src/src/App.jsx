@@ -34,6 +34,9 @@ import OnboardingModal from './components/modals/OnboardingModal';
 import DirPickerModal from './components/modals/DirPickerModal';
 import DeleteProjectModal from './components/modals/DeleteProjectModal';
 
+import EditModelsModal from './components/modals/EditModelsModal';
+import AddProviderModal from './components/modals/AddProviderModal';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // App
 // ─────────────────────────────────────────────────────────────────────────────
@@ -133,6 +136,12 @@ export default function App() {
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
+  // ── Global Models ─────────────────────────────────────────────────────────
+  const [globalModels, setGlobalModels] = useState([]);
+  const [showEditModelsModal, setShowEditModelsModal] = useState(false);
+  const [showAddProviderModal, setShowAddProviderModal] = useState(false);
+  const [editingModelModalData, setEditingModelModalData] = useState(null);
+
   // ── IDE settings ──────────────────────────────────────────────────────────
   const [settingsTab, setSettingsTab] = useState('preferences');
   const [activeChatId, setActiveChatId] = useState('main');
@@ -190,6 +199,139 @@ export default function App() {
         fetchProjects();
       });
   }, []);
+
+  const fetchGlobalModels = () => {
+    fetch('/api/settings/models')
+      .then(res => res.json())
+      .then(data => {
+        if (data.models) setGlobalModels(data.models);
+      })
+      .catch(console.error);
+  };
+
+  useEffect(() => {
+    fetchGlobalModels();
+  }, []);
+
+  const handleGlobalModelSave = async (modelData) => {
+    try {
+      const res = await fetch('/api/settings/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(modelData)
+      });
+      if (res.ok) {
+        fetchGlobalModels();
+        setShowAddProviderModal(false);
+
+        // If the active project is currently using this model, update its settings
+        if (activeProject) {
+          const isOrchestrator = activeProject.model === modelData.id;
+          const isWorker = activeProject.worker_model === modelData.id;
+          
+          if (isOrchestrator || isWorker) {
+            const payload = {
+              project_name: activeProject.name,
+              display_name: activeProject.project_name || activeProject.name,
+              project_path: activeProject.project_path,
+              model: activeProject.model,
+              worker_model: activeProject.worker_model,
+              mode: activeProject.mode,
+              description: activeProject.description,
+              model_params: activeProject.model_params,
+              worker_model_params: activeProject.worker_model_params,
+              api_key: activeProject.api_key,
+              api_base: activeProject.api_base,
+              worker_api_key: activeProject.worker_api_key,
+              worker_api_base: activeProject.worker_api_base,
+              use_shared_memory: activeProject.use_shared_memory
+            };
+
+            if (isOrchestrator) {
+              payload.api_key = modelData.api_key;
+              payload.api_base = modelData.api_base;
+            }
+            if (isWorker) {
+              payload.worker_api_key = modelData.api_key;
+              payload.worker_api_base = modelData.api_base;
+            }
+
+            const resUpdate = await fetch('/api/omnime/update-project', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            
+            if (resUpdate.ok) {
+              const updated = await resUpdate.json();
+              setActiveProject(prev => ({ ...prev, ...updated }));
+              setProjects(prev => prev.map(p => (p.name === updated.name) ? { ...p, ...updated } : p));
+            }
+          }
+        }
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const handleGlobalModelDelete = async (modelId) => {
+    try {
+      const res = await fetch('/api/settings/models', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: modelId })
+      });
+      if (res.ok) fetchGlobalModels();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleProjectModelChange = async (field, value) => {
+    if (!activeProject) return;
+    try {
+      const selectedModelObj = globalModels.find(m => m.id === value);
+      const payload = { 
+        project_name: activeProject.name,
+        display_name: activeProject.project_name || activeProject.name,
+        project_path: activeProject.project_path,
+        model: activeProject.model,
+        worker_model: activeProject.worker_model,
+        mode: activeProject.mode,
+        description: activeProject.description,
+        model_params: activeProject.model_params,
+        worker_model_params: activeProject.worker_model_params,
+        api_key: activeProject.api_key,
+        api_base: activeProject.api_base,
+        worker_api_key: activeProject.worker_api_key,
+        worker_api_base: activeProject.worker_api_base,
+        use_shared_memory: activeProject.use_shared_memory
+      };
+      
+      // Update specific field (orchestrator or worker)
+      if (field === 'model') {
+        payload.model = value;
+        if (selectedModelObj) {
+          payload.api_key = selectedModelObj.api_key;
+          payload.api_base = selectedModelObj.api_base;
+        }
+      } else if (field === 'worker_model') {
+        payload.worker_model = value;
+        if (selectedModelObj) {
+          payload.worker_api_key = selectedModelObj.api_key;
+          payload.worker_api_base = selectedModelObj.api_base;
+        }
+      }
+
+      const res = await fetch('/api/omnime/update-project', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setActiveProject(prev => ({ ...prev, ...updated }));
+        setProjects(prev => prev.map(p => (p.name === updated.name) ? { ...p, ...updated } : p));
+      }
+    } catch (err) {
+      console.error('Failed to update project model', err);
+    }
+  };
 
   useEffect(() => {
     fetch('/api/settings/web-search')
@@ -1793,6 +1935,10 @@ export default function App() {
             setChatMessages={setChatMessages}
             pendingAttachments={pendingAttachments}
             setPendingAttachments={setPendingAttachments}
+            globalModels={globalModels}
+            onRefreshModels={fetchGlobalModels}
+            onEditModels={() => setShowEditModelsModal(true)}
+            onModelChange={handleProjectModelChange}
           />
         )}
       </div>
@@ -1958,6 +2104,30 @@ export default function App() {
         handlePasteNode={handlePasteNode}
         clipboardNode={clipboardNode}
       />
+
+      {showEditModelsModal && (
+        <EditModelsModal
+          globalModels={globalModels}
+          onClose={() => setShowEditModelsModal(false)}
+          onDeleteModel={handleGlobalModelDelete}
+          onEditModel={(model) => {
+            setEditingModelModalData(model);
+            setShowAddProviderModal(true);
+          }}
+          onAddProvider={() => {
+            setEditingModelModalData(null);
+            setShowAddProviderModal(true);
+          }}
+        />
+      )}
+
+      {showAddProviderModal && (
+        <AddProviderModal
+          editingModel={editingModelModalData}
+          onClose={() => setShowAddProviderModal(false)}
+          onSave={handleGlobalModelSave}
+        />
+      )}
     </div>
   );
 }
