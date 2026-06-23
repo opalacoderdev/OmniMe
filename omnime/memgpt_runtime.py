@@ -651,7 +651,10 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         role = msg.get("role", "assistant")
         if role not in _VALID_ROLES:
             role = "assistant"
-        memgpt.internal_history.append({"role": role, "content": msg.get("content", "")})
+        content = msg.get("content", "")
+        if msg.get("timestamp"):
+            content = f"[{msg['timestamp']}] {content}"
+        memgpt.internal_history.append({"role": role, "content": content})
 
     # run_skill is bound to this MemGPT instance (interceptor needs its history)
     # and to the project (so it can re-scope file tools on each call).

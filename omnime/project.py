@@ -475,7 +475,7 @@ class ProjectStore:
                     chats = [{"id": chat_id, "name": "Main Chat"}]
                     
             hist_rows = conn.execute(
-                "SELECT role, content FROM project_history WHERE project = ? AND chat_id = ? ORDER BY id",
+                "SELECT role, content, timestamp FROM project_history WHERE project = ? AND chat_id = ? ORDER BY id",
                 (name, chat_id),
             ).fetchall()
             # Read api_key and api_base from local .env if it exists
@@ -660,6 +660,10 @@ class ProjectStore:
         with _conn(self.db_path) as conn:
             conn.execute("DELETE FROM project_chats WHERE project = ? AND id = ?", (name, chat_id))
             conn.execute("DELETE FROM project_history WHERE project = ? AND chat_id = ?", (name, chat_id))
+
+    def rename_chat(self, name: str, chat_id: str, new_name: str) -> None:
+        with _conn(self.db_path) as conn:
+            conn.execute("UPDATE project_chats SET name = ? WHERE project = ? AND id = ?", (new_name, name, chat_id))
 
 # Backward-compat alias
 SessionStore = ProjectStore

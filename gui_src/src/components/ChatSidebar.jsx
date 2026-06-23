@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, MessageSquare, Trash2 } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export default function ChatSidebar({
@@ -8,32 +8,41 @@ export default function ChatSidebar({
   setActiveChatId,
   setChats,
   activeProject,
-  setChatMessages
+  setChatMessages,
+  onSwitchChat
 }) {
   const { t } = useTranslation();
   const [showNewChatPrompt, setShowNewChatPrompt] = useState(false);
   const [newChatName, setNewChatName] = useState('');
   const [chatToDelete, setChatToDelete] = useState(null);
 
-  const handleSwitchChat = async (id) => {
-    if (!activeProject || id === activeChatId) return;
-    setActiveChatId(id);
+  const handleRenameChatClick = async (id, currentName, e) => {
+    e.stopPropagation();
+    if (!activeProject || id === 'main') return;
     
+    const newName = window.prompt(t('chatSidebar.renamePrompt', 'Novo nome do chat:'), currentName);
+    if (!newName || newName.trim() === '' || newName.trim() === currentName) return;
+
     try {
-      const res = await fetch(`/api/chat/history?project_name=${encodeURIComponent(activeProject.name)}&chat_id=${encodeURIComponent(id)}&t=${Date.now()}`);
-      if (res.ok) {
-        const data = await res.json();
-        const greeting = activeProject.project_name || activeProject.name;
-        if (data.history && data.history.length > 0) {
-          setChatMessages(data.history);
-        } else {
-          setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
-        }
-      }
+      const res = await fetch('/api/chat/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_name: activeProject.name,
+          chat_id: id,
+          new_name: newName.trim()
+        })
+      });
+      if (!res.ok) throw new Error('Failed to rename chat');
+      
+      const newChats = chats.map(c => c.id === id ? { ...c, name: newName.trim() } : c);
+      setChats(newChats);
     } catch (err) {
       console.error(err);
     }
   };
+
+  const handleSwitchChat = onSwitchChat;
 
   const handleCreateChatClick = () => {
     if (!activeProject) return;
@@ -84,7 +93,6 @@ export default function ChatSidebar({
       const newChats = chats.filter(c => c.id !== id);
       setChats(newChats);
       if (activeChatId === id) {
-        setActiveChatId('main');
         handleSwitchChat('main');
       }
       setChatToDelete(null);
@@ -172,13 +180,22 @@ export default function ChatSidebar({
                   {c.name}
                 </div>
                 {c.id !== 'main' && (
-                  <button
-                    onClick={(e) => handleDeleteChatClick(c.id, e)}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0', padding: '2px 4px' }}
-                    title={t('chatSidebar.removeChat', 'Remover Chat')}
-                  >
-                    <Trash2 size={12} />
-                  </button>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      onClick={(e) => handleRenameChatClick(c.id, c.name, e)}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0', padding: '2px 4px' }}
+                      title={t('chatSidebar.renameChat', 'Renomear Chat')}
+                    >
+                      <Pencil size={12} />
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteChatClick(c.id, e)}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0a0a0', padding: '2px 4px' }}
+                      title={t('chatSidebar.removeChat', 'Remover Chat')}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 )}
               </div>
             );

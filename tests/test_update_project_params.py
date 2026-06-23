@@ -123,6 +123,16 @@ class TestUpdateProjectPersistence:
                 f"param '{key}': expected {expected!r}, got {reloaded.model_params[key]!r}"
             )
 
+    def test_load_with_custom_chat_id(self, tmp_store):
+        """Verify that ProjectStore.load loads project with custom chat_id correctly."""
+        store, project = tmp_store
+        chat_id = "test-chat-123"
+        store.create_chat(project.name, chat_id, "Test Chat")
+        
+        reloaded = store.load(project.name, chat_id=chat_id)
+        assert reloaded is not None
+        assert reloaded.current_chat_id == chat_id
+
     def test_litellm_params_applied_to_agent_kwargs(self, tmp_store):
         """LiteLLM params must appear in get_agent_llm_kwargs() after save."""
         store, project = tmp_store

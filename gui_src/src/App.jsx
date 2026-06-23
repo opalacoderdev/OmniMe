@@ -244,7 +244,8 @@ export default function App() {
               api_base: activeProject.api_base,
               worker_api_key: activeProject.worker_api_key,
               worker_api_base: activeProject.worker_api_base,
-              use_shared_memory: activeProject.use_shared_memory
+              use_shared_memory: activeProject.use_shared_memory,
+              chat_id: activeChatId
             };
 
             if (isOrchestrator) {
@@ -301,7 +302,8 @@ export default function App() {
         api_base: activeProject.api_base,
         worker_api_key: activeProject.worker_api_key,
         worker_api_base: activeProject.worker_api_base,
-        use_shared_memory: activeProject.use_shared_memory
+        use_shared_memory: activeProject.use_shared_memory,
+        chat_id: activeChatId
       };
       
       // Update specific field (orchestrator or worker)
@@ -394,6 +396,9 @@ export default function App() {
             const currentChatId = activeProject.current_chat_id
               || (loadedChats.length > 0 ? loadedChats[0].id : 'main');
             setActiveChatId(currentChatId);
+            if (!activeProject.current_chat_id) {
+              setActiveProject(prev => prev ? { ...prev, current_chat_id: currentChatId } : null);
+            }
 
             // Now fetch history for this chat
             fetch(`/api/chat/history?project_name=${encodeURIComponent(activeProject.name)}&chat_id=${encodeURIComponent(currentChatId)}&t=${Date.now()}`)
@@ -448,6 +453,27 @@ export default function App() {
       prevProjectNameRef.current = null;
     }
   }, [activeProject]);
+
+  const handleSwitchChat = async (id) => {
+    if (!activeProject || id === activeChatId) return;
+    setActiveChatId(id);
+    setActiveProject(prev => prev ? { ...prev, current_chat_id: id } : null);
+    
+    try {
+      const res = await fetch(`/api/chat/history?project_name=${encodeURIComponent(activeProject.name)}&chat_id=${encodeURIComponent(id)}&t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        const greeting = activeProject.project_name || activeProject.name;
+        if (data.history && data.history.length > 0) {
+          setChatMessages(data.history);
+        } else {
+          setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
     if (!activeProject || !selectedFile) return;
@@ -767,7 +793,8 @@ export default function App() {
           api_base: activeProject.api_base,
           worker_api_key: activeProject.worker_api_key,
           worker_api_base: activeProject.worker_api_base,
-          use_shared_memory: activeProject.use_shared_memory
+          use_shared_memory: activeProject.use_shared_memory,
+          chat_id: activeChatId
         })
       }).catch(err => console.error("Failed to auto-switch to edit mode:", err));
     }
@@ -1022,7 +1049,7 @@ export default function App() {
     try {
       const res = await fetch('/api/omnime/update-project', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_name: editingProject.name, display_name: editingProject.project_name, project_path: editingProject.project_path, model: editingProject.model, worker_model: editingProject.worker_model, mode: editingProject.mode, description: editingProject.description, model_params: editingProject.model_params, worker_model_params: editingProject.worker_model_params, api_key: editingProject.api_key, api_base: editingProject.api_base, worker_api_key: editingProject.worker_api_key, worker_api_base: editingProject.worker_api_base, use_shared_memory: editingProject.use_shared_memory }),
+        body: JSON.stringify({ project_name: editingProject.name, display_name: editingProject.project_name, project_path: editingProject.project_path, model: editingProject.model, worker_model: editingProject.worker_model, mode: editingProject.mode, description: editingProject.description, model_params: editingProject.model_params, worker_model_params: editingProject.worker_model_params, api_key: editingProject.api_key, api_base: editingProject.api_base, worker_api_key: editingProject.worker_api_key, worker_api_base: editingProject.worker_api_base, use_shared_memory: editingProject.use_shared_memory, chat_id: activeChatId }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -1785,6 +1812,7 @@ export default function App() {
                 setChats={setChats}
                 activeProject={activeProject}
                 setChatMessages={setChatMessages}
+                onSwitchChat={handleSwitchChat}
               />
             </div>
             
@@ -1933,6 +1961,7 @@ export default function App() {
             chats={chats}
             setChats={setChats}
             setChatMessages={setChatMessages}
+            onSwitchChat={handleSwitchChat}
             pendingAttachments={pendingAttachments}
             setPendingAttachments={setPendingAttachments}
             globalModels={globalModels}

@@ -29,6 +29,7 @@ export default function ChatPanel({
   chats,
   setChats,
   setChatMessages,
+  onSwitchChat,
   pendingAttachments,
   setPendingAttachments,
   isChatMode,
@@ -368,7 +369,6 @@ export default function ChatPanel({
       setChats(newChats);
       if (activeChatId === id) {
         // Switch to main if we deleted the current one
-        setActiveChatId('main');
         handleSwitchChat('main', newChats);
       }
       setChatToDelete(null);
@@ -378,34 +378,7 @@ export default function ChatPanel({
     }
   };
 
-  const handleSwitchChat = async (id, currentChats = chats) => {
-    if (!activeProject || id === activeChatId) return;
-    setActiveChatId(id);
-    
-    // We must load the project's history for this chat
-    try {
-      // Actually, we could just rely on App.jsx handling it, but App.jsx doesn't refetch on activeChatId change.
-      // So let's re-fetch the project or have a dedicated endpoint for chat history.
-      // Easiest is to simulate /api/omnime/run with a "load_chat" command, but we don't have that.
-      // Let's call a minimal endpoint or we can just send `/api/omnime/list-projects` again and find ours? No, list-projects doesn't load chat history.
-      // A quick hack: dispatch a slash command or do a dummy request? No, wait. App.jsx passes down `chats` but not full project data per chat.
-      // Let's add `/api/chat/history` or fetch the project. 
-      // Actually we can just update `activeProject` in App by calling an endpoint, but we don't have an endpoint just for fetching a project with a specific chat_id. Wait! UpdateProject doesn't return history.
-      // Wait, let me add `/api/chat/history` in `ide_server.py`. I will add it right now.
-      const res = await fetch(`/api/chat/history?project_name=${encodeURIComponent(activeProject.name)}&chat_id=${encodeURIComponent(id)}&t=${Date.now()}`);
-      if (res.ok) {
-        const data = await res.json();
-        const greeting = activeProject.project_name || activeProject.name;
-        if (data.history && data.history.length > 0) {
-          setChatMessages(data.history);
-        } else {
-          setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
-        }
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  const handleSwitchChat = onSwitchChat;
 
   const handleExportMarkdown = () => {
     if (!chatMessages || chatMessages.length === 0) return;
@@ -853,12 +826,19 @@ export default function ChatPanel({
           return (
             <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span
-                  className={`vscode-chat-msg-header ${isUser ? 'chat-header-user' : 'chat-header-agent'}`}
-                  style={{ margin: 0 }}
-                >
-                  {isUser ? t('chatPanel.you') : t('chatPanel.omnime')}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span
+                    className={`vscode-chat-msg-header ${isUser ? 'chat-header-user' : 'chat-header-agent'}`}
+                    style={{ margin: 0 }}
+                  >
+                    {isUser ? t('chatPanel.you') : t('chatPanel.omnime')}
+                  </span>
+                  {msg.timestamp && (
+                    <span style={{ fontSize: '10px', color: 'var(--vscode-descriptionForeground, #717171)' }}>
+                      {new Date(msg.timestamp).toLocaleString()}
+                    </span>
+                  )}
+                </div>
                 {!isUser && (
                   <button
                     onClick={() => handleExportSingleMessage(msg.content)}

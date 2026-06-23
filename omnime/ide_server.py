@@ -1286,6 +1286,20 @@ class AsyncHTTPServer:
             clear_archival_chat(project_name, chat_id)
             self.send_response(writer, 200, b'{"status":"ok"}', "application/json")
 
+        elif path == '/api/chat/rename' and method == 'POST':
+            from omnime.config import DEFAULT_DB_PATH
+            from omnime.project import ProjectStore
+            store = ProjectStore(db_path=DEFAULT_DB_PATH)
+            project_name = data.get("project_name")
+            chat_id = data.get("chat_id")
+            new_name = data.get("new_name")
+            if not project_name or not chat_id or not new_name:
+                self.send_response(writer, 400, b'{"error":"project_name, chat_id and new_name required"}', "application/json")
+                return
+            store.rename_chat(project_name, chat_id, new_name)
+            self.send_response(writer, 200, b'{"status":"ok"}', "application/json")
+
+
         elif path == '/api/chat/history' and method == 'GET':
             from omnime.config import DEFAULT_DB_PATH
             from omnime.project import ProjectStore
@@ -1392,7 +1406,8 @@ class AsyncHTTPServer:
             if not store.exists(project_name):
                 self.send_response(writer, 404, json.dumps({"error": f"Project '{project_name}' not found"}).encode(), "application/json")
                 return
-            project = store.load(project_name)
+            chat_id = data.get("chat_id") or data.get("current_chat_id") or "main"
+            project = store.load(project_name, chat_id=chat_id)
             # Patch only supplied fields
             if "display_name" in data:
                 project.project_name = data["display_name"]
@@ -1483,6 +1498,7 @@ class AsyncHTTPServer:
                 "api_base": getattr(project, "api_base", ""),
                 "worker_api_key": getattr(project, "worker_api_key", ""),
                 "worker_api_base": getattr(project, "worker_api_base", ""),
+                "current_chat_id": project.current_chat_id,
             }
             self.send_response(writer, 200, json.dumps(res_data).encode(), "application/json")
 
