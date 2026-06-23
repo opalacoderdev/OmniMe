@@ -1,8 +1,8 @@
 name: Cleanup Old Releases
 
 on:
-  release:
-    types: [published]
+  # release:
+  #   types: [published]
   workflow_dispatch: # Allows manual triggering from the Actions tab
 
 jobs:
