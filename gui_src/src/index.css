@@ -949,6 +949,11 @@ select {
   padding-right: 24px;
 }
 
+.msg-action-btn:hover {
+  background-color: var(--vscode-hover-item);
+  color: var(--vscode-text-light) !important;
+}
+
 @media print {
   html, body, #root, .vscode-app, .vscode-main, .vscode-editor-panel, .vscode-editor-container, .vscode-chat, .vscode-chat-history, .markdown-preview-container {
     height: auto !important;
@@ -967,7 +972,8 @@ select {
   .vscode-chat-toolbar,
   #web-search-toggle,
   .vscode-settings-input,
-  .vscode-statusbar {
+  .vscode-statusbar,
+  .msg-action-btn {
     display: none !important;
   }
 

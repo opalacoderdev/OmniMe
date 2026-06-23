@@ -94,7 +94,8 @@
     "askOmniMe": "Ask OmniMe...",
     "interruptAgent": "Interrupt agent",
     "deleteCurrentChat": "Delete Current Chat",
-    "aiThoughts": "AI Thoughts"
+    "aiThoughts": "AI Thoughts",
+    "exportMessage": "Export this response"
   },
   "chatSidebar": {
     "newChat": "New Chat",

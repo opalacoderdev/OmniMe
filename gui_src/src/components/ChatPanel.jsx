@@ -423,6 +423,20 @@ export default function ChatPanel({
     URL.revokeObjectURL(url);
   };
 
+  const handleExportSingleMessage = (content) => {
+    if (!content) return;
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    // Use ISO string but make it filename-safe
+    const timeStr = new Date().toISOString().replace(/[:.]/g, '-');
+    a.download = `agent_response_${timeStr}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+
   const handlePrintPDF = () => {
     document.body.classList.remove('printing-editor');
     window.print();
@@ -838,11 +852,34 @@ export default function ChatPanel({
           const atts = msg._attachments || [];
           return (
             <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span
-                className={`vscode-chat-msg-header ${isUser ? 'chat-header-user' : 'chat-header-agent'}`}
-              >
-                {isUser ? t('chatPanel.you') : t('chatPanel.omnime')}
-              </span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span
+                  className={`vscode-chat-msg-header ${isUser ? 'chat-header-user' : 'chat-header-agent'}`}
+                  style={{ margin: 0 }}
+                >
+                  {isUser ? t('chatPanel.you') : t('chatPanel.omnime')}
+                </span>
+                {!isUser && (
+                  <button
+                    onClick={() => handleExportSingleMessage(msg.content)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--vscode-descriptionForeground, #717171)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '2px',
+                      borderRadius: '3px',
+                      transition: 'background-color 0.1s, color 0.1s',
+                    }}
+                    title={t('chatPanel.exportMessage', 'Exportar esta resposta')}
+                    className="msg-action-btn"
+                  >
+                    <Download size={12} />
+                  </button>
+                )}
+              </div>
               {/* Attachment previews */}
               {atts.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', margin: '2px 0' }}>

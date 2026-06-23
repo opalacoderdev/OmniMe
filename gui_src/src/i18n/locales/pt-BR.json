@@ -94,7 +94,8 @@
     "askOmniMe": "Pergunte ao OmniMe...",
     "interruptAgent": "Interromper agente",
     "deleteCurrentChat": "Deletar Chat Atual",
-    "aiThoughts": "Pensamentos da IA"
+    "aiThoughts": "Pensamentos da IA",
+    "exportMessage": "Exportar esta resposta"
   },
   "chatSidebar": {
     "newChat": "Novo Chat",
