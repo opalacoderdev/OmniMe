@@ -2,12 +2,30 @@
 import sys
 
 # Force UTF-8 on Windows to prevent 'charmap' codec crashes when printing emojis or unicode
-if sys.stdout and getattr(sys.stdout, "encoding", "").lower() != "utf-8":
-    try: sys.stdout.reconfigure(encoding="utf-8")
-    except Exception: pass
-if sys.stderr and getattr(sys.stderr, "encoding", "").lower() != "utf-8":
-    try: sys.stderr.reconfigure(encoding="utf-8")
-    except Exception: pass
+class _UnicodeSafeStream:
+    def __init__(self, stream):
+        self._stream = stream
+    def write(self, s):
+        try:
+            self._stream.write(s)
+        except UnicodeEncodeError:
+            try: self._stream.write(s.encode('ascii', 'replace').decode('ascii'))
+            except Exception: pass
+        except Exception:
+            pass
+    def flush(self):
+        if hasattr(self._stream, 'flush'):
+            try: self._stream.flush()
+            except Exception: pass
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+if sys.stdout:
+    try: sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception: sys.stdout = _UnicodeSafeStream(sys.stdout)
+if sys.stderr:
+    try: sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception: sys.stderr = _UnicodeSafeStream(sys.stderr)
 
 import os
 import subprocess
