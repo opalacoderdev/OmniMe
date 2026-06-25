@@ -878,7 +878,7 @@ export default function ChatPanel({
                 </div>
               )}
               <div className="vscode-chat-msg-content">
-                {formatMessageContent(msg.content)}
+                {formatMessageContent(msg.content, activeProject?.project_path)}
               </div>
             </div>
           );

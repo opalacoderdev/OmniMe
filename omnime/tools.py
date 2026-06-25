@@ -389,6 +389,76 @@ def read_file(path: str) -> str:
     except Exception as e:
         raise ValueError(f"Error reading {_preview(resolved)}: {e}")
 
+@omnime_tool(name="analyze_image", is_safe=True, description="Analyzes an image file using computer vision and returns a text description. Use this when the user asks you to look at a chart, UI mockup, or any image file.")
+def analyze_image(file_path: str, prompt: str = "Describe this image in detail") -> str:
+    try:
+        import base64
+        import mimetypes
+        import litellm
+        from .config import get_agent_llm_kwargs, get_agent_model
+        
+        resolved = _resolve_path(file_path)
+        if not os.path.exists(resolved) or os.path.isdir(resolved):
+            return "infelizmente não consegui analisar sua imagem: arquivo não encontrado ou é um diretório."
+            
+        content_type, _ = mimetypes.guess_type(resolved)
+        if not content_type or not content_type.startswith("image/"):
+            content_type = "image/jpeg"
+            
+        with open(resolved, "rb") as f:
+            encoded_img = base64.b64encode(f.read()).decode("utf-8")
+            
+        kwargs = get_agent_llm_kwargs("memgpt")
+        
+        # Use the orchestrator's model by default (since it's the one using the tool)
+        model = get_agent_model("memgpt")
+        if _PROJECT_SESSION:
+            project_override = getattr(_PROJECT_SESSION, "model", None)
+            if project_override:
+                model = project_override
+                
+        kwargs.pop("stream", None)
+        
+        try:
+            from .memgpt_runtime import _apply_modelconfig_provider
+            if _PROJECT_SESSION:
+                model = _apply_modelconfig_provider(model, _PROJECT_SESSION)
+        except Exception:
+            pass
+            
+        if kwargs.get("api_base"):
+            if model.startswith("ollama/") or model.startswith("ollama_chat/"):
+                if kwargs["api_base"].endswith("/v1"):
+                    kwargs["api_base"] = kwargs["api_base"][:-3]
+                elif kwargs["api_base"].endswith("/v1/"):
+                    kwargs["api_base"] = kwargs["api_base"][:-4]
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{content_type};base64,{encoded_img}"}
+                    }
+                ]
+            }
+        ]
+        
+        AGENT_PROGRESS.update("analyze_image", f"path={_preview(resolved)}")
+        response = litellm.completion(model=model, messages=messages, **kwargs)
+        return response.choices[0].message.content or "infelizmente não consegui analisar sua imagem."
+        
+    except litellm.exceptions.BadRequestError as e:
+        return f"CRITICAL ERROR: The model ({model}) rejected the request. Explicitly inform the user that this model likely does not support Computer Vision (not multimodal) or the image is too large. Technical detail: {str(e)}"
+    except litellm.exceptions.AuthenticationError as e:
+        return f"CRITICAL ERROR: Authentication failed for model {model}. EXPLÍCITLY tell the user that they need to specify the API Key for this model in the top bar (under 'Edit Models'). Technical detail: {str(e)}"
+    except litellm.exceptions.APIConnectionError as e:
+        return f"CRITICAL ERROR: Connection failed with the model's API ({model}). Tell the user to verify if the local server (e.g., Ollama) is running or if the URL is correct. Technical detail: {str(e)}"
+    except Exception as e:
+        return f"CRITICAL ERROR: An internal error occurred while analyzing the image using the model {model}. Tell the user the following reason: {str(e)}"
+
 @omnime_tool(name="write_file", is_safe=False, description="Write or overwrite a file inside the project directory. Relative paths are resolved from the project directory. Creates parent directories if needed. ALWAYS use this tool to save file content — never use run_command with echo/printf/cat to write files, as shell quoting will break with multi-line or HTML/JSON content.")
 def write_file(path: str, content: str) -> str:
     try:
@@ -771,7 +841,8 @@ def get_available_tools():
         write_file,
         write_content_pos,
         run_command,
-        run_interactive_command
+        run_interactive_command,
+        analyze_image
     ]
 
 # ─── Achievements Memory ─────────────────────────────────────────────────────

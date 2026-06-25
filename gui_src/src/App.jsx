@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useTransition } from 'react';
 import '@xterm/xterm/css/xterm.css';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n/index.js';
@@ -151,6 +151,9 @@ export default function App() {
   const [editorTabSize, setEditorTabSize] = useState(() => Number(safeGetLocalStorage('editorTabSize', 4)));
   const [editorWordWrap, setEditorWordWrap] = useState(() => safeGetLocalStorage('editorWordWrap', 'on'));
 
+  const [isPending, startTransition] = useTransition();
+  const [isLoadingChat, setIsLoadingChat] = useState(false);
+
   // ── Optional dependencies ─────────────────────────────────────────────────
   const [isInstallingDeps, setIsInstallingDeps] = useState(false);
   const [installDepsStatus, setInstallDepsStatus] = useState('');
@@ -223,52 +226,6 @@ export default function App() {
       if (res.ok) {
         fetchGlobalModels();
         setShowAddProviderModal(false);
-
-        // If the active project is currently using this model, update its settings
-        if (activeProject) {
-          const isOrchestrator = activeProject.model === modelData.id;
-          const isWorker = activeProject.worker_model === modelData.id;
-          
-          if (isOrchestrator || isWorker) {
-            const payload = {
-              project_name: activeProject.name,
-              display_name: activeProject.project_name || activeProject.name,
-              project_path: activeProject.project_path,
-              model: activeProject.model,
-              worker_model: activeProject.worker_model,
-              mode: activeProject.mode,
-              description: activeProject.description,
-              model_params: activeProject.model_params,
-              worker_model_params: activeProject.worker_model_params,
-              api_key: activeProject.api_key,
-              api_base: activeProject.api_base,
-              worker_api_key: activeProject.worker_api_key,
-              worker_api_base: activeProject.worker_api_base,
-              use_shared_memory: activeProject.use_shared_memory,
-              chat_id: activeChatId
-            };
-
-            if (isOrchestrator) {
-              payload.api_key = modelData.api_key;
-              payload.api_base = modelData.api_base;
-            }
-            if (isWorker) {
-              payload.worker_api_key = modelData.api_key;
-              payload.worker_api_base = modelData.api_base;
-            }
-
-            const resUpdate = await fetch('/api/omnime/update-project', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-            });
-            
-            if (resUpdate.ok) {
-              const updated = await resUpdate.json();
-              setActiveProject(prev => ({ ...prev, ...updated }));
-              setProjects(prev => prev.map(p => (p.name === updated.name) ? { ...p, ...updated } : p));
-            }
-          }
-        }
       }
     } catch (e) { console.error(e); }
   };
@@ -384,6 +341,7 @@ export default function App() {
         
         // Show a blank state while we load — avoid flash of stale greeting
         setChatMessages([]);
+        setIsLoadingChat(true);
 
         // Fetch chats
         fetch(`/api/chat/list?project_name=${encodeURIComponent(activeProject.name)}&t=${Date.now()}`)
@@ -404,25 +362,35 @@ export default function App() {
             fetch(`/api/chat/history?project_name=${encodeURIComponent(activeProject.name)}&chat_id=${encodeURIComponent(currentChatId)}&t=${Date.now()}`)
               .then(res => res.json())
               .then(histData => {
-                if (histData.history && histData.history.length > 0) {
-                  // Restore previous conversation
-                  setChatMessages(histData.history);
-                } else {
-                  // First time opening this project/chat → show greeting
-                  const greeting = activeProject.project_name || activeProject.name;
-                  setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
-                }
+                startTransition(() => {
+                  if (histData.history && histData.history.length > 0) {
+                    // Restore previous conversation
+                    setChatMessages(histData.history);
+                  } else {
+                    // First time opening this project/chat → show greeting
+                    const greeting = activeProject.project_name || activeProject.name;
+                    setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+                  }
+                });
               })
               .catch(err => {
                 console.error("Failed to fetch chat history:", err);
                 const greeting = activeProject.project_name || activeProject.name;
-                setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+                startTransition(() => {
+                  setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+                });
+              })
+              .finally(() => {
+                setIsLoadingChat(false);
               });
           })
           .catch(err => {
             console.error("Failed to fetch chat list:", err);
             const greeting = activeProject.project_name || activeProject.name;
-            setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+            startTransition(() => {
+              setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+            });
+            setIsLoadingChat(false);
           });
 
         setOpenFiles([]);
@@ -456,23 +424,30 @@ export default function App() {
 
   const handleSwitchChat = async (id) => {
     if (!activeProject || id === activeChatId) return;
+    setIsLoadingChat(true);
     setActiveChatId(id);
     setActiveProject(prev => prev ? { ...prev, current_chat_id: id } : null);
     
-    try {
-      const res = await fetch(`/api/chat/history?project_name=${encodeURIComponent(activeProject.name)}&chat_id=${encodeURIComponent(id)}&t=${Date.now()}`);
-      if (res.ok) {
-        const data = await res.json();
-        const greeting = activeProject.project_name || activeProject.name;
-        if (data.history && data.history.length > 0) {
-          setChatMessages(data.history);
-        } else {
-          setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+    setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/chat/history?project_name=${encodeURIComponent(activeProject.name)}&chat_id=${encodeURIComponent(id)}&t=${Date.now()}`);
+        if (res.ok) {
+          const data = await res.json();
+          const greeting = activeProject.project_name || activeProject.name;
+          startTransition(() => {
+            if (data.history && data.history.length > 0) {
+              setChatMessages(data.history);
+            } else {
+              setChatMessages([{ role: 'assistant', content: t('app.greeting', { projectName: greeting }) }]);
+            }
+          });
         }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoadingChat(false);
       }
-    } catch (err) {
-      console.error(err);
-    }
+    }, 10);
   };
 
   useEffect(() => {
@@ -1934,7 +1909,8 @@ export default function App() {
 
         {/* Chat Panel */}
         {(!isEditorMaximized && (isChatVisible || layoutMode === 'chat')) && (
-          <ChatPanel
+          <>
+            <ChatPanel
             isChatMode={layoutMode === 'chat'}
             chatMessages={chatMessages}
             chatInput={chatInput}
@@ -1969,6 +1945,26 @@ export default function App() {
             onEditModels={() => setShowEditModelsModal(true)}
             onModelChange={handleProjectModelChange}
           />
+          
+          {(isLoadingChat || isPending) && (
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              zIndex: 50, color: 'var(--vscode-editor-foreground)',
+              flexDirection: 'column', gap: '10px'
+            }}>
+              <div className="spinner" style={{
+                width: '30px', height: '30px', border: '3px solid rgba(255,255,255,0.3)',
+                borderRadius: '50%', borderTopColor: '#fff', animation: 'spin 1s ease-in-out infinite'
+              }}></div>
+              <style>{`
+                @keyframes spin { to { transform: rotate(360deg); } }
+              `}</style>
+              <span>Carregando chat...</span>
+            </div>
+          )}
+          </>
         )}
       </div>
 

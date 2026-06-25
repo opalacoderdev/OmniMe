@@ -75,14 +75,15 @@ def _friendly_llm_error(exc: Exception, project=None) -> str:
             return f"O modelo `{model.replace('ollama/', '')}` não foi encontrado localmente ou ainda está sendo baixado em segundo plano pelo Ollama. Por favor, aguarde alguns instantes até o fim do download e tente enviar a mensagem novamente!"
         return f"Model {model} not found or needs to be pulled. Please check if it exists."
 
+    from omnime.i18n import _
     if "connection" in low or "connect" in low:
-        return f"Could not connect to {model}. Check that Ollama/the API server is running."
+        return _("err_connection_failed").format(model=model)
 
     if "authentication" in low or "api key" in low or "unauthorized" in low:
-        return f"Authentication failed for {model}. Check the API key in project settings."
+        return _("err_auth_failed").format(model=model)
 
     if "context" in low and ("length" in low or "window" in low or "exceed" in low):
-        return f"The conversation exceeded the context window of {model}. Try increasing num_ctx or starting a new session."
+        return _("err_context_exceeded").format(model=model)
 
     return msg
 
@@ -145,6 +146,7 @@ from omnime.tools import (
     read_content_pos,
     set_project_context,
     web_search,
+    analyze_image,
 )
 
 # Global map of available tools by name
@@ -160,6 +162,7 @@ ALL_TOOLS_MAP = {
     "write_content_pos": write_content_pos,
     "read_content_pos": read_content_pos,
     "web_search": web_search,
+    "analyze_image": analyze_image,
 }
 
 # State for persistent session

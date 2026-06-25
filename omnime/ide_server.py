@@ -1,3 +1,11 @@
+import sys
+if sys.stdout is not None:
+    try: sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception: pass
+if sys.stderr is not None:
+    try: sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception: pass
+
 import asyncio
 import os
 import json
@@ -413,6 +421,31 @@ class AsyncHTTPServer:
                 with open(full_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                 self.send_response(writer, 200, json.dumps({"content": content}).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+
+        # 2.2 Read Raw File (for inline images/assets)
+        elif path == '/api/file/raw':
+            project_path = query.get('projectPath', [None])[0]
+            file_path = query.get('filePath', [None])[0]
+            if not project_path or not file_path:
+                self.send_response(writer, 400, b'{"error":"projectPath and filePath are required"}', "application/json")
+                return
+            full_path = os.path.abspath(os.path.join(project_path, file_path))
+            if not full_path.startswith(os.path.abspath(project_path)):
+                self.send_response(writer, 403, b'{"error":"Forbidden: Path traversal detected"}', "application/json")
+                return
+            if not os.path.exists(full_path) or os.path.isdir(full_path):
+                self.send_response(writer, 404, b'{"error":"File not found"}', "application/json")
+                return
+            try:
+                import mimetypes
+                content_type, _ = mimetypes.guess_type(full_path)
+                if not content_type:
+                    content_type = "application/octet-stream"
+                with open(full_path, 'rb') as f:
+                    content = f.read()
+                self.send_response(writer, 200, content, content_type)
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 

@@ -132,18 +132,37 @@ const components = {
 };
 
 const REMARK_PLUGINS = [remarkMath];
-const REHYPE_PLUGINS = [rehypeKatex];
+const REHYPE_PLUGINS = [[rehypeKatex, { strict: "ignore" }]];
 
 // ── Public API ──────────────────────────────────────────────────────────────
 // Drop-in replacement for the old formatMessageContent(content) function.
 // Returns a React element that renders Markdown + LaTeX (KaTeX).
-export function formatMessageContent(content) {
+export function formatMessageContent(content, activeProjectPath = null) {
   if (!content) return null;
+
+  const localComponents = {
+    ...components,
+    img: ({ src, alt, ...props }) => {
+      let finalSrc = src;
+      if (activeProjectPath && src && !src.startsWith('http') && !src.startsWith('data:')) {
+        finalSrc = `/api/file/raw?projectPath=${encodeURIComponent(activeProjectPath)}&filePath=${encodeURIComponent(src)}`;
+      }
+      return (
+        <img 
+          src={finalSrc} 
+          alt={alt} 
+          style={{ maxWidth: '100%', height: 'auto', borderRadius: '4px', marginTop: '8px', marginBottom: '8px' }} 
+          {...props} 
+        />
+      );
+    }
+  };
+
   return (
     <ReactMarkdown
       remarkPlugins={REMARK_PLUGINS}
       rehypePlugins={REHYPE_PLUGINS}
-      components={components}
+      components={localComponents}
     >
       {content}
     </ReactMarkdown>

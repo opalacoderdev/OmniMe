@@ -99,10 +99,12 @@ def parse_skill_md(skill_dir: str) -> dict | None:
     name = fm.get("name") or os.path.basename(os.path.normpath(skill_dir))
     description = fm.get("description", "")
     model = fm.get("model", "")
+    extends = fm.get("extends", "")
     return {
         "name": name,
         "description": description,
         "model": model,
+        "extends": extends,
         "dir": os.path.abspath(skill_dir),
         "manifest": os.path.abspath(manifest),
         "body": body,
@@ -126,10 +128,6 @@ def discover_skills(project_path: str = "") -> list[dict]:
             skill_dir = os.path.join(base, entry)
             if not os.path.isdir(skill_dir):
                 continue
-            # Exclude skills located under a "skills_store" directory unless explicitly declared
-            if "skills_store" in os.path.normpath(skill_dir).split(os.sep):
-                if not declared or entry not in declared:
-                    continue
             meta = parse_skill_md(skill_dir)
             if meta is None or meta["name"] in seen_names:
                 continue
@@ -174,10 +172,19 @@ def write_skills_yaml(project_path: str, skill_names: list[str]) -> None:
 
 def add_skill_to_project(project_path: str, skill_name: str) -> tuple[bool, str]:
     """Add a skill to the project's skills.yaml. Returns (changed, message)."""
-    if find_skill_dir(skill_name, project_path) is None:
+    skill_dir = find_skill_dir(skill_name, project_path)
+    if skill_dir is None:
         return False, f"skill '{skill_name}' not found in any search dir."
     if skill_name in MANDATORY_SKILLS:
         return False, f"skill '{skill_name}' is always active (mandatory)."
+        
+    meta = parse_skill_md(skill_dir)
+    if meta and meta.get("extends"):
+        parent_name = meta["extends"]
+        active = [s["name"] for s in active_skills(project_path)]
+        if parent_name not in active:
+            return False, f"Cannot add skill '{skill_name}' because it extends '{parent_name}', which is not active."
+            
     # Absent skills.yaml means "only mandatory active" → start from an empty set.
     declared = read_skills_yaml(project_path) or []
     if skill_name in declared:

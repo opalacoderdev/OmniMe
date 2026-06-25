@@ -38,6 +38,7 @@ from .tools import (
     append_core_memory,
     search_conversation_history,
     web_search,
+    analyze_image,
     set_project_context,
 )
 from .config import (
@@ -213,6 +214,20 @@ def build_run_skill_tool(
         if meta is None:
             return f"[ERROR] skill '{skill_name}' has no valid SKILL.md."
 
+        # >> INHERITANCE LOGIC START <<
+        extends_name = meta.get("extends")
+        parent_dir = None
+        if extends_name:
+            active = [s["name"] for s in active_skills(project_path)]
+            if extends_name not in active:
+                return f"[ERROR] skill '{skill_name}' requires parent '{extends_name}' which is not active."
+            parent_dir = find_skill_dir(extends_name, project_path)
+            if parent_dir:
+                parent_meta = parse_skill_md(parent_dir)
+                if parent_meta:
+                    meta["body"] = parent_meta["body"] + "\n\n" + meta["body"]
+        # >> INHERITANCE LOGIC END <<
+
         model = resolve_skill_model(meta, project_model, project_worker)
 
         # Write the request to a fixed temp file so the sub-agent never has to
@@ -230,16 +245,29 @@ def build_run_skill_tool(
             request_file = ""
 
         # System prompt = SKILL.md body (Level 2) + working dir scope + exact paths.
-        scripts_dir = os.path.join(skill_dir, "scripts")
-        scripts_hint = ""
-        if os.path.isdir(scripts_dir):
-            names = sorted(f for f in os.listdir(scripts_dir) if f.endswith(".py"))
-            if names:
-                listing = "\n".join(f"  {os.path.join(scripts_dir, n)}" for n in names)
-                scripts_hint = (
-                    f"\nScripts available in this skill (use the ABSOLUTE path with "
-                    f"run_command):\n{listing}\n"
+        script_paths = []
+        if parent_dir:
+            parent_scripts_dir = os.path.join(parent_dir, "scripts")
+            if os.path.isdir(parent_scripts_dir):
+                script_paths.extend(
+                    os.path.join(parent_scripts_dir, f) 
+                    for f in sorted(os.listdir(parent_scripts_dir)) if f.endswith(".py")
                 )
+                
+        scripts_dir = os.path.join(skill_dir, "scripts")
+        if os.path.isdir(scripts_dir):
+            script_paths.extend(
+                os.path.join(scripts_dir, f)
+                for f in sorted(os.listdir(scripts_dir)) if f.endswith(".py")
+            )
+            
+        scripts_hint = ""
+        if script_paths:
+            listing = "\n".join(f"  {p}" for p in script_paths)
+            scripts_hint = (
+                f"\nScripts available in this skill (use the ABSOLUTE path with "
+                f"run_command):\n{listing}\n"
+            )
         request_hint = ""
         if request_file:
             request_hint = (
@@ -604,6 +632,7 @@ def build_chat_orchestrator(project, store=None) -> MemGPTAgentBlock:
         wrap_tool(append_core_memory), 
         wrap_tool(search_conversation_history), 
         wrap_tool(web_search),
+        wrap_tool(analyze_image),
         wrap_tool(create_plan)
     ]
     if enable_achievements:

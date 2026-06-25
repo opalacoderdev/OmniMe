@@ -100,7 +100,7 @@ export default function ConfirmModal({ confirmRequest, onConfirm }) {
                   }}
                 />
               ) : (
-                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[[rehypeKatex, { strict: "ignore" }]]}>
                   {editedText}
                 </ReactMarkdown>
               )}
