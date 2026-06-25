@@ -1,33 +1,45 @@
 """OmniMe entry point — run with: python main.py [--mode auto|plan|edit] [--model ...]"""
 import sys
-
-# Force UTF-8 on Windows to prevent 'charmap' codec crashes when printing emojis or unicode
-class _UnicodeSafeStream:
-    def __init__(self, stream):
-        self._stream = stream
-    def write(self, s):
-        try:
-            self._stream.write(s)
-        except UnicodeEncodeError:
-            try: self._stream.write(s.encode('ascii', 'replace').decode('ascii'))
-            except Exception: pass
-        except Exception:
-            pass
-    def flush(self):
-        if hasattr(self._stream, 'flush'):
-            try: self._stream.flush()
-            except Exception: pass
-    def __getattr__(self, name):
-        return getattr(self._stream, name)
-
-if sys.stdout:
-    try: sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception: sys.stdout = _UnicodeSafeStream(sys.stdout)
-if sys.stderr:
-    try: sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception: sys.stderr = _UnicodeSafeStream(sys.stderr)
-
 import os
+import io
+
+# ── Force UTF-8 globally on Windows ──────────────────────────────────────────
+# PyInstaller --windowed builds on Windows create stdout/stderr with cp1252
+# encoding or set them to None. Any print() of emoji/unicode then crashes with
+# UnicodeEncodeError. We fix this by GUARANTEEING a UTF-8 stream exists.
+os.environ["PYTHONUTF8"] = "1"
+os.environ["PYTHONIOENCODING"] = "utf-8"
+
+def _ensure_utf8_stream(stream, fallback_name="devnull"):
+    """Guarantee a UTF-8 writable stream. Returns the fixed stream."""
+    # Case 1: stream is None (PyInstaller --windowed)
+    if stream is None:
+        return open(os.devnull, "w", encoding="utf-8", errors="replace")
+
+    # Case 2: try reconfigure (works on real terminals)
+    try:
+        stream.reconfigure(encoding="utf-8", errors="replace")
+        if getattr(stream, "encoding", "").lower().replace("-", "") == "utf8":
+            return stream
+    except Exception:
+        pass
+
+    # Case 3: wrap the binary buffer in a proper UTF-8 TextIOWrapper
+    try:
+        buf = getattr(stream, "buffer", None)
+        if buf is not None:
+            wrapper = io.TextIOWrapper(buf, encoding="utf-8", errors="replace", line_buffering=True)
+            return wrapper
+    except Exception:
+        pass
+
+    # Case 4: replace with devnull (in windowed mode nobody reads these anyway)
+    return open(os.devnull, "w", encoding="utf-8", errors="replace")
+
+sys.stdout = _ensure_utf8_stream(sys.stdout)
+sys.stderr = _ensure_utf8_stream(sys.stderr)
+
+
 import subprocess
 
 # PyInstaller + PythonNet workaround: explicitly set the python DLL path 
