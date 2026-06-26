@@ -55,7 +55,10 @@ $exePath  = "$exeDir\OmniMe.exe"
 $wshShell = New-Object -ComObject WScript.Shell
 
 # Atalho no Desktop
-$desktopShortcut      = $wshShell.CreateShortcut("$env:USERPROFILE\Desktop\OmniMe.lnk")
+# Usa SpecialFolders para obter o caminho real, mesmo que o Desktop esteja
+# redirecionado (OneDrive, politicas de grupo, etc.)
+$desktopPath          = $wshShell.SpecialFolders("Desktop")
+$desktopShortcut      = $wshShell.CreateShortcut("$desktopPath\OmniMe.lnk")
 $desktopShortcut.TargetPath       = $exePath
 $desktopShortcut.WorkingDirectory = $exeDir
 $desktopShortcut.Description      = "OmniMe AI Assistant"
@@ -63,7 +66,7 @@ $desktopShortcut.IconLocation     = "$exePath,0"
 $desktopShortcut.Save()
 
 # Atalho no Menu Iniciar
-$startMenuDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+$startMenuDir = $wshShell.SpecialFolders("Programs")
 if (-not (Test-Path $startMenuDir)) {
     New-Item -ItemType Directory -Force -Path $startMenuDir | Out-Null
 }
@@ -74,7 +77,7 @@ $startMenuShortcut.Description      = "OmniMe AI Assistant"
 $startMenuShortcut.IconLocation     = "$exePath,0"
 $startMenuShortcut.Save()
 
-Write-Host "  -> Desktop: $env:USERPROFILE\Desktop\OmniMe.lnk" -ForegroundColor DarkGray
+Write-Host "  -> Desktop: $desktopPath\OmniMe.lnk" -ForegroundColor DarkGray
 Write-Host "  -> Menu Iniciar: $startMenuDir\OmniMe.lnk" -ForegroundColor DarkGray
 
 # 7. Limpeza
