@@ -54,6 +54,25 @@ export default function EditorPanel({
 
   const localEditorRef = useRef(null);
 
+  // Custom syntax definitions
+  const handleBeforeMount = (monaco) => {
+    const languages = monaco.languages.getLanguages();
+    if (!languages.some(lang => lang.id === 'latex')) {
+      monaco.languages.register({ id: 'latex' });
+      monaco.languages.setMonarchTokensProvider('latex', {
+        tokenizer: {
+          root: [
+            [/\\[a-zA-Z]+/, 'keyword'],
+            [/%.*$/, 'comment'],
+            [/[{}]/, 'delimiter.bracket'],
+            [/\$/, 'string.quote'],
+            [/[\[\]]/, 'delimiter.array'],
+          ]
+        }
+      });
+    }
+  };
+
   // Wrap the external mount handler so we can also register the context-menu
   // actions and the Ctrl+L shortcut ourselves.
   const handleMount = (editor, monaco) => {
@@ -312,6 +331,7 @@ export default function EditorPanel({
             modified={fileContent}
             originalModelPath={`original-${selectedFile}`}
             modifiedModelPath={`modified-${selectedFile}`}
+            beforeMount={handleBeforeMount}
             onMount={handleMount}
             options={{
               minimap: { enabled: true },
@@ -332,6 +352,7 @@ export default function EditorPanel({
             language={getLanguage(selectedFile)}
             theme={theme === 'light' ? 'light' : 'vs-dark'}
             value={fileContent}
+            beforeMount={handleBeforeMount}
             onChange={(val) => setFileContent(val)}
             onMount={handleMount}
             options={{

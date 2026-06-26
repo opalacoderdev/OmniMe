@@ -13,6 +13,7 @@ const EXT_MAP = {
   yml: 'yaml',
   yaml: 'yaml',
   sh: 'shell',
+  tex: 'latex',
 };
 
 export const getLanguage = (filename) => {
