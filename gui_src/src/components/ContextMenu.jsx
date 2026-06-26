@@ -12,7 +12,7 @@ export default function ContextMenu({
   handleDeleteNode,
   handleCopyNode,
   handlePasteNode,
-  handleOpenSystemApp,
+  handleOpenInSystem,
   clipboardNode,
 }) {
   const { t } = useTranslation();
@@ -73,13 +73,6 @@ export default function ContextMenu({
           >
             <Copy size={13} style={{ color: '#888' }} />
             <span>{t('contextMenu.copy', 'Copiar')}</span>
-          </div>
-          <div
-            className="vscode-context-menu-item"
-            onClick={() => handleOpenSystemApp(rightClickedNode)}
-          >
-            <ExternalLink size={13} style={{ color: '#a0a0a0' }} />
-            <span>{t('contextMenu.openSystemApp', 'Abrir no app padrão')}</span>
           </div>
           <div
             className="vscode-context-menu-item"

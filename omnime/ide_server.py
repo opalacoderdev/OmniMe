@@ -699,50 +699,6 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
-        # 3.6.6. Open file in OS default app
-        elif path == '/api/file/open-os-app' and method == 'POST':
-            project_path = data.get('projectPath')
-            file_path = data.get('filePath')
-            
-            if not project_path or not file_path:
-                self.send_response(writer, 400, b'{"error":"projectPath and filePath are required"}', "application/json")
-                return
-                
-            full_path = os.path.abspath(os.path.join(project_path, file_path))
-            
-            # Security check
-            if not full_path.startswith(os.path.abspath(project_path)):
-                self.send_response(writer, 403, b'{"error":"Forbidden: Path traversal detected"}', "application/json")
-                return
-                
-            if not os.path.exists(full_path):
-                self.send_response(writer, 404, b'{"error":"File not found"}', "application/json")
-                return
-                
-            try:
-                import subprocess, platform
-                system = platform.system()
-                
-                env = os.environ.copy()
-                if 'LD_LIBRARY_PATH_ORIG' in env:
-                    env['LD_LIBRARY_PATH'] = env['LD_LIBRARY_PATH_ORIG']
-                elif 'LD_LIBRARY_PATH' in env:
-                    del env['LD_LIBRARY_PATH']
-
-                if system == "Windows":
-                    os.startfile(full_path)
-                elif system == "Darwin":
-                    subprocess.Popen(["open", full_path], env=env)
-                else:
-                    release = platform.uname().release.lower()
-                    if "microsoft" in release or "wsl" in release:
-                        subprocess.Popen(["explorer.exe", full_path], env=env)
-                    else:
-                        subprocess.Popen(["xdg-open", full_path], env=env)
-                self.send_response(writer, 200, b'{"success":true}', "application/json")
-            except Exception as e:
-                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
-
         # 3.7. List subdirectories of a filesystem path
         elif path == '/api/fs/dirs':
             req_path = data.get('path', os.path.expanduser('~'))

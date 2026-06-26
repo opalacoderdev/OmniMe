@@ -1226,27 +1226,6 @@ export default function App() {
     }
   };
 
-  const handleOpenSystemApp = async (node) => {
-    setContextMenu(null);
-    if (!node || !activeProject) return;
-    try {
-      const res = await fetch('/api/file/open-os-app', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectPath: activeProject.project_path,
-          filePath: node.path,
-        }),
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to open file');
-      }
-    } catch (err) {
-      addLog('error', `Erro ao abrir no app padrão: ${err.message}`);
-    }
-  };
-
   // ── Agent ─────────────────────────────────────────────────────────────────
   const handleInterruptAgent = async () => {
     try {
@@ -2161,7 +2140,7 @@ export default function App() {
         handleDeleteNode={handleDeleteNode}
         handleCopyNode={handleCopyNode}
         handlePasteNode={handlePasteNode}
-        handleOpenSystemApp={handleOpenSystemApp}
+        handleOpenInSystem={handleOpenInSystem}
         clipboardNode={clipboardNode}
       />
 
