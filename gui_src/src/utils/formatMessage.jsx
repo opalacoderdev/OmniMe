@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import i18n from '../i18n';
 
@@ -129,9 +130,59 @@ const components = {
       {children}
     </a>
   ),
+
+  // Tables
+  table: ({ children }) => (
+    <div style={{ overflowX: 'auto', margin: '10px 0' }}>
+      <table style={{
+        borderCollapse: 'collapse',
+        width: '100%',
+        fontSize: '12px',
+        lineHeight: '1.5',
+        border: '1px solid var(--border-color, #3c3c3c)',
+      }}>
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }) => (
+    <thead style={{ background: 'var(--titlebar-bg, #252526)' }}>
+      {children}
+    </thead>
+  ),
+  tbody: ({ children }) => (
+    <tbody>{children}</tbody>
+  ),
+  tr: ({ children }) => (
+    <tr style={{ borderBottom: '1px solid var(--border-color, #3c3c3c)' }}>
+      {children}
+    </tr>
+  ),
+  th: ({ children }) => (
+    <th style={{
+      padding: '6px 12px',
+      textAlign: 'left',
+      fontWeight: 'bold',
+      color: 'var(--vscode-text-light, #ffffff)',
+      borderRight: '1px solid var(--border-color, #3c3c3c)',
+      whiteSpace: 'nowrap',
+    }}>
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td style={{
+      padding: '5px 12px',
+      color: 'var(--chat-text, #cccccc)',
+      borderRight: '1px solid var(--border-color, #3c3c3c)',
+      verticalAlign: 'top',
+    }}>
+      {children}
+    </td>
+  ),
 };
 
-const REMARK_PLUGINS = [remarkMath];
+const REMARK_PLUGINS = [remarkGfm, remarkMath];
 const REHYPE_PLUGINS = [[rehypeKatex, { strict: "ignore" }]];
 
 // ── Public API ──────────────────────────────────────────────────────────────
