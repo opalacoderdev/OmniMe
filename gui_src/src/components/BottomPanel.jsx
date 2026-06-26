@@ -1,8 +1,9 @@
 import { useRef, useState, useEffect } from 'react';
-import { AlertCircle, Trash, Maximize2, Minimize2, ChevronUp, ChevronDown } from 'lucide-react';
+import { AlertCircle, Trash, Maximize2, Minimize2, ChevronUp, ChevronDown, Plus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useTextContextMenu } from '../hooks/useTextContextMenu.js';
 import TextContextMenu from './TextContextMenu.jsx';
+import TerminalInstance from './TerminalInstance.jsx';
 
 // Bottom panel with Output / Problems / Thinking / Terminal tabs.
 export default function BottomPanel({
@@ -23,10 +24,15 @@ export default function BottomPanel({
   isBottomMaximized,
   onToggleMaximizeBottom,
   achievementsMemory,
+  theme
 }) {
   const { t } = useTranslation();
   const contentRef = useRef(null);
   const logsContainerRef = useRef(null);
+  const terminalInstancesRef = useRef({});
+  const [terminals, setTerminals] = useState(['main-1']);
+  const [activeTermId, setActiveTermId] = useState('main-1');
+  const [termCounter, setTermCounter] = useState(1);
   const { menu, onContextMenu, handleCopy, handlePaste, handleSelectAll } = useTextContextMenu();
   const [autoScroll, setAutoScroll] = useState(true);
 
@@ -63,7 +69,7 @@ export default function BottomPanel({
         onSelectAll={
           activeBottomTab === 'terminal'
             ? () => {
-                const term = terminalInstanceRef?.current;
+                const term = terminalInstancesRef.current[activeTermId];
                 close();
                 if (term) {
                   term.selectAll();
@@ -294,13 +300,79 @@ export default function BottomPanel({
 
 
             {/* Terminal tab */}
-            <div style={{ display: activeBottomTab === 'terminal' ? 'block' : 'none', height: '100%', background: 'var(--vscode-terminal-bg)', overflow: 'hidden' }}>
+            <div style={{ display: activeBottomTab === 'terminal' ? 'flex' : 'none', flexDirection: 'column', height: '100%', background: 'var(--vscode-terminal-bg)', overflow: 'hidden' }}>
               {!activeProject ? (
                 <div style={{ color: '#808080', fontStyle: 'italic', padding: '16px' }}>
                   {t('bottomPanel.setProjectForTerminal')}
                 </div>
               ) : (
-                <div ref={terminalRef} style={{ width: '100%', height: '100%', padding: '4px' }} />
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', padding: '2px 8px', background: 'var(--vscode-editor-bg)', borderBottom: '1px solid var(--vscode-border)', gap: '8px' }}>
+                    <select
+                      value={activeTermId}
+                      onChange={e => setActiveTermId(e.target.value)}
+                      style={{ background: 'var(--vscode-input-background)', color: 'var(--vscode-input-foreground)', border: '1px solid var(--vscode-input-border)', padding: '2px 4px', fontSize: '12px', minWidth: '100px' }}
+                    >
+                      {terminals.map(id => (
+                        <option key={id} value={id}>Terminal {id.split('-')[1]}</option>
+                      ))}
+                    </select>
+                    <button
+                      className="vscode-button"
+                      style={{ padding: '2px 6px', fontSize: '12px', background: 'transparent', color: 'var(--vscode-foreground)' }}
+                      onClick={() => {
+                        if (terminals.length >= 3) return;
+                        const nextId = termCounter + 1;
+                        setTermCounter(nextId);
+                        const newTerm = `main-${nextId}`;
+                        
+                        // Notify backend to start terminal immediately
+                        fetch('/api/terminal/start', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ term_id: newTerm, projectPath: activeProject.project_path }),
+                        }).catch(e => console.error(e));
+                        
+                        setTerminals([...terminals, newTerm]);
+                        setActiveTermId(newTerm);
+                      }}
+                      title="New Terminal"
+                      disabled={terminals.length >= 3}
+                    >
+                      +
+                    </button>
+                    {terminals.length > 1 && (
+                      <button
+                        className="vscode-button"
+                        style={{ padding: '2px 6px', background: 'transparent', color: 'var(--vscode-errorForeground)' }}
+                        onClick={() => {
+                          const newTerms = terminals.filter(t => t !== activeTermId);
+                          setTerminals(newTerms);
+                          setActiveTermId(newTerms[newTerms.length - 1]);
+                          delete terminalInstancesRef.current[activeTermId];
+                        }}
+                        title="Close Terminal"
+                      >
+                        <Trash size={12} />
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ flex: 1, position: 'relative' }}>
+                    {terminals.map(id => (
+                      <TerminalInstance
+                        key={id}
+                        termId={id}
+                        activeProject={activeProject}
+                        activeBottomTab={activeBottomTab}
+                        bottomPanelHeight={bottomPanelHeight}
+                        isTerminalCollapsed={isTerminalCollapsed}
+                        theme={theme}
+                        isActive={id === activeTermId}
+                        onMount={(term) => terminalInstancesRef.current[id] = term}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>

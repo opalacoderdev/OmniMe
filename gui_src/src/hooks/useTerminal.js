@@ -3,12 +3,13 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 
 // Hook that initialises an xterm.js terminal and connects it to the backend SSE stream.
-export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight, isTerminalCollapsed, theme }) {
+export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight, isTerminalCollapsed, theme, termId = 'main', isActive = true }) {
   const promptDrawnRef = useRef(false);
   // Written on every render so the ResizeObserver callback (a closure created
   // once at mount) always reads the latest value without a stale-closure race.
   const isCollapsedRef = useRef(isTerminalCollapsed);
   isCollapsedRef.current = isTerminalCollapsed;
+  const lastSizeRef = useRef({ cols: 0, rows: 0 });
 
   // Update terminal theme dynamically when theme changes
   useEffect(() => {
@@ -101,7 +102,7 @@ export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, f
 
     // Connect to SSE terminal stream.
     const projectPath = activeProject.project_path;
-    const url = `/api/terminal/stream?projectPath=${encodeURIComponent(projectPath)}`;
+    const url = `/api/terminal/stream?term_id=${termId}&projectPath=${encodeURIComponent(projectPath)}`;
     const evs = new EventSource(url);
     eventSourceRef.current = evs;
 
@@ -125,7 +126,7 @@ export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, f
       fetch('/api/terminal/input', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'input', text: data, projectPath: activeProject.project_path }),
+        body: JSON.stringify({ term_id: termId, action: 'input', text: data, projectPath: activeProject.project_path }),
       }).catch(err => console.error('Failed to send terminal input', err));
     });
 
@@ -134,15 +135,19 @@ export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, f
       if (resizeTimeout) return;
       resizeTimeout = setTimeout(() => {
         resizeTimeout = null;
-        if (fitAddon && !isCollapsedRef.current) {
+        if (fitAddon && !isCollapsedRef.current && isActive && terminalRef.current) {
           try {
+            if (terminalRef.current.clientWidth === 0 || terminalRef.current.clientHeight === 0) return;
             fitAddon.fit();
             const { cols, rows } = term;
-            fetch('/api/terminal/input', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'resize', cols, rows, projectPath: activeProject.project_path }),
-            }).catch(err => console.error('Failed to send terminal resize', err));
+            if (cols > 0 && rows > 0 && (cols !== lastSizeRef.current.cols || rows !== lastSizeRef.current.rows)) {
+              lastSizeRef.current = { cols, rows };
+              fetch('/api/terminal/input', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ term_id: termId, action: 'resize', cols, rows, projectPath: activeProject.project_path }),
+              }).catch(err => console.error('Failed to send terminal resize', err));
+            }
           } catch (e) { /* ignore */ }
         }
       }, 100); // 100ms debounce
@@ -160,33 +165,37 @@ export function useTerminal({ activeProject, terminalRef, terminalInstanceRef, f
 
   // Re-fit the terminal when the terminal tab becomes visible, the panel is expanded, or resized.
   useEffect(() => {
-    if (activeBottomTab === 'terminal' && !isTerminalCollapsed && terminalInstanceRef.current && fitAddonRef.current && activeProject) {
+    if (activeBottomTab === 'terminal' && !isTerminalCollapsed && terminalInstanceRef.current && fitAddonRef.current && activeProject && isActive) {
       setTimeout(() => {
         try {
+          if (terminalRef.current && (terminalRef.current.clientWidth === 0 || terminalRef.current.clientHeight === 0)) return;
           fitAddonRef.current.fit();
           const { cols, rows } = terminalInstanceRef.current;
-          fetch('/api/terminal/input', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'resize', cols, rows, projectPath: activeProject.project_path }),
-          }).catch(err => console.error('Failed to send terminal resize', err));
+          if (cols > 0 && rows > 0 && (cols !== lastSizeRef.current.cols || rows !== lastSizeRef.current.rows)) {
+            lastSizeRef.current = { cols, rows };
+            fetch('/api/terminal/input', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ term_id: termId, action: 'resize', cols, rows, projectPath: activeProject.project_path }),
+            }).catch(err => console.error('Failed to send terminal resize', err));
+          }
 
           terminalInstanceRef.current.focus();
 
           // On the first time the terminal becomes visible, the shell may not have
           // redrawn its prompt after the initial resize (the tab was hidden during
-          // creation so xterm.js had no valid dimensions). Sending Ctrl+L forces
-          // bash/zsh to redraw the prompt without executing any command.
+          // creation so xterm.js had no valid dimensions). Sending Enter (\r) forces
+          // the shell (especially PowerShell on Windows) to print a fresh, clean prompt.
           if (!promptDrawnRef.current) {
             promptDrawnRef.current = true;
-            fetch('/api/terminal/input', {
+              fetch('/api/terminal/input', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'input', text: '\x0c', projectPath: activeProject.project_path }),
+              body: JSON.stringify({ term_id: termId, action: 'input', text: '\r', projectPath: activeProject.project_path }),
             }).catch(err => console.error('Failed to send prompt redraw', err));
           }
         } catch (e) { /* ignore */ }
       }, 50);
     }
-  }, [activeBottomTab, bottomPanelHeight, activeProject, isTerminalCollapsed]);
+  }, [activeBottomTab, bottomPanelHeight, activeProject, isTerminalCollapsed, isActive]);
 }

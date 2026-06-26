@@ -8,7 +8,6 @@ import { safeGetLocalStorage, safeSetLocalStorage } from './utils/storage';
 
 // Hooks
 import { useResizing } from './hooks/useResizing';
-import { useTerminal } from './hooks/useTerminal';
 
 // Layout components
 import ActivityBar from './components/ActivityBar';
@@ -183,8 +182,6 @@ export default function App() {
 
   // ── Hooks ─────────────────────────────────────────────────────────────────
   const { startResizing } = useResizing({ setSidebarWidth, setChatWidth, setBottomPanelHeight, sidebarWidth, chatWidth, bottomPanelHeight });
-
-  useTerminal({ activeProject, terminalRef, terminalInstanceRef, fitAddonRef, eventSourceRef, activeBottomTab, bottomPanelHeight, isTerminalCollapsed, theme });
 
   // ── Effects ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1898,6 +1895,7 @@ export default function App() {
               startResizing={startResizing}
               isBottomMaximized={isBottomMaximized}
               onToggleMaximizeBottom={() => setIsBottomMaximized(!isBottomMaximized)}
+              theme={theme}
             />
           </div>
         </main>

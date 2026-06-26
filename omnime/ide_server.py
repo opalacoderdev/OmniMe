@@ -1714,8 +1714,18 @@ class AsyncHTTPServer:
                 active_term = self.active_terminal
             else:
                 if term_id not in self.temp_terminals:
-                    self.send_response(writer, 404, b'{"error":"Temp terminal not found"}', "application/json")
-                    return
+                    if term_id.startswith('main-') and project_path and os.path.exists(project_path):
+                        from omnime.terminal_manager import TerminalSession
+                        try:
+                            term = TerminalSession(project_path)
+                            term.start_reading(asyncio.get_running_loop())
+                            self.temp_terminals[term_id] = term
+                        except Exception as e:
+                            self.send_response(writer, 500, f'{{"error": "{str(e)}"}}'.encode('utf-8'), "application/json")
+                            return
+                    else:
+                        self.send_response(writer, 404, b'{"error":"Temp terminal not found"}', "application/json")
+                        return
                 active_term = self.temp_terminals[term_id]
 
             headers = (
@@ -1776,8 +1786,18 @@ class AsyncHTTPServer:
                 active_term = self.active_terminal
             else:
                 if term_id not in self.temp_terminals:
-                    self.send_response(writer, 404, b'{"error":"Temp terminal not found"}', "application/json")
-                    return
+                    if term_id.startswith('main-') and project_path and os.path.exists(project_path):
+                        from omnime.terminal_manager import TerminalSession
+                        try:
+                            term = TerminalSession(project_path)
+                            term.start_reading(asyncio.get_running_loop())
+                            self.temp_terminals[term_id] = term
+                        except Exception as e:
+                            self.send_response(writer, 500, f'{{"error": "{str(e)}"}}'.encode('utf-8'), "application/json")
+                            return
+                    else:
+                        self.send_response(writer, 404, b'{"error":"Temp terminal not found"}', "application/json")
+                        return
                 active_term = self.temp_terminals[term_id]
 
             action = data.get("action", "input")
@@ -1792,6 +1812,23 @@ class AsyncHTTPServer:
                 self.send_response(writer, 200, b'{"ok":true}', "application/json")
             else:
                 self.send_response(writer, 400, b'{"error":"Invalid action"}', "application/json")
+                
+        elif path == '/api/terminal/start' and method == 'POST':
+            term_id = data.get("term_id")
+            project_path = data.get("projectPath")
+            
+            if not term_id or not project_path:
+                self.send_response(writer, 400, b'{"error":"term_id and projectPath required"}', "application/json")
+                return
+                
+            from omnime.terminal_manager import TerminalSession
+            try:
+                term = TerminalSession(project_path)
+                term.start_reading(asyncio.get_running_loop())
+                self.temp_terminals[term_id] = term
+                self.send_response(writer, 200, b'{"ok":true}', "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, f'{{"error": "{str(e)}"}}'.encode('utf-8'), "application/json")
                 
         elif path == '/api/terminal/temp/start' and method == 'POST':
             term_id = data.get("term_id")

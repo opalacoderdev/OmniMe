@@ -17,8 +17,8 @@ class TerminalSession:
         if sys.platform == "win32":
             try:
                 from winpty import PtyProcess
-                # Use cmd.exe or powershell.exe on Windows
-                shell = os.environ.get("COMSPEC", "cmd.exe")
+                # Force PowerShell on Windows
+                shell = "powershell.exe"
                 self.process = PtyProcess.spawn(shell, cwd=project_path)
             except ImportError:
                 self.process = None
