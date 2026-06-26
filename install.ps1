@@ -1,6 +1,10 @@
 # =========================================================
 # Script de Instalação do OmniMe para Windows (via PowerShell)
 # =========================================================
+#
+# Atalhos criados:
+#   - Desktop do usuário              (~\Desktop\OmniMe.lnk)
+#   - Menu Iniciar do usuário         (~\AppData\...\Programs\OmniMe.lnk)
 
 $ErrorActionPreference = "Stop"
 
@@ -44,17 +48,50 @@ if ($userPath -notlike "*$exeDir*") {
     $env:Path = "$env:Path;$exeDir"
 }
 
-# 6. Limpeza
+# 6. Criar atalhos (Desktop e Menu Iniciar)
+Write-Host "Criando atalhos..." -ForegroundColor Yellow
+
+$exePath  = "$exeDir\OmniMe.exe"
+$wshShell = New-Object -ComObject WScript.Shell
+
+# Atalho no Desktop
+$desktopShortcut      = $wshShell.CreateShortcut("$env:USERPROFILE\Desktop\OmniMe.lnk")
+$desktopShortcut.TargetPath       = $exePath
+$desktopShortcut.WorkingDirectory = $exeDir
+$desktopShortcut.Description      = "OmniMe AI Assistant"
+$desktopShortcut.IconLocation     = "$exePath,0"
+$desktopShortcut.Save()
+
+# Atalho no Menu Iniciar
+$startMenuDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+if (-not (Test-Path $startMenuDir)) {
+    New-Item -ItemType Directory -Force -Path $startMenuDir | Out-Null
+}
+$startMenuShortcut      = $wshShell.CreateShortcut("$startMenuDir\OmniMe.lnk")
+$startMenuShortcut.TargetPath       = $exePath
+$startMenuShortcut.WorkingDirectory = $exeDir
+$startMenuShortcut.Description      = "OmniMe AI Assistant"
+$startMenuShortcut.IconLocation     = "$exePath,0"
+$startMenuShortcut.Save()
+
+Write-Host "  -> Desktop: $env:USERPROFILE\Desktop\OmniMe.lnk" -ForegroundColor DarkGray
+Write-Host "  -> Menu Iniciar: $startMenuDir\OmniMe.lnk" -ForegroundColor DarkGray
+
+# 7. Limpeza
 Write-Host "Limpando arquivos temporarios..." -ForegroundColor DarkGray
 Remove-Item -Path $tempZip -Force -ErrorAction SilentlyContinue
 
-# 7. Finalização
+# 8. Finalização
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host "  OmniMe instalado/atualizado com sucesso!" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Para abrir o OmniMe agora, basta digitar em um terminal:"
+Write-Host "Atalhos criados:"
+Write-Host "  - Desktop" -ForegroundColor Cyan
+Write-Host "  - Menu Iniciar" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Para abrir o OmniMe pelo terminal:"
 Write-Host "  omnime" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Nota: Se o comando não for reconhecido, feche este terminal e abra um novo."
+Write-Host "Nota: Se o comando nao for reconhecido, feche este terminal e abra um novo."

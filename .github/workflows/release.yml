@@ -53,6 +53,7 @@ jobs:
 
       - name: Tar Executable
         run: |
+          cp icon.png dist/OmniMe/icon.png
           tar -czvf OmniMe-linux-x64.tar.gz -C dist OmniMe
 
       - name: Upload Release Asset
