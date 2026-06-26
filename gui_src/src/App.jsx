@@ -1243,7 +1243,7 @@ export default function App() {
       case 'stream_chunk':
         addLog('stream_chunk', data.content, data.agent);
         break;
-      case 'cancelled': addLog('warning', data.message || 'Execução cancelada.', data.agent); setChatMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Interrompido: ${data.message || 'A execução do agente foi parada.'}` }]); break;
+      case 'cancelled': addLog('warning', data.message || 'Execução cancelada.', data.agent); setChatMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Interrompido: ${data.message || 'A execução do agente foi parada.'}`, timestamp: new Date().toISOString() }]); break;
       case 'tool_call':
         addLog('tool_call', `Chamando: ${data.tool} (${JSON.stringify(data.arguments)})`, data.agent);
         if (['write_file', 'write_content_pos', 'edit_file'].includes(data.tool)) {
@@ -1318,7 +1318,7 @@ export default function App() {
         setChatMessages(prev => {
           const last = prev[prev.length - 1];
           if (last?.role === 'assistant' && last.content === responseText) return prev;
-          return [...prev, { role: 'assistant', content: responseText }];
+          return [...prev, { role: 'assistant', content: responseText, timestamp: new Date().toISOString() }];
         });
 
         // ── Auto-replace: if there is a pending inline selection range, extract
@@ -1357,7 +1357,7 @@ export default function App() {
         setConfirmRequest({ ...data, id: data.id, prompt: data.prompt, options: data.options || ['yes', 'no'], default: data.default || 'yes', type: data.type || 'confirm' });
         addLog('info', `🔔 Aguardando confirmação: ${data.prompt}`);
         break;
-      case 'error': addLog('error', data.message); setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Erro do Agente: ${data.message}` }]); break;
+      case 'error': addLog('error', data.message); setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Erro do Agente: ${data.message}`, timestamp: new Date().toISOString() }]); break;
       case 'problem':
         addLog('error', `[Problema em ${data.tool}]: ${data.message}`);
         setProblems(prev => trimToLimit([...prev, { id: Math.random().toString(), tool: data.tool, message: data.message, severity: data.severity || 'error', timestamp: new Date().toLocaleTimeString() }], panelMaxLines));
@@ -1374,7 +1374,7 @@ export default function App() {
     setChatInput('');
     setPendingAttachments([]);
     // Show attachment previews alongside the user message in the chat history
-    const userMsg = { role: 'user', content: userText || '📎 Attachment', _attachments: attachmentsSnapshot };
+    const userMsg = { role: 'user', content: userText || '📎 Attachment', _attachments: attachmentsSnapshot, timestamp: new Date().toISOString() };
     setChatMessages(prev => [...prev, userMsg]);
     setIsAgentRunning(true);
     setProblems([]);
@@ -1393,13 +1393,13 @@ export default function App() {
           setConfirmRequest({ id: result.id, prompt: result.prompt, options: result.options || ['yes', 'no'], default: result.default || 'yes', type: result.type || 'confirm', isSlashCommand: true });
           addLog('info', `🔔 Aguardando confirmação: ${result.prompt}`);
         } else if (result.status === 'done') {
-          setChatMessages(prev => [...prev, { role: 'assistant', content: (result.messages || []).join('\n') || 'Comando executado.' }]);
+          setChatMessages(prev => [...prev, { role: 'assistant', content: (result.messages || []).join('\n') || 'Comando executado.', timestamp: new Date().toISOString() }]);
         } else {
-          setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Erro: ${result.error || 'desconhecido'}` }]);
+          setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Erro: ${result.error || 'desconhecido'}`, timestamp: new Date().toISOString() }]);
         }
       } catch (err) {
         addLog('error', `Falha no comando: ${err.message}`);
-        setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Falha: ${err.message}` }]);
+        setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Falha: ${err.message}`, timestamp: new Date().toISOString() }]);
       } finally { setIsAgentRunning(false); fetchFiles(); }
       return;
     }
@@ -1439,7 +1439,7 @@ export default function App() {
       if (buffer.trim()) { try { handleAgentEvent(JSON.parse(buffer)); } catch (e) { addLog('stdout', buffer); } }
     } catch (err) {
       addLog('error', `Falha na execução: ${err.message}`);
-      setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Falha na execução: ${err.message}` }]);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Falha na execução: ${err.message}`, timestamp: new Date().toISOString() }]);
     } finally { setIsAgentRunning(false); fetchFiles(); fetchProblems(); }
   };
 
@@ -1459,7 +1459,7 @@ export default function App() {
         const res = await fetch('/api/omnime/slash-command/continue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, value }) });
         const result = await res.json();
         if (result.status === 'done') {
-          setChatMessages(prev => [...prev, { role: 'assistant', content: (result.messages || []).join('\n') || 'Comando executado.' }]);
+          setChatMessages(prev => [...prev, { role: 'assistant', content: (result.messages || []).join('\n') || 'Comando executado.', timestamp: new Date().toISOString() }]);
           fetchFiles();
           fetchGitStatus();
         }
@@ -1661,7 +1661,7 @@ export default function App() {
   const handleSendMessageWithPrompt = async (userText, capturedSelectedText) => {
     if (!userText.trim() || !activeProject || isAgentRunning) return;
     setChatInput('');
-    setChatMessages(prev => [...prev, { role: 'user', content: userText }]);
+    setChatMessages(prev => [...prev, { role: 'user', content: userText, timestamp: new Date().toISOString() }]);
     setIsAgentRunning(true);
     setProblems([]);
     addLog('info', `Iniciando: "${userText.slice(0, 80)}${userText.length > 80 ? '…' : ''}"`)
@@ -1699,7 +1699,7 @@ export default function App() {
       if (buffer.trim()) { try { handleAgentEvent(JSON.parse(buffer)); } catch (e) { addLog('stdout', buffer); } }
     } catch (err) {
       addLog('error', `Falha na execução: ${err.message}`);
-      setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Falha na execução: ${err.message}` }]);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `🔴 Falha na execução: ${err.message}`, timestamp: new Date().toISOString() }]);
     } finally { setIsAgentRunning(false); fetchFiles(); fetchProblems(); }
   };
 
