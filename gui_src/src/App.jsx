@@ -1181,6 +1181,21 @@ export default function App() {
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
 
+  const handleOpenInSystem = async (node) => {
+    setContextMenu(null);
+    if (!activeProject || !node) return;
+    try {
+      await fetch('/api/file/open-explorer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: activeProject.project_path, filePath: node.path })
+      });
+    } catch (err) {
+      console.error('Failed to open in system:', err);
+      addLog('error', `Erro ao abrir no sistema: ${err.message}`);
+    }
+  };
+
   const handleCopyNode = (node) => {
     setClipboardNode(node);
     setContextMenu(null);
@@ -2125,6 +2140,7 @@ export default function App() {
         handleDeleteNode={handleDeleteNode}
         handleCopyNode={handleCopyNode}
         handlePasteNode={handlePasteNode}
+        handleOpenInSystem={handleOpenInSystem}
         clipboardNode={clipboardNode}
       />
 
