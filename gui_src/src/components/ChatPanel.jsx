@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useLayoutEffect, useEffect } from 'react';
-import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings, Settings2, Plus, Trash2, Search, Paperclip, FileText, ZoomIn, ZoomOut, Download, Printer } from 'lucide-react';
+import { MessageSquare, Cpu, HelpCircle, Check, X, ArrowRight, Eraser, Globe, Settings, Settings2, Plus, Trash2, Search, Paperclip, FileText, ZoomIn, ZoomOut, Download, Printer, GitBranch } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatMessageContent } from '../utils/formatMessage';
 import { readClipboard } from '../utils/clipboard.js';
@@ -394,6 +394,44 @@ export default function ChatPanel({
     a.download = `chat_export_${new Date().toISOString().split('T')[0]}.md`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleBranchChat = async (messageIndex) => {
+    const newChatName = window.prompt(t('chatPanel.branchPrompt', 'Name for the new chat (branch):'));
+    if (!newChatName) return;
+
+    try {
+      const projectName = activeProject?.name || '';
+      const res = await fetch('/api/chat/branch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_name: projectName,
+          source_chat_id: activeChatId,
+          new_chat_name: newChatName,
+          message_index: messageIndex
+        })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        const listRes = await fetch(`/api/chat/list?project_name=${encodeURIComponent(projectName)}&t=${Date.now()}`);
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          setChats(listData.chats || []);
+        }
+        if (handleSwitchChat) {
+          handleSwitchChat(data.new_chat_id);
+        }
+      } else {
+        const err = await res.json();
+        console.error('Failed to branch chat:', err.error);
+        alert(t('app.error', 'Erro:') + ' ' + (err.error || 'Failed to branch chat'));
+      }
+    } catch (e) {
+      console.error(e);
+      alert(t('app.error', 'Erro:') + ' ' + e.message);
+    }
   };
 
   const handleExportSingleMessage = (content) => {
@@ -881,6 +919,24 @@ export default function ChatPanel({
                     </span>
                   )}
                 </div>
+                <button
+                  onClick={() => handleBranchChat(i)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--vscode-descriptionForeground, #717171)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '2px',
+                    borderRadius: '3px',
+                    transition: 'background-color 0.1s, color 0.1s',
+                  }}
+                  title={t('chatPanel.branchMessage', 'Criar branch a partir daqui')}
+                  className="msg-action-btn"
+                >
+                  <GitBranch size={12} />
+                </button>
                 {!isUser && (
                   <button
                     onClick={() => handleExportSingleMessage(msg.content)}

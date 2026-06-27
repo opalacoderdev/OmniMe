@@ -665,5 +665,29 @@ class ProjectStore:
         with _conn(self.db_path) as conn:
             conn.execute("UPDATE project_chats SET name = ? WHERE project = ? AND id = ?", (new_name, name, chat_id))
 
+    def branch_chat(self, name: str, source_chat_id: str, new_chat_id: str, new_chat_name: str, message_index: int) -> None:
+        with _conn(self.db_path) as conn:
+            now = datetime.now(timezone.utc).isoformat()
+            
+            # 1. Obter core memory do chat original
+            row = conn.execute("SELECT core_memory FROM project_chats WHERE project = ? AND id = ?", (name, source_chat_id)).fetchone()
+            core_memory = row["core_memory"] if row else ""
+            
+            # 2. Criar novo chat
+            conn.execute("INSERT INTO project_chats (id, project, name, created_at, core_memory) VALUES (?,?,?,?,?)", 
+                         (new_chat_id, name, new_chat_name, now, core_memory))
+            
+            # 3. Copiar histórico até message_index
+            history = conn.execute(
+                "SELECT role, content, timestamp FROM project_history WHERE project = ? AND chat_id = ? ORDER BY id LIMIT ?",
+                (name, source_chat_id, message_index + 1)
+            ).fetchall()
+            
+            for hist_row in history:
+                conn.execute(
+                    "INSERT INTO project_history (project, chat_id, timestamp, role, content) VALUES (?,?,?,?,?)",
+                    (name, new_chat_id, hist_row["timestamp"], hist_row["role"], hist_row["content"])
+                )
+
 # Backward-compat alias
 SessionStore = ProjectStore

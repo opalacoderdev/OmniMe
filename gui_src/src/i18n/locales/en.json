@@ -70,6 +70,8 @@
   "chatPanel": {
     "header": "OMNIME CHAT",
     "clearChat": "Clear chat",
+    "branchMessage": "Branch from here",
+    "branchPrompt": "Name for the new chat (branch):",
     "webSearch": "Web Search",
     "mcpIndicator": "(MCP)",
     "configureMcp": "Configure search MCP",

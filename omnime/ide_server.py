@@ -1385,6 +1385,29 @@ class AsyncHTTPServer:
             store.rename_chat(project_name, chat_id, new_name)
             self.send_response(writer, 200, b'{"status":"ok"}', "application/json")
 
+        elif path == '/api/chat/branch' and method == 'POST':
+            from omnime.config import DEFAULT_DB_PATH
+            from omnime.project import ProjectStore
+            import uuid
+            
+            store = ProjectStore(db_path=DEFAULT_DB_PATH)
+            project_name = data.get("project_name")
+            source_chat_id = data.get("source_chat_id")
+            new_chat_name = data.get("new_chat_name")
+            message_index = data.get("message_index")
+            
+            if not project_name or not source_chat_id or not new_chat_name or message_index is None:
+                self.send_response(writer, 400, b'{"error":"project_name, source_chat_id, new_chat_name and message_index required"}', "application/json")
+                return
+                
+            new_chat_id = str(uuid.uuid4())
+            try:
+                store.branch_chat(project_name, source_chat_id, new_chat_id, new_chat_name, int(message_index))
+                self.send_response(writer, 200, json.dumps({"status": "success", "new_chat_id": new_chat_id}).encode('utf-8'), "application/json")
+            except Exception as e:
+                self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
+            return
+
 
         elif path == '/api/chat/history' and method == 'GET':
             from omnime.config import DEFAULT_DB_PATH
