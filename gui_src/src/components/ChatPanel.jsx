@@ -415,6 +415,15 @@ export default function ChatPanel({
     window.print();
   };
 
+  // Token battery calculation
+  const numCtx = parseInt(activeProject?.model_params?.num_ctx || activeProject?.agent_params?.max_context_tokens || 8192, 10);
+  const estimatedTokens = chatMessages.reduce((acc, msg) => acc + Math.ceil((msg.content?.length || 0) / 4), 0);
+  const availableTokens = Math.max(0, numCtx - estimatedTokens);
+  const tokenPercentage = Math.min(100, Math.max(0, (availableTokens / numCtx) * 100));
+  const isTokenExploded = availableTokens === 0;
+  // Cheia (verde), perto do limite (amarela), explodiu (vermelha)
+  const batteryColor = isTokenExploded ? '#f87171' : tokenPercentage <= 20 ? '#fbbf24' : '#4ade80';
+
   return (
     <aside 
       className="vscode-chat" 
@@ -433,6 +442,39 @@ export default function ChatPanel({
           <span>{t('chatPanel.header')}</span>
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div 
+            title={`Contexto: ${availableTokens} disponíveis / ${numCtx} total`}
+            style={{ 
+              display: 'flex', alignItems: 'center', gap: '4px', 
+              marginRight: '8px', cursor: 'help',
+              opacity: 0.9,
+              fontSize: '10px',
+              color: batteryColor
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1px' }}>
+              <div style={{
+                width: '16px', height: '9px', 
+                border: `1px solid ${batteryColor}`, 
+                borderRadius: '2px', 
+                padding: '1px',
+                display: 'flex'
+              }}>
+                <div style={{
+                  width: `${Math.min(100, tokenPercentage)}%`, 
+                  backgroundColor: batteryColor, 
+                  height: '100%', 
+                  transition: 'width 0.3s'
+                }} />
+              </div>
+              <div style={{
+                width: '2px', height: '3px', 
+                backgroundColor: batteryColor, 
+                borderRadius: '0 1px 1px 0'
+              }} />
+            </div>
+            <span>{Math.round(tokenPercentage)}%</span>
+          </div>
           <button
             onClick={() => setChatZoom(z => Math.max(0.5, z - 0.1))}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-fg)' }}
