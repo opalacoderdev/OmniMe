@@ -130,7 +130,10 @@
     "newFile": "Novo Arquivo...",
     "newDir": "Novo Diretório...",
     "rename": "Renomear...",
-    "delete": "Excluir"
+    "delete": "Excluir",
+    "copy": "Copiar",
+    "paste": "Colar",
+    "openInSystem": "Abrir com app padrão"
   },
   "textContextMenu": {
     "copy": "Copiar",

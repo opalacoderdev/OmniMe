@@ -648,17 +648,30 @@ class AsyncHTTPServer:
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")
 
-        # 3.6.5. Open OS Explorer
+        # 3.6.5. Open OS Explorer / Default App
         elif path == '/api/file/open-explorer' and method == 'POST':
             project_path = data.get('projectPath')
-            if not project_path or not os.path.isdir(project_path):
+            file_path = data.get('filePath') # Optional
+            
+            if not project_path or not os.path.exists(project_path):
                 self.send_response(writer, 400, b'{"error":"Valid projectPath is required"}', "application/json")
                 return
+                
+            target_path = project_path
+            if file_path:
+                target_path = os.path.abspath(os.path.join(project_path, file_path))
+                if not target_path.startswith(os.path.abspath(project_path)):
+                    self.send_response(writer, 403, b'{"error":"Forbidden: Path traversal detected"}', "application/json")
+                    return
+                if not os.path.exists(target_path):
+                    self.send_response(writer, 404, b'{"error":"File not found"}', "application/json")
+                    return
+
             try:
                 import subprocess, platform
                 system = platform.system()
                 
-                # Strip PyInstaller's LD_LIBRARY_PATH so system apps (like nautilus) don't crash
+                # Strip PyInstaller's LD_LIBRARY_PATH so system apps (like nautilus or image viewers) don't crash
                 env = os.environ.copy()
                 if 'LD_LIBRARY_PATH_ORIG' in env:
                     env['LD_LIBRARY_PATH'] = env['LD_LIBRARY_PATH_ORIG']
@@ -666,16 +679,22 @@ class AsyncHTTPServer:
                     del env['LD_LIBRARY_PATH']
 
                 if system == "Windows":
-                    os.startfile(project_path)
+                    os.startfile(target_path)
                 elif system == "Darwin":
-                    subprocess.Popen(["open", project_path], env=env)
+                    subprocess.Popen(["open", target_path], env=env)
                 else:
                     # Check if it's WSL (Windows Subsystem for Linux)
                     release = platform.uname().release.lower()
                     if "microsoft" in release or "wsl" in release:
-                        subprocess.Popen(["explorer.exe", "."], cwd=project_path, env=env)
+                        # For WSL, we might need different logic if opening a file vs folder
+                        if os.path.isdir(target_path):
+                            subprocess.Popen(["explorer.exe", "."], cwd=target_path, env=env)
+                        else:
+                            # Not ideal but explorer.exe can open files in WSL if converted to win path, 
+                            # easiest is wslview if available, otherwise xdg-open might work inside some WSL distros
+                            subprocess.Popen(["xdg-open", target_path], env=env)
                     else:
-                        subprocess.Popen(["xdg-open", project_path], env=env)
+                        subprocess.Popen(["xdg-open", target_path], env=env)
                 self.send_response(writer, 200, b'{"success":true}', "application/json")
             except Exception as e:
                 self.send_response(writer, 500, json.dumps({"error": str(e)}).encode('utf-8'), "application/json")

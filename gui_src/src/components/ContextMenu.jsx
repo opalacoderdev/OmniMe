@@ -34,8 +34,8 @@ export default function ContextMenu({
 
   const parentPath = rightClickedNode
     ? (rightClickedNode.isDirectory
-        ? rightClickedNode.path
-        : rightClickedNode.path.replace(/\\/g, '/').split('/').slice(0, -1).join('/'))
+      ? rightClickedNode.path
+      : rightClickedNode.path.replace(/\\/g, '/').split('/').slice(0, -1).join('/'))
     : '';
 
   return (
@@ -60,6 +60,13 @@ export default function ContextMenu({
       </div>
       {rightClickedNode && (
         <>
+          <div
+            className="vscode-context-menu-item"
+            onClick={() => handleOpenInSystem(rightClickedNode)}
+          >
+            <ExternalLink size={13} style={{ color: '#007acc' }} />
+            <span>{t('contextMenu.openInSystem', 'Abrir com app padrão')}</span>
+          </div>
           <div
             className="vscode-context-menu-item"
             onClick={() => handleCopyNode(rightClickedNode)}

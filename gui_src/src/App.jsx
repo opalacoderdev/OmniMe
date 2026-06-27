@@ -242,7 +242,7 @@ export default function App() {
     if (!activeProject) return;
     try {
       const selectedModelObj = globalModels.find(m => m.id === value);
-      const payload = { 
+      const payload = {
         project_name: activeProject.name,
         display_name: activeProject.project_name || activeProject.name,
         project_path: activeProject.project_path,
@@ -259,7 +259,7 @@ export default function App() {
         use_shared_memory: activeProject.use_shared_memory,
         chat_id: activeChatId
       };
-      
+
       // Update specific field (orchestrator or worker)
       if (field === 'model') {
         payload.model = value;
@@ -335,7 +335,7 @@ export default function App() {
       fetchProblems();
       if (prevProjectNameRef.current !== activeProject.name) {
         prevProjectNameRef.current = activeProject.name;
-        
+
         // Show a blank state while we load — avoid flash of stale greeting
         setChatMessages([]);
         setIsLoadingChat(true);
@@ -346,7 +346,7 @@ export default function App() {
           .then(data => {
             const loadedChats = data.chats || [];
             setChats(loadedChats);
-            
+
             // Set active chat id: use the one stored in the project or fall back to the first chat
             const currentChatId = activeProject.current_chat_id
               || (loadedChats.length > 0 ? loadedChats[0].id : 'main');
@@ -424,7 +424,7 @@ export default function App() {
     setIsLoadingChat(true);
     setActiveChatId(id);
     setActiveProject(prev => prev ? { ...prev, current_chat_id: id } : null);
-    
+
     setTimeout(async () => {
       try {
         const res = await fetch(`/api/chat/history?project_name=${encodeURIComponent(activeProject.name)}&chat_id=${encodeURIComponent(id)}&t=${Date.now()}`);
@@ -595,14 +595,14 @@ export default function App() {
       alert(`A pasta do projeto não existe no disco:\n${proj.project_path}`);
       return;
     }
-    
+
     let currentContents = { ...fileContents };
     if (selectedFile) {
       currentContents[selectedFile] = fileContent;
     }
 
     const dirtyFiles = openFiles.filter(f => currentContents[f] !== originalFileContents[f] && originalFileContents[f] !== undefined);
-    
+
     if (dirtyFiles.length > 0) {
       setConfirmRequest({
         prompt: `Você tem ${dirtyFiles.length} arquivo(s) não salvo(s) no projeto atual. Deseja salvá-los antes de trocar de projeto? (Escolha "Cancelar" para não trocar)`,
@@ -610,15 +610,15 @@ export default function App() {
         callback: async (val) => {
           if (val === 'cancel') return;
           if (val === 'yes') {
-             for (const filePath of dirtyFiles) {
-                try {
-                   await fetch('/api/file/write', {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({ projectPath: activeProject.project_path, filePath, content: currentContents[filePath] })
-                   });
-                } catch(e) {}
-             }
+            for (const filePath of dirtyFiles) {
+              try {
+                await fetch('/api/file/write', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ projectPath: activeProject.project_path, filePath, content: currentContents[filePath] })
+                });
+              } catch (e) { }
+            }
           }
           setActiveProject(proj);
           addLog('info', t('app.projectSelected', { name: proj.project_name || proj.name }));
@@ -728,7 +728,7 @@ export default function App() {
       });
       return;
     }
-    
+
     // Normal click clears multi-selection
     setSelectedNodes(new Set());
     if (!isDirectory) {
@@ -743,7 +743,7 @@ export default function App() {
     setOpenFiles(prev => prev.includes(filePath) ? prev : [...prev, filePath]);
     setSelectedFile(filePath);
     setLayoutMode('ide'); // Force the IDE view so the text editor is visible
-    
+
     // Auto-switch to edit mode (IDE mode) when a file is opened
     if (activeProject.mode !== 'edit') {
       const updatedProject = { ...activeProject, mode: 'edit' };
@@ -779,24 +779,24 @@ export default function App() {
     console.log(`[DEBUG handleFileSelect] CACHE MISS for "${filePath}" — fetching from disk.`);
     try {
       const res = await fetch(`/api/file/read?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(filePath)}`);
-      if (res.ok) { 
-        const data = await res.json(); 
-        console.log(`[DEBUG handleFileSelect] Loaded from disk: ${data.content.length} chars`); 
-        setFileContent(data.content); 
-        setFileContents(prev => ({ ...prev, [filePath]: data.content })); 
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`[DEBUG handleFileSelect] Loaded from disk: ${data.content.length} chars`);
+        setFileContent(data.content);
+        setFileContents(prev => ({ ...prev, [filePath]: data.content }));
         setOriginalFileContents(prev => ({ ...prev, [filePath]: data.content }));
-        
+
         fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(filePath)}&shadow=${useShadowGit}&t=${Date.now()}`)
           .then(r => r.ok ? r.json() : null)
           .then(gitData => {
             if (gitData && gitData.content !== undefined) {
-               setOriginalFileContents(prev => ({ ...prev, [filePath]: gitData.content }));
+              setOriginalFileContents(prev => ({ ...prev, [filePath]: gitData.content }));
             } else {
-               setOriginalFileContents(prev => ({ ...prev, [filePath]: '' }));
+              setOriginalFileContents(prev => ({ ...prev, [filePath]: '' }));
             }
           })
           .catch(() => {
-             setOriginalFileContents(prev => ({ ...prev, [filePath]: '' }));
+            setOriginalFileContents(prev => ({ ...prev, [filePath]: '' }));
           });
       }
       else addLog('error', `Erro ao ler arquivo: ${filePath}`);
@@ -811,25 +811,25 @@ export default function App() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectPath: activeProject.project_path, filePath: selectedFile, content: fileContent }),
       });
-      if (res.ok) { 
-        addLog('info', `Arquivo salvo: ${selectedFile}`); 
-        setFileContents(prev => ({ ...prev, [selectedFile]: fileContent })); 
-        
+      if (res.ok) {
+        addLog('info', `Arquivo salvo: ${selectedFile}`);
+        setFileContents(prev => ({ ...prev, [selectedFile]: fileContent }));
+
         fetch(`/api/git/file-at-head?projectPath=${encodeURIComponent(activeProject.project_path)}&filePath=${encodeURIComponent(selectedFile)}&shadow=${useShadowGit}&t=${Date.now()}`)
           .then(r => r.ok ? r.json() : null)
           .then(gitData => {
             if (gitData && gitData.content !== undefined) {
-               setOriginalFileContents(prev => ({ ...prev, [selectedFile]: gitData.content }));
+              setOriginalFileContents(prev => ({ ...prev, [selectedFile]: gitData.content }));
             } else {
-               setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
+              setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
             }
           })
           .catch(() => {
-             // Do not overwrite originalFileContents on error or 404 if it's unwanted, but actually we should set to empty if untracked.
-             setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
+            // Do not overwrite originalFileContents on error or 404 if it's unwanted, but actually we should set to empty if untracked.
+            setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
           });
-        fetchGitStatus(); 
-        fetchProblems(); 
+        fetchGitStatus();
+        fetchProblems();
       }
       else addLog('error', `Erro ao salvar arquivo: ${selectedFile}`);
     } catch (err) { addLog('error', `Erro de escrita: ${err.message}`); }
@@ -898,14 +898,14 @@ export default function App() {
 
   const handleDeleteNode = async (node) => {
     if (!activeProject || !node) return;
-    
+
     // Se o nó clicado faz parte da seleção múltipla, apagamos todos da seleção
-    const nodesToDelete = (selectedNodes && selectedNodes.has(node.path)) 
+    const nodesToDelete = (selectedNodes && selectedNodes.has(node.path))
       ? Array.from(selectedNodes)
       : [node.path];
 
     const isMulti = nodesToDelete.length > 1;
-    const msg = isMulti 
+    const msg = isMulti
       ? `Tem certeza que deseja deletar ${nodesToDelete.length} itens selecionados? Todos os arquivos internos de diretórios também serão removidos!`
       : `Tem certeza que deseja deletar o ${node.isDirectory ? 'diretório' : 'arquivo'} "${node.path}"?${node.isDirectory ? ' Todos os arquivos internos serão removidos!' : ''}`;
 
@@ -925,10 +925,10 @@ export default function App() {
               setFileContents(prev => { const n = {}; for (const [k, v] of Object.entries(prev)) if (k !== pathToDelete && !k.startsWith(`${pathToDelete}/`)) n[k] = v; return n; });
               if (selectedFile === pathToDelete || selectedFile?.startsWith(`${pathToDelete}/`)) {
                 // If it's the current file, we can't reliably pick the 'last' open file easily in a loop, so we just clear it.
-                setSelectedFile(null); setFileContent(''); 
+                setSelectedFile(null); setFileContent('');
               }
-            } else { 
-              const e = await res.json(); addLog('error', `Falha ao deletar ${pathToDelete}: ${e.error}`); 
+            } else {
+              const e = await res.json(); addLog('error', `Falha ao deletar ${pathToDelete}: ${e.error}`);
             }
           }
           if (successCount > 0) {
@@ -959,7 +959,7 @@ export default function App() {
     e.preventDefault();
     if (!newProjName || !newProjPath) return;
     setNewProjError('');
-    
+
     const sep = navigator.userAgent.toLowerCase().includes('windows') ? '\\' : '/';
     let basePath = newProjPath;
     if (basePath.endsWith(sep)) basePath = basePath.slice(0, -1);
@@ -1181,6 +1181,21 @@ export default function App() {
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
 
+  const handleOpenInSystem = async (node) => {
+    setContextMenu(null);
+    if (!activeProject || !node) return;
+    try {
+      await fetch('/api/file/open-explorer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: activeProject.project_path, filePath: node.path })
+      });
+    } catch (err) {
+      console.error('Failed to open in system:', err);
+      addLog('error', `Erro ao abrir no sistema: ${err.message}`);
+    }
+  };
+
   const handleCopyNode = (node) => {
     setClipboardNode(node);
     setContextMenu(null);
@@ -1311,17 +1326,17 @@ export default function App() {
                         .then(r => r.ok ? r.json() : null)
                         .then(gitData => {
                           if (gitData && gitData.content !== undefined) {
-                             setOriginalFileContents(prev => ({ ...prev, [selectedFile]: gitData.content }));
+                            setOriginalFileContents(prev => ({ ...prev, [selectedFile]: gitData.content }));
                           } else {
-                             setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
+                            setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
                           }
                         })
                         .catch(() => {
-                           setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
+                          setOriginalFileContents(prev => ({ ...prev, [selectedFile]: '' }));
                         });
                     }
                   })
-                  .catch(() => {});
+                  .catch(() => { });
               }
             }
           }
@@ -1329,8 +1344,8 @@ export default function App() {
         break;
       case 'agent_response':
         addLog('info', 'Resposta recebida.');
-        const responseText = (data.response && data.response.trim() !== '') 
-          ? data.response 
+        const responseText = (data.response && data.response.trim() !== '')
+          ? data.response
           : "⚠️ *O agente concluiu o processamento, mas não emitiu nenhuma resposta textual ou chamada de ferramenta. Isso geralmente acontece quando o modelo de IA sofre uma falha de geração (ex: esqueceu de usar o formato correto após pensar).*";
 
         setChatMessages(prev => {
@@ -1793,12 +1808,12 @@ export default function App() {
             )}
           </aside>
         )}
-        
+
         {/* Chat Sidebar (Only in Chat Mode) */}
         {!isEditorMaximized && layoutMode === 'chat' && (
           <aside className="vscode-sidebar" style={{ width: `${sidebarWidth}px`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <ChatSidebar 
+              <ChatSidebar
                 chats={chats}
                 activeChatId={activeChatId}
                 setActiveChatId={setActiveChatId}
@@ -1808,9 +1823,9 @@ export default function App() {
                 onSwitchChat={handleSwitchChat}
               />
             </div>
-            
+
             <div style={{ height: '4px', backgroundColor: 'var(--vscode-border)', cursor: 'row-resize', flexShrink: 0 }} />
-            
+
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
               <ExplorerSidebar
                 projects={projects}
@@ -1930,59 +1945,59 @@ export default function App() {
         {(!isEditorMaximized && (isChatVisible || layoutMode === 'chat')) && (
           <>
             <ChatPanel
-            isChatMode={layoutMode === 'chat'}
-            chatMessages={chatMessages}
-            chatInput={chatInput}
-            setChatInput={setChatInput}
-            isAgentRunning={isAgentRunning}
-            chatThoughtStream={chatThoughtStream}
-            activeProject={activeProject}
-            isChatVisible={isChatVisible}
-            setIsChatVisible={setIsChatVisible}
-            chatWidth={chatWidth}
-            handleSendMessage={handleSendMessage}
-            handleInterruptAgent={handleInterruptAgent}
-            onClearChat={() => {
-              const currentProjName = activeProject ? (activeProject.project_name || activeProject.name) : '';
-              setChatMessages(currentProjName ? [
-                { role: 'assistant', content: t('app.greeting', { projectName: currentProjName }) }
-              ] : []);
-            }}
-            chatEndRef={chatEndRef}
-            webSearchConfig={webSearchConfig}
-            setWebSearchConfig={setWebSearchConfig}
-            activeChatId={activeChatId}
-            setActiveChatId={setActiveChatId}
-            chats={chats}
-            setChats={setChats}
-            setChatMessages={setChatMessages}
-            onSwitchChat={handleSwitchChat}
-            pendingAttachments={pendingAttachments}
-            setPendingAttachments={setPendingAttachments}
-            globalModels={globalModels}
-            onRefreshModels={fetchGlobalModels}
-            onEditModels={() => setShowEditModelsModal(true)}
-            onModelChange={handleProjectModelChange}
-          />
-          
-          {(isLoadingChat || isPending) && (
-            <div style={{
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              zIndex: 50, color: 'var(--vscode-editor-foreground)',
-              flexDirection: 'column', gap: '10px'
-            }}>
-              <div className="spinner" style={{
-                width: '30px', height: '30px', border: '3px solid rgba(255,255,255,0.3)',
-                borderRadius: '50%', borderTopColor: '#fff', animation: 'spin 1s ease-in-out infinite'
-              }}></div>
-              <style>{`
+              isChatMode={layoutMode === 'chat'}
+              chatMessages={chatMessages}
+              chatInput={chatInput}
+              setChatInput={setChatInput}
+              isAgentRunning={isAgentRunning}
+              chatThoughtStream={chatThoughtStream}
+              activeProject={activeProject}
+              isChatVisible={isChatVisible}
+              setIsChatVisible={setIsChatVisible}
+              chatWidth={chatWidth}
+              handleSendMessage={handleSendMessage}
+              handleInterruptAgent={handleInterruptAgent}
+              onClearChat={() => {
+                const currentProjName = activeProject ? (activeProject.project_name || activeProject.name) : '';
+                setChatMessages(currentProjName ? [
+                  { role: 'assistant', content: t('app.greeting', { projectName: currentProjName }) }
+                ] : []);
+              }}
+              chatEndRef={chatEndRef}
+              webSearchConfig={webSearchConfig}
+              setWebSearchConfig={setWebSearchConfig}
+              activeChatId={activeChatId}
+              setActiveChatId={setActiveChatId}
+              chats={chats}
+              setChats={setChats}
+              setChatMessages={setChatMessages}
+              onSwitchChat={handleSwitchChat}
+              pendingAttachments={pendingAttachments}
+              setPendingAttachments={setPendingAttachments}
+              globalModels={globalModels}
+              onRefreshModels={fetchGlobalModels}
+              onEditModels={() => setShowEditModelsModal(true)}
+              onModelChange={handleProjectModelChange}
+            />
+
+            {(isLoadingChat || isPending) && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 50, color: 'var(--vscode-editor-foreground)',
+                flexDirection: 'column', gap: '10px'
+              }}>
+                <div className="spinner" style={{
+                  width: '30px', height: '30px', border: '3px solid rgba(255,255,255,0.3)',
+                  borderRadius: '50%', borderTopColor: '#fff', animation: 'spin 1s ease-in-out infinite'
+                }}></div>
+                <style>{`
                 @keyframes spin { to { transform: rotate(360deg); } }
               `}</style>
-              <span>Carregando chat...</span>
-            </div>
-          )}
+                <span>Carregando chat...</span>
+              </div>
+            )}
           </>
         )}
       </div>
